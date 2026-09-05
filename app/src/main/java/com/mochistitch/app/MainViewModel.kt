@@ -13,6 +13,7 @@ import com.mochistitch.core.imaging.FilenameFormatter
 import com.mochistitch.core.imaging.ImageCompressor
 import com.mochistitch.core.imaging.MergeDirection
 import com.mochistitch.core.imaging.PaddingColor
+import com.mochistitch.core.imaging.ProcessingStage
 import com.mochistitch.core.imaging.StitchProcessor
 import com.mochistitch.core.settings.AlignmentModeSetting
 import com.mochistitch.core.settings.MochiStitchSettings
@@ -22,6 +23,7 @@ import com.mochistitch.core.settings.OutputWrapperFormat
 import com.mochistitch.core.settings.PaddingColorSetting
 import com.mochistitch.core.settings.ReadingDirection
 import com.mochistitch.core.ui.ImageItem
+import com.mochistitch.core.ui.PreviewSliceItem
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -31,7 +33,7 @@ import java.io.ByteArrayOutputStream
 import java.io.OutputStream
 
 enum class Screen {
-    MAIN, SETTINGS
+    MAIN, SETTINGS, PREVIEW
 }
 
 data class ExportResultInfo(
@@ -45,8 +47,10 @@ data class ExportResultInfo(
 data class MainUiState(
     val currentScreen: Screen = Screen.MAIN,
     val selectedImages: List<ImageItem> = emptyList(),
+    val previewSlices: List<PreviewSliceItem> = emptyList(),
     val settings: MochiStitchSettings = MochiStitchSettings(),
     val isProcessing: Boolean = false,
+    val processingStep: String = "",
     val progress: Float = 0f,
     val exportResult: ExportResultInfo? = null,
     val resultOutputUri: Uri? = null,
@@ -134,7 +138,18 @@ class MainViewModel : ViewModel() {
     }
 
     fun clearAll() {
+        clearPreviewSlices()
         _uiState.update { it.copy(selectedImages = emptyList()) }
+    }
+
+    private fun clearPreviewSlices() {
+        val slices = _uiState.value.previewSlices
+        slices.forEach { slice ->
+            if (!slice.bitmap.isRecycled) {
+                slice.bitmap.recycle()
+            }
+        }
+        _uiState.update { it.copy(previewSlices = emptyList()) }
     }
 
     fun updateDirection(direction: MergeDirection) {
@@ -194,7 +209,7 @@ class MainViewModel : ViewModel() {
         }
     }
 
-    fun startMerge(outputUri: Uri, context: Context) {
+    fun generatePreview(context: Context) {
         initSettings(context)
         val images = _uiState.value.selectedImages
         if (images.isEmpty()) {
@@ -202,11 +217,14 @@ class MainViewModel : ViewModel() {
             return
         }
 
+        clearPreviewSlices()
+
         val settings = _uiState.value.settings
 
         _uiState.update {
             it.copy(
                 isProcessing = true,
+                processingStep = "Aligning images",
                 progress = 0f,
                 errorMessage = null,
                 exportResult = null,
@@ -216,6 +234,79 @@ class MainViewModel : ViewModel() {
 
         viewModelScope.launch {
             val processor = StitchProcessor(context)
+            try {
+                val result = processor.process(
+                    imageUris = images.map { it.uri },
+                    settings = settings,
+                    onProgress = { stage, progress ->
+                        _uiState.update { state ->
+                            state.copy(
+                                processingStep = stage.stepName,
+                                progress = progress
+                            )
+                        }
+                    }
+                )
+
+                if (result.isFailure) {
+                    _uiState.update {
+                        it.copy(
+                            isProcessing = false,
+                            errorMessage = result.exceptionOrNull()?.message ?: "Failed to process image stitching."
+                        )
+                    }
+                    return@launch
+                }
+
+                val items = result.getOrThrow()
+                val previewSlices = items.map { item ->
+                    PreviewSliceItem(
+                        index = item.index,
+                        filename = item.filename,
+                        bitmap = item.bitmap,
+                        width = item.width,
+                        height = item.height,
+                        needsManualReview = item.needsManualReview
+                    )
+                }
+
+                _uiState.update {
+                    it.copy(
+                        isProcessing = false,
+                        previewSlices = previewSlices,
+                        currentScreen = Screen.PREVIEW
+                    )
+                }
+            } catch (e: Exception) {
+                _uiState.update {
+                    it.copy(
+                        isProcessing = false,
+                        errorMessage = e.message ?: "Failed to generate preview."
+                    )
+                }
+            }
+        }
+    }
+
+    fun exportResult(outputUri: Uri, context: Context) {
+        val previewSlices = _uiState.value.previewSlices
+        if (previewSlices.isEmpty()) {
+            _uiState.update { it.copy(errorMessage = "No preview available to export.") }
+            return
+        }
+
+        val settings = _uiState.value.settings
+
+        _uiState.update {
+            it.copy(
+                isProcessing = true,
+                processingStep = ProcessingStage.EXPORTING.stepName,
+                progress = 0f,
+                errorMessage = null
+            )
+        }
+
+        viewModelScope.launch {
             try {
                 val outputStream = context.contentResolver.openOutputStream(outputUri)
                 if (outputStream == null) {
@@ -228,46 +319,28 @@ class MainViewModel : ViewModel() {
                     return@launch
                 }
 
-                val result = processor.process(
-                    imageUris = images.map { it.uri },
-                    settings = settings,
-                    onProgress = { progress ->
-                        _uiState.update { state -> state.copy(progress = progress) }
-                    }
-                )
-
-                if (result.isFailure) {
-                    outputStream.close()
-                    _uiState.update {
-                        it.copy(
-                            isProcessing = false,
-                            errorMessage = result.exceptionOrNull()?.message ?: "Failed to process image stitching."
-                        )
-                    }
-                    return@launch
-                }
-
-                val items = result.getOrThrow()
                 var bytesWritten = 0L
 
                 if (settings.wrapperFormat == OutputWrapperFormat.CBZ || settings.wrapperFormat == OutputWrapperFormat.ZIP) {
-                    val archiveEntries = items.map { item ->
+                    val archiveEntries = previewSlices.mapIndexed { index, slice ->
+                        _uiState.update { it.copy(progress = (index + 1).toFloat() / previewSlices.size.toFloat()) }
                         val baos = ByteArrayOutputStream()
                         ImageCompressor.compress(
-                            bitmap = item.bitmap,
+                            bitmap = slice.bitmap,
                             format = settings.outputFormat,
                             quality = if (settings.outputFormat == OutputFormat.JPG) settings.jpgQuality else settings.webpQuality,
                             webpLossless = settings.webpLossless,
                             outputStream = baos
                         )
-                        ArchiveEntry(item.filename, baos.toByteArray())
+                        ArchiveEntry(slice.filename, baos.toByteArray())
                     }
                     bytesWritten = ArchiveHandler.createArchive(archiveEntries, outputStream)
                 } else {
                     val byteCountingStream = ByteCountingOutputStream(outputStream)
-                    for (item in items) {
+                    for ((index, slice) in previewSlices.withIndex()) {
+                        _uiState.update { it.copy(progress = (index + 1).toFloat() / previewSlices.size.toFloat()) }
                         ImageCompressor.compress(
-                            bitmap = item.bitmap,
+                            bitmap = slice.bitmap,
                             format = settings.outputFormat,
                             quality = if (settings.outputFormat == OutputFormat.JPG) settings.jpgQuality else settings.webpQuality,
                             webpLossless = settings.webpLossless,
@@ -279,10 +352,9 @@ class MainViewModel : ViewModel() {
                     outputStream.close()
                 }
 
-                val maxW = items.maxOfOrNull { it.width } ?: 0
-                val totalH = items.sumOf { it.height }
-                val manualReviewCount = items.count { it.needsManualReview }
-                processor.recycleAll(items)
+                val maxW = previewSlices.maxOfOrNull { it.width } ?: 0
+                val totalH = previewSlices.sumOf { it.height }
+                val manualReviewCount = previewSlices.count { it.needsManualReview }
 
                 _uiState.update {
                     it.copy(
@@ -291,7 +363,7 @@ class MainViewModel : ViewModel() {
                             width = maxW,
                             height = totalH,
                             bytesWritten = bytesWritten,
-                            outputCount = items.size,
+                            outputCount = previewSlices.size,
                             itemsNeedingManualReview = manualReviewCount
                         ),
                         resultOutputUri = outputUri
@@ -314,6 +386,11 @@ class MainViewModel : ViewModel() {
 
     fun dismissError() {
         _uiState.update { it.copy(errorMessage = null) }
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        clearPreviewSlices()
     }
 
     private fun queryFileName(context: Context, uri: Uri): String? {

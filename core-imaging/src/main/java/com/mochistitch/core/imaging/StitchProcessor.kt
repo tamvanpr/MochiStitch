@@ -21,6 +21,13 @@ data class StitchResultItem(
     val needsManualReview: Boolean = false
 )
 
+enum class ProcessingStage(val stepName: String) {
+    ALIGNING("Aligning images"),
+    MERGING("Merging canvas"),
+    MOCHISMART_ANALYSIS("MochiSmart Analysis"),
+    EXPORTING("Exporting file")
+}
+
 class StitchProcessor(
     private val openInputStream: (Uri) -> InputStream?
 ) {
@@ -31,13 +38,15 @@ class StitchProcessor(
     suspend fun process(
         imageUris: List<Uri>,
         settings: MochiStitchSettings,
-        onProgress: (Float) -> Unit = {}
+        onProgress: (ProcessingStage, Float) -> Unit = { _, _ -> }
     ): Result<List<StitchResultItem>> = withContext(Dispatchers.IO) {
         if (imageUris.isEmpty()) {
             return@withContext Result.failure(IllegalArgumentException("No input images provided."))
         }
 
         try {
+            onProgress(ProcessingStage.ALIGNING, 0.05f)
+
             val mergeConfig = MergeConfig(
                 direction = when (settings.readingDirection) {
                     ReadingDirection.VERTICAL -> MergeDirection.VERTICAL
@@ -72,9 +81,14 @@ class StitchProcessor(
                 val batchProgressStart = batchIdx.toFloat() / totalBatches.toFloat()
                 val batchProgressRange = 1.0f / totalBatches.toFloat()
 
+                onProgress(ProcessingStage.MERGING, batchProgressStart + 0.1f * batchProgressRange)
+
                 val mergedBitmap = mergeEngine.mergeToBitmap(batchUris, mergeConfig) { prog ->
-                    onProgress(batchProgressStart + prog * batchProgressRange)
+                    val totalProg = batchProgressStart + (0.1f + prog * 0.5f) * batchProgressRange
+                    onProgress(ProcessingStage.MERGING, totalProg)
                 }.getOrThrow()
+
+                onProgress(ProcessingStage.MOCHISMART_ANALYSIS, batchProgressStart + 0.65f * batchProgressRange)
 
                 val slices: List<SlicedPiece> = if (settings.splitMode == SplitMode.MAX_PIXELS) {
                     SplitEngine.sliceBitmapDetailed(
@@ -84,6 +98,8 @@ class StitchProcessor(
                 } else {
                     listOf(SlicedPiece(mergedBitmap, needsManualReview = false))
                 }
+
+                onProgress(ProcessingStage.MOCHISMART_ANALYSIS, batchProgressStart + 0.95f * batchProgressRange)
 
                 for (piece in slices) {
                     val filename = FilenameFormatter.formatFilename(
@@ -108,7 +124,7 @@ class StitchProcessor(
                 }
             }
 
-            onProgress(1.0f)
+            onProgress(ProcessingStage.MOCHISMART_ANALYSIS, 1.0f)
             Result.success(resultItems)
         } catch (e: Throwable) {
             Result.failure(e)
