@@ -185,7 +185,7 @@ fun MainScreen(
                 onPaddingColorChange = { viewModel.updatePaddingColor(it) }
             )
 
-            Spacer(modifier = Modifier.height(12.dp))
+            Spacer(modifier = Modifier.height(14.dp))
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -194,7 +194,8 @@ fun MainScreen(
             ) {
                 Text(
                     text = "Selected Pages (${uiState.selectedImages.size})",
-                    style = MaterialTheme.typography.titleMedium
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
                 )
 
                 OutlinedButton(
@@ -225,11 +226,11 @@ fun MainScreen(
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
                         Text(
-                            text = "No images selected",
+                            text = "No images selected to stitch",
                             style = MaterialTheme.typography.bodyLarge,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
-                        Spacer(modifier = Modifier.height(8.dp))
+                        Spacer(modifier = Modifier.height(12.dp))
                         Button(
                             onClick = {
                                 selectImagesLauncher.launch(arrayOf("image/*"))
@@ -266,8 +267,9 @@ fun MainScreen(
                 ) {
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        text = "Process & Preview Merge",
-                        style = MaterialTheme.typography.titleMedium
+                        text = "Stitch & Export Preview",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
                     )
                 }
             }

@@ -20,6 +20,10 @@ class MergeEngine(
 ) {
     constructor(context: Context) : this({ uri -> context.contentResolver.openInputStream(uri) })
 
+    companion object {
+        private const val TAG = "MochiStitch.MergeEngine"
+    }
+
     data class ImageSize(val uri: Uri, val width: Int, val height: Int)
 
     suspend fun mergeToBitmap(
@@ -38,6 +42,7 @@ class MergeEngine(
                 if (w <= 0 || h <= 0) {
                     return@withContext Result.failure(IllegalStateException("Failed to decode image dimensions for URI: $uri"))
                 }
+                logDebug("Input load stage - URI: $uri, width: $w, height: $h")
                 ImageSize(uri, w, h)
             }
 
@@ -68,6 +73,8 @@ class MergeEngine(
                 canvasHeight = (canvasHeight * scaleFactor).roundToInt().coerceAtLeast(1)
             }
 
+            logDebug("Dimension calculation stage - refWidth: $refWidth, refHeight: $refHeight, canvasWidth: $canvasWidth, canvasHeight: $canvasHeight, direction: ${config.direction}, alignment: ${config.alignmentMode}")
+
             val canvasBitmap = Bitmap.createBitmap(canvasWidth, canvasHeight, Bitmap.Config.ARGB_8888)
             val canvas = Canvas(canvasBitmap)
             canvas.drawColor(config.paddingColor.colorInt)
@@ -79,8 +86,12 @@ class MergeEngine(
                 val inputStream = openInputStream(item.uri)
                     ?: return@withContext Result.failure(IllegalStateException("Could not open stream for URI: ${item.uri}"))
 
-                // Calculate sample size for large image subsampling to prevent OOM
-                val sampleSize = calculateInSampleSize(item.srcRect.width(), item.srcRect.height(), item.dstRect.width(), item.dstRect.height())
+                val sampleSize = calculateInSampleSize(
+                    item.srcRect.width(),
+                    item.srcRect.height(),
+                    item.dstRect.width(),
+                    item.dstRect.height()
+                )
 
                 val options = BitmapFactory.Options().apply {
                     inPreferredConfig = Bitmap.Config.ARGB_8888
@@ -94,6 +105,13 @@ class MergeEngine(
                     return@withContext Result.failure(IllegalStateException("Could not decode bitmap for URI: ${item.uri}"))
                 }
 
+                val scaledSrcRect = Rect(
+                    item.srcRect.left / sampleSize,
+                    item.srcRect.top / sampleSize,
+                    (item.srcRect.right / sampleSize).coerceAtMost(srcBitmap.width),
+                    (item.srcRect.bottom / sampleSize).coerceAtMost(srcBitmap.height)
+                )
+
                 val dstRectF = if (scaleFactor != 1.0f) {
                     RectF(
                         item.dstRect.left * scaleFactor,
@@ -104,6 +122,8 @@ class MergeEngine(
                 } else {
                     RectF(item.dstRect)
                 }
+
+                logDebug("Canvas draw stage - item $index: URI: ${item.uri}, srcRect: $scaledSrcRect, dstRectF: $dstRectF")
 
                 if (config.alignmentMode == AlignmentMode.PADDING && config.paddingColor != PaddingColor.TRANSPARENT) {
                     val pageBgPaint = Paint().apply {
@@ -123,7 +143,7 @@ class MergeEngine(
                     canvas.drawRect(pageBoxF, pageBgPaint)
                 }
 
-                canvas.drawBitmap(srcBitmap, null, dstRectF, paint)
+                canvas.drawBitmap(srcBitmap, scaledSrcRect, dstRectF, paint)
                 srcBitmap.recycle()
 
                 val progress = 0.1f + 0.8f * ((index + 1).toFloat() / totalCount.toFloat())
@@ -354,6 +374,14 @@ class MergeEngine(
                     Rect(0, 0, pageW, pageH)
                 )
             }
+        }
+    }
+
+    private fun logDebug(message: String) {
+        try {
+            android.util.Log.d(TAG, message)
+        } catch (t: Throwable) {
+            println("[$TAG] $message")
         }
     }
 

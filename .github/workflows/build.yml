@@ -49,17 +49,30 @@ jobs:
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: ./gradlew assembleRelease
 
-      - name: Upload APK Artifacts
+      - name: Cleanup Keystore
+        if: always()
+        run: |
+          rm -f app/mochistitch-release.jks
+
+      - name: Upload Debug APK Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: mochistitch-apks
-          path: app/build/outputs/apk/**/*.apk
+          name: mochistitch-debug-apks
+          path: app/build/outputs/apk/debug/**/*.apk
+          if-no-files-found: ignore
+
+      - name: Upload Release APK Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: mochistitch-release-apks
+          path: app/build/outputs/apk/release/**/*.apk
+          if-no-files-found: ignore
 
       - name: Create GitHub Release
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
-          files: app/build/outputs/apk/**/*.apk
+          files: app/build/outputs/apk/release/**/*.apk
           generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
