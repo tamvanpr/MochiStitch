@@ -22,6 +22,7 @@ class MergeEngine(
 
     companion object {
         private const val TAG = "MochiStitch.MergeEngine"
+        private const val MAX_CANVAS_DIM = 8192
     }
 
     data class ImageSize(val uri: Uri, val width: Int, val height: Int)
@@ -47,16 +48,13 @@ class MergeEngine(
                 ImageSize(uri, w, h)
             }
 
-            val targetWidth = sizes.maxOf { it.width }
-            val targetHeight = sizes.maxOf { it.height }
+            val maxInputWidth = sizes.maxOf { it.width }
+            val maxInputHeight = sizes.maxOf { it.height }
 
-            val refWidth = targetWidth
-            val refHeight = targetHeight
-
-            val items = calculateItemPlacements(sizes, refWidth, refHeight, config)
+            val items = calculateItemPlacements(sizes, maxInputWidth, maxInputHeight, config)
 
             var canvasWidth = if (config.direction == MergeDirection.VERTICAL) {
-                targetWidth
+                maxInputWidth
             } else {
                 items.maxOf { item -> item.dstRect.right }
             }
@@ -64,22 +62,23 @@ class MergeEngine(
             var canvasHeight = if (config.direction == MergeDirection.VERTICAL) {
                 items.maxOf { item -> item.dstRect.bottom }
             } else {
-                targetHeight
+                maxInputHeight
             }
 
+            // Log EXACTLY calculated max width before drawing
+            logMochiStitch("Calculated max width: $maxInputWidth")
             logMochiStitch("Target Canvas: ${canvasWidth}x${canvasHeight}")
 
-            val maxCanvasDim = 8192
             var scaleFactor = 1.0f
-            if (canvasWidth > maxCanvasDim || canvasHeight > maxCanvasDim) {
-                val scaleW = maxCanvasDim.toFloat() / canvasWidth.toFloat()
-                val scaleH = maxCanvasDim.toFloat() / canvasHeight.toFloat()
+            if (canvasWidth > MAX_CANVAS_DIM || canvasHeight > MAX_CANVAS_DIM) {
+                val scaleW = MAX_CANVAS_DIM.toFloat() / canvasWidth.toFloat()
+                val scaleH = MAX_CANVAS_DIM.toFloat() / canvasHeight.toFloat()
                 scaleFactor = minOf(scaleW, scaleH)
                 canvasWidth = (canvasWidth * scaleFactor).roundToInt().coerceAtLeast(1)
                 canvasHeight = (canvasHeight * scaleFactor).roundToInt().coerceAtLeast(1)
             }
 
-            logDebug("Dimension calculation stage - refWidth: $refWidth, refHeight: $refHeight, canvasWidth: $canvasWidth, canvasHeight: $canvasHeight, direction: ${config.direction}, alignment: ${config.alignmentMode}")
+            logDebug("Dimension calculation stage - maxInputWidth: $maxInputWidth, maxInputHeight: $maxInputHeight, canvasWidth: $canvasWidth, canvasHeight: $canvasHeight, direction: ${config.direction}, alignment: ${config.alignmentMode}")
 
             val canvasBitmap = Bitmap.createBitmap(canvasWidth, canvasHeight, Bitmap.Config.ARGB_8888)
             val canvas = Canvas(canvasBitmap)
