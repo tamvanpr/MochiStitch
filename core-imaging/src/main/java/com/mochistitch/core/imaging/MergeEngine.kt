@@ -12,6 +12,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.InputStream
 import java.io.OutputStream
+import kotlin.math.max
 import kotlin.math.roundToInt
 
 class MergeEngine(
@@ -78,8 +79,12 @@ class MergeEngine(
                 val inputStream = openInputStream(item.uri)
                     ?: return@withContext Result.failure(IllegalStateException("Could not open stream for URI: ${item.uri}"))
 
+                // Calculate sample size for large image subsampling to prevent OOM
+                val sampleSize = calculateInSampleSize(item.srcRect.width(), item.srcRect.height(), item.dstRect.width(), item.dstRect.height())
+
                 val options = BitmapFactory.Options().apply {
                     inPreferredConfig = Bitmap.Config.ARGB_8888
+                    inSampleSize = sampleSize
                 }
                 val srcBitmap = BitmapFactory.decodeStream(inputStream, null, options)
                 inputStream.close()
@@ -118,7 +123,7 @@ class MergeEngine(
                     canvas.drawRect(pageBoxF, pageBgPaint)
                 }
 
-                canvas.drawBitmap(srcBitmap, item.srcRect, dstRectF, paint)
+                canvas.drawBitmap(srcBitmap, null, dstRectF, paint)
                 srcBitmap.recycle()
 
                 val progress = 0.1f + 0.8f * ((index + 1).toFloat() / totalCount.toFloat())
@@ -130,6 +135,18 @@ class MergeEngine(
         } catch (e: Throwable) {
             Result.failure(e)
         }
+    }
+
+    private fun calculateInSampleSize(reqSrcW: Int, reqSrcH: Int, reqDstW: Int, reqDstH: Int): Int {
+        var inSampleSize = 1
+        if (reqSrcH > reqDstH * 2 || reqSrcW > reqDstW * 2) {
+            val halfHeight: Int = reqSrcH / 2
+            val halfWidth: Int = reqSrcW / 2
+            while ((halfHeight / inSampleSize) >= reqDstH && (halfWidth / inSampleSize) >= reqDstW) {
+                inSampleSize *= 2
+            }
+        }
+        return max(1, inSampleSize)
     }
 
     suspend fun merge(
