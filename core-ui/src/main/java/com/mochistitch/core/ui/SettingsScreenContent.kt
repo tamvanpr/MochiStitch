@@ -157,7 +157,7 @@ fun SettingsScreenContent(
                     ) {
                         SplitMode.entries.forEach { mode ->
                             val label = when (mode) {
-                                SplitMode.NO_SPLIT -> "No Splitting (Single Long Image)"
+                                SplitMode.NO_LIMIT -> "No Splitting (Single Long Image)"
                                 SplitMode.MAX_PIXELS -> "Split by File Size/Pixels"
                                 SplitMode.PAGES_PER_FILE -> "Split by Page Count"
                             }
