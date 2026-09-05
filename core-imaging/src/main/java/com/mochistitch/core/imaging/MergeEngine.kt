@@ -42,17 +42,21 @@ class MergeEngine(
                 if (w <= 0 || h <= 0) {
                     return@withContext Result.failure(IllegalStateException("Failed to decode image dimensions for URI: $uri"))
                 }
+                logMochiStitch("Input Bitmap: ${w}x${h}")
                 logDebug("Input load stage - URI: $uri, width: $w, height: $h")
                 ImageSize(uri, w, h)
             }
 
-            val refWidth = sizes.maxOf { it.width }
-            val refHeight = sizes.maxOf { it.height }
+            val targetWidth = sizes.maxOf { it.width }
+            val targetHeight = sizes.maxOf { it.height }
+
+            val refWidth = targetWidth
+            val refHeight = targetHeight
 
             val items = calculateItemPlacements(sizes, refWidth, refHeight, config)
 
             var canvasWidth = if (config.direction == MergeDirection.VERTICAL) {
-                refWidth
+                targetWidth
             } else {
                 items.maxOf { item -> item.dstRect.right }
             }
@@ -60,8 +64,10 @@ class MergeEngine(
             var canvasHeight = if (config.direction == MergeDirection.VERTICAL) {
                 items.maxOf { item -> item.dstRect.bottom }
             } else {
-                refHeight
+                targetHeight
             }
+
+            logMochiStitch("Target Canvas: ${canvasWidth}x${canvasHeight}")
 
             val maxCanvasDim = 8192
             var scaleFactor = 1.0f
@@ -374,6 +380,14 @@ class MergeEngine(
                     Rect(0, 0, pageW, pageH)
                 )
             }
+        }
+    }
+
+    private fun logMochiStitch(message: String) {
+        try {
+            android.util.Log.d("MochiStitch", message)
+        } catch (t: Throwable) {
+            println("[MochiStitch] $message")
         }
     }
 

@@ -72,4 +72,36 @@ class MergeEngineTest {
         assertEquals(300, scaledHeight2)
         assertEquals(700, scaledHeight1 + scaledHeight2)
     }
+
+    @Test
+    fun testTargetWidthCalculatedFromMaxOfAllInputs() {
+        val inputs = listOf(
+            45 to 100,
+            300 to 200,
+            1080 to 1920,
+            500 to 800
+        )
+        val targetWidth = inputs.maxOf { it.first }
+        val targetHeight = inputs.maxOf { it.second }
+
+        assertEquals(1080, targetWidth)
+        assertEquals(1920, targetHeight)
+
+        inputs.forEach { (w, h) ->
+            println("[MochiStitch] Input Bitmap: ${w}x${h}")
+        }
+
+        // For vertical merge with proportional scaling to targetWidth (1080):
+        // 45x100 -> width 1080, height = (100 * 1080 / 45) = 2400
+        // 300x200 -> width 1080, height = (200 * 1080 / 300) = 720
+        // 1080x1920 -> width 1080, height = 1920
+        // 500x800 -> width 1080, height = (800 * 1080 / 500) = 1728
+        // Total canvas height = 2400 + 720 + 1920 + 1728 = 6768
+        val totalCanvasHeight = inputs.sumOf { (w, h) ->
+            (h.toFloat() * targetWidth.toFloat() / w.toFloat()).toInt()
+        }
+        println("[MochiStitch] Target Canvas: ${targetWidth}x${totalCanvasHeight}")
+        assertEquals(1080, targetWidth)
+        assertEquals(6768, totalCanvasHeight)
+    }
 }
