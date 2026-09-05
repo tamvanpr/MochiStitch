@@ -35,6 +35,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.mochistitch.core.settings.AlignmentModeSetting
+import com.mochistitch.core.settings.DetectionSensitivity
 import com.mochistitch.core.settings.MochiStitchSettings
 import com.mochistitch.core.settings.OutputFormat
 import com.mochistitch.core.settings.OutputWrapperFormat
@@ -145,7 +146,78 @@ fun SettingsScreenContent(
                 }
             }
 
-            // 2. Output Wrapper Format
+            // 2. MochiSmart Engine Settings
+            Card(
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "MochiSmart AI / Contour Engine",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Switch(
+                            checked = settings.mochiSmartEnabled,
+                            onCheckedChange = { onSettingsChanged(settings.copy(mochiSmartEnabled = it)) }
+                        )
+                    }
+
+                    if (settings.mochiSmartEnabled) {
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Text(
+                            text = "Split Tolerance Range: ${settings.mochiSmartTolerance} px",
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                        Slider(
+                            value = settings.mochiSmartTolerance.toFloat(),
+                            onValueChange = { onSettingsChanged(settings.copy(mochiSmartTolerance = it.roundToInt())) },
+                            valueRange = 50f..400f
+                        )
+
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Text(
+                            text = "Detection Sensitivity",
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            DetectionSensitivity.entries.forEach { sensitivity ->
+                                FilterChip(
+                                    selected = settings.mochiSmartSensitivity == sensitivity,
+                                    onClick = { onSettingsChanged(settings.copy(mochiSmartSensitivity = sensitivity)) },
+                                    label = { Text(sensitivity.name) }
+                                )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "Show Manual Review Markers",
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+                            Switch(
+                                checked = settings.showManualReviewMarkers,
+                                onCheckedChange = { onSettingsChanged(settings.copy(showManualReviewMarkers = it)) }
+                            )
+                        }
+                    }
+                }
+            }
+
+            // 3. Output Wrapper Format
             Card(
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
             ) {
@@ -171,7 +243,7 @@ fun SettingsScreenContent(
                 }
             }
 
-            // 3. File Naming Template
+            // 4. File Naming Template
             Card(
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
             ) {
@@ -219,7 +291,7 @@ fun SettingsScreenContent(
                 }
             }
 
-            // 4. Auto-Split Mode
+            // 5. Auto-Split Mode
             Card(
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
             ) {
@@ -275,7 +347,7 @@ fun SettingsScreenContent(
                 }
             }
 
-            // 5. Reading Direction & Alignment Defaults
+            // 6. Reading Direction & Alignment Defaults
             Card(
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
             ) {

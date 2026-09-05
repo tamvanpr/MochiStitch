@@ -33,6 +33,10 @@ class MochiStitchSettingsRepository(private val dataStore: DataStore<Preferences
         val KEY_READING_DIRECTION = stringPreferencesKey("reading_direction")
         val KEY_ALIGNMENT_MODE = stringPreferencesKey("alignment_mode")
         val KEY_PADDING_COLOR = stringPreferencesKey("padding_color")
+        val KEY_MOCHI_SMART_ENABLED = booleanPreferencesKey("mochi_smart_enabled")
+        val KEY_MOCHI_SMART_TOLERANCE = intPreferencesKey("mochi_smart_tolerance")
+        val KEY_MOCHI_SMART_SENSITIVITY = stringPreferencesKey("mochi_smart_sensitivity")
+        val KEY_SHOW_MANUAL_REVIEW_MARKERS = booleanPreferencesKey("show_manual_review_markers")
     }
 
     val settingsFlow: Flow<MochiStitchSettings> = dataStore.data.map { prefs ->
@@ -51,7 +55,11 @@ class MochiStitchSettingsRepository(private val dataStore: DataStore<Preferences
             maxPagesPerFile = prefs[KEY_MAX_PAGES_PER_FILE] ?: 10,
             readingDirection = prefs[KEY_READING_DIRECTION]?.let { runCatching { ReadingDirection.valueOf(it) }.getOrNull() } ?: ReadingDirection.LTR,
             alignmentMode = prefs[KEY_ALIGNMENT_MODE]?.let { runCatching { AlignmentModeSetting.valueOf(it) }.getOrNull() } ?: AlignmentModeSetting.RESIZE_PROPORTIONAL,
-            paddingColor = prefs[KEY_PADDING_COLOR]?.let { runCatching { PaddingColorSetting.valueOf(it) }.getOrNull() } ?: PaddingColorSetting.WHITE
+            paddingColor = prefs[KEY_PADDING_COLOR]?.let { runCatching { PaddingColorSetting.valueOf(it) }.getOrNull() } ?: PaddingColorSetting.WHITE,
+            mochiSmartEnabled = prefs[KEY_MOCHI_SMART_ENABLED] ?: true,
+            mochiSmartTolerance = prefs[KEY_MOCHI_SMART_TOLERANCE] ?: 150,
+            mochiSmartSensitivity = prefs[KEY_MOCHI_SMART_SENSITIVITY]?.let { runCatching { DetectionSensitivity.valueOf(it) }.getOrNull() } ?: DetectionSensitivity.MEDIUM,
+            showManualReviewMarkers = prefs[KEY_SHOW_MANUAL_REVIEW_MARKERS] ?: true
         )
     }
 
@@ -72,6 +80,10 @@ class MochiStitchSettingsRepository(private val dataStore: DataStore<Preferences
             prefs[KEY_READING_DIRECTION] = settings.readingDirection.name
             prefs[KEY_ALIGNMENT_MODE] = settings.alignmentMode.name
             prefs[KEY_PADDING_COLOR] = settings.paddingColor.name
+            prefs[KEY_MOCHI_SMART_ENABLED] = settings.mochiSmartEnabled
+            prefs[KEY_MOCHI_SMART_TOLERANCE] = settings.mochiSmartTolerance
+            prefs[KEY_MOCHI_SMART_SENSITIVITY] = settings.mochiSmartSensitivity.name
+            prefs[KEY_SHOW_MANUAL_REVIEW_MARKERS] = settings.showManualReviewMarkers
         }
     }
 }

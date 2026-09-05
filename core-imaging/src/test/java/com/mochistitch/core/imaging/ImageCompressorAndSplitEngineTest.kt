@@ -1,7 +1,12 @@
 package com.mochistitch.core.imaging
 
+import com.mochistitch.core.settings.DetectionSensitivity
+import com.mochistitch.core.settings.MochiStitchSettings
 import com.mochistitch.core.settings.OutputFormat
+import com.mochistitch.core.settings.ReadingDirection
+import com.mochistitch.core.settings.SplitMode
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
 import org.junit.Test
 
 class ImageCompressorAndSplitEngineTest {
@@ -38,5 +43,14 @@ class ImageCompressorAndSplitEngineTest {
             format = OutputFormat.JPG
         )
         assertEquals("page_12.jpg", filename2)
+    }
+
+    @Test
+    fun testMochiSmartSettingsDefaults() {
+        val settings = MochiStitchSettings()
+        assertEquals(true, settings.mochiSmartEnabled)
+        assertEquals(150, settings.mochiSmartTolerance)
+        assertEquals(DetectionSensitivity.MEDIUM, settings.mochiSmartSensitivity)
+        assertEquals(true, settings.showManualReviewMarkers)
     }
 }

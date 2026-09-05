@@ -38,7 +38,8 @@ data class ExportResultInfo(
     val width: Int,
     val height: Int,
     val bytesWritten: Long,
-    val outputCount: Int
+    val outputCount: Int,
+    val itemsNeedingManualReview: Int = 0
 )
 
 data class MainUiState(
@@ -280,6 +281,7 @@ class MainViewModel : ViewModel() {
 
                 val maxW = items.maxOfOrNull { it.width } ?: 0
                 val totalH = items.sumOf { it.height }
+                val manualReviewCount = items.count { it.needsManualReview }
                 processor.recycleAll(items)
 
                 _uiState.update {
@@ -289,7 +291,8 @@ class MainViewModel : ViewModel() {
                             width = maxW,
                             height = totalH,
                             bytesWritten = bytesWritten,
-                            outputCount = items.size
+                            outputCount = items.size,
+                            itemsNeedingManualReview = manualReviewCount
                         ),
                         resultOutputUri = outputUri
                     )
