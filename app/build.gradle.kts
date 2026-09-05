@@ -74,6 +74,22 @@ android {
         }
     }
 
+    applicationVariants.all {
+        outputs.all {
+            val outputImpl = this as? com.android.build.gradle.internal.api.BaseVariantOutputImpl
+            if (outputImpl != null) {
+                val variantName = buildType.name
+                val isSigned = signingConfig != null && signingConfig!!.storeFile?.exists() == true
+                val fileName = if (variantName == "release") {
+                    if (isSigned) "MochiStitch-release-signed.apk" else "MochiStitch-release.apk"
+                } else {
+                    "MochiStitch-debug.apk"
+                }
+                outputImpl.outputFileName = fileName
+            }
+        }
+    }
+
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17

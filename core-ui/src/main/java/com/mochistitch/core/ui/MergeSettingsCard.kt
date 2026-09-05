@@ -9,13 +9,13 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.mochistitch.core.imaging.AlignmentMode
 import com.mochistitch.core.imaging.MergeDirection
@@ -32,12 +32,9 @@ fun MergeSettingsCard(
     onPaddingColorChange: (PaddingColor) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    Card(
+    ElevatedCard(
         modifier = modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant
-        )
+        shape = RoundedCornerShape(16.dp)
     ) {
         Column(
             modifier = Modifier
@@ -45,52 +42,57 @@ fun MergeSettingsCard(
                 .padding(16.dp)
         ) {
             Text(
-                text = "Merge Options",
+                text = "Stitch Layout Options",
                 style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.primary
             )
 
             Spacer(modifier = Modifier.height(12.dp))
 
             Text(
-                text = "Direction",
-                style = MaterialTheme.typography.labelLarge
+                text = "Stitch Direction",
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.onSurface
             )
-            Spacer(modifier = Modifier.height(4.dp))
+            Spacer(modifier = Modifier.height(6.dp))
             FlowRow(
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 FilterChip(
                     selected = direction == MergeDirection.VERTICAL,
                     onClick = { onDirectionChange(MergeDirection.VERTICAL) },
-                    label = { Text("Vertical") }
+                    label = { Text("Vertical (Webtoon)") }
                 )
                 FilterChip(
                     selected = direction == MergeDirection.HORIZONTAL_LTR,
                     onClick = { onDirectionChange(MergeDirection.HORIZONTAL_LTR) },
-                    label = { Text("Horizontal (LTR)") }
+                    label = { Text("Horizontal (Left-to-Right)") }
                 )
                 FilterChip(
                     selected = direction == MergeDirection.HORIZONTAL_RTL,
                     onClick = { onDirectionChange(MergeDirection.HORIZONTAL_RTL) },
-                    label = { Text("Horizontal (RTL)") }
+                    label = { Text("Horizontal (Right-to-Left / Manga)") }
                 )
             }
 
-            Spacer(modifier = Modifier.height(12.dp))
+            Spacer(modifier = Modifier.height(14.dp))
 
             Text(
-                text = "Alignment Mode",
-                style = MaterialTheme.typography.labelLarge
+                text = "Page Alignment Mode",
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.onSurface
             )
-            Spacer(modifier = Modifier.height(4.dp))
+            Spacer(modifier = Modifier.height(6.dp))
             FlowRow(
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 FilterChip(
                     selected = alignmentMode == AlignmentMode.RESIZE_PROPORTIONAL,
                     onClick = { onAlignmentModeChange(AlignmentMode.RESIZE_PROPORTIONAL) },
-                    label = { Text("Resize Proportional") }
+                    label = { Text("Scale to Fit (Maintain Ratio)") }
                 )
                 FilterChip(
                     selected = alignmentMode == AlignmentMode.CENTER_CROP,
@@ -100,20 +102,22 @@ fun MergeSettingsCard(
                 FilterChip(
                     selected = alignmentMode == AlignmentMode.PADDING,
                     onClick = { onAlignmentModeChange(AlignmentMode.PADDING) },
-                    label = { Text("Letterbox / Padding") }
+                    label = { Text("Add Padding / Letterbox") }
                 )
             }
 
             if (alignmentMode == AlignmentMode.PADDING) {
-                Spacer(modifier = Modifier.height(12.dp))
+                Spacer(modifier = Modifier.height(14.dp))
 
                 Text(
-                    text = "Padding Color",
-                    style = MaterialTheme.typography.labelLarge
+                    text = "Padding Background Color",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.onSurface
                 )
-                Spacer(modifier = Modifier.height(4.dp))
+                Spacer(modifier = Modifier.height(6.dp))
                 FlowRow(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     FilterChip(
                         selected = paddingColor == PaddingColor.WHITE,

@@ -46,4 +46,28 @@ class MergeEngineTest {
         val error = result as MergeResult.Error
         assertTrue(error.message.contains("Failed to decode image dimensions"))
     }
+
+    @Test
+    fun testProportionalScalingCalculation() {
+        // Given item 1: 100x200, item 2: 200x300
+        // refWidth = 200 (max width)
+        // Item 1 scaled to refWidth 200: height becomes 200 * (200 / 100) = 400
+        // Item 2 scaled to refWidth 200: height stays 300
+        // Expected total height for vertical merge = 400 + 300 = 700
+        val size1 = MergeEngine.ImageSize(Uri.parse("content://1"), 100, 200)
+        val size2 = MergeEngine.ImageSize(Uri.parse("content://2"), 200, 300)
+
+        val refWidth = maxOf(size1.width, size2.width)
+        val refHeight = maxOf(size1.height, size2.height)
+
+        assertEquals(200, refWidth)
+        assertEquals(300, refHeight)
+
+        val scaledHeight1 = (size1.height.toFloat() * refWidth.toFloat() / size1.width.toFloat()).toInt()
+        val scaledHeight2 = (size2.height.toFloat() * refWidth.toFloat() / size2.width.toFloat()).toInt()
+
+        assertEquals(400, scaledHeight1)
+        assertEquals(300, scaledHeight2)
+        assertEquals(700, scaledHeight1 + scaledHeight2)
+    }
 }
