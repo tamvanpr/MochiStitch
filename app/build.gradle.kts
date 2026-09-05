@@ -39,7 +39,7 @@ android {
     signingConfigs {
         create("release") {
             val keystoreFilePath = System.getenv("KEYSTORE_FILE") ?: "mochistitch-release.jks"
-            val keystoreFile = File(keystoreFilePath)
+            val keystoreFile = rootProject.file(keystoreFilePath)
             val keystorePassword = System.getenv("KEYSTORE_PASSWORD")
             val keyAliasEnv = System.getenv("KEY_ALIAS")
             val keyPasswordEnv = System.getenv("KEY_PASSWORD")
