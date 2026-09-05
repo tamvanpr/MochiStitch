@@ -80,10 +80,12 @@ android {
             if (outputImpl != null) {
                 val variantName = buildType.name
                 val isSigned = signingConfig != null && signingConfig!!.storeFile?.exists() == true
+                val abiFilter = outputImpl.filters.find { it.filterType == com.android.build.OutputFile.ABI }?.identifier
                 val fileName = if (variantName == "release") {
-                    if (isSigned) "MochiStitch-release-signed.apk" else "MochiStitch-release.apk"
+                    val baseName = if (isSigned) "MochiStitch-release-signed" else "MochiStitch-release"
+                    if (abiFilter != null) "$baseName-$abiFilter.apk" else "$baseName.apk"
                 } else {
-                    "MochiStitch-debug.apk"
+                    if (abiFilter != null) "MochiStitch-debug-$abiFilter.apk" else "MochiStitch-debug.apk"
                 }
                 outputImpl.outputFileName = fileName
             }
