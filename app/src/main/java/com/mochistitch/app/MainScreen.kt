@@ -1,6 +1,5 @@
 package com.mochistitch.app
 
-import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
@@ -19,6 +18,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Clear
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -35,6 +35,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
@@ -45,8 +46,15 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import coil.compose.AsyncImage
+import com.mochistitch.core.imaging.AlignmentMode
+import com.mochistitch.core.imaging.MergeDirection
+import com.mochistitch.core.imaging.PaddingColor
+import com.mochistitch.core.settings.AlignmentModeSetting
+import com.mochistitch.core.settings.PaddingColorSetting
+import com.mochistitch.core.settings.ReadingDirection
 import com.mochistitch.core.ui.ImageReorderList
 import com.mochistitch.core.ui.MergeSettingsCard
+import com.mochistitch.core.ui.SettingsScreenContent
 import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -58,6 +66,20 @@ fun MainScreen(
     val uiState by viewModel.uiState.collectAsState()
     val context = LocalContext.current
 
+    LaunchedEffect(Unit) {
+        viewModel.initSettings(context)
+    }
+
+    if (uiState.currentScreen == Screen.SETTINGS) {
+        SettingsScreenContent(
+            settings = uiState.settings,
+            onSettingsChanged = { viewModel.saveSettings(it) },
+            onBackClicked = { viewModel.navigateTo(Screen.MAIN) },
+            modifier = modifier
+        )
+        return
+    }
+
     val selectImagesLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenMultipleDocuments()
     ) { uris ->
@@ -67,11 +89,29 @@ fun MainScreen(
     }
 
     val createDocumentLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.CreateDocument("image/jpeg")
+        contract = ActivityResultContracts.CreateDocument(viewModel.getExportMimeType())
     ) { uri ->
         if (uri != null) {
             viewModel.startMerge(uri, context)
         }
+    }
+
+    val currentDirection = when (uiState.settings.readingDirection) {
+        ReadingDirection.VERTICAL -> MergeDirection.VERTICAL
+        ReadingDirection.LTR -> MergeDirection.HORIZONTAL_LTR
+        ReadingDirection.RTL -> MergeDirection.HORIZONTAL_RTL
+    }
+
+    val currentAlignment = when (uiState.settings.alignmentMode) {
+        AlignmentModeSetting.RESIZE_PROPORTIONAL -> AlignmentMode.RESIZE_PROPORTIONAL
+        AlignmentModeSetting.CENTER_CROP -> AlignmentMode.CENTER_CROP
+        AlignmentModeSetting.PADDING -> AlignmentMode.PADDING
+    }
+
+    val currentPaddingColor = when (uiState.settings.paddingColor) {
+        PaddingColorSetting.WHITE -> PaddingColor.WHITE
+        PaddingColorSetting.BLACK -> PaddingColor.BLACK
+        PaddingColorSetting.TRANSPARENT -> PaddingColor.TRANSPARENT
     }
 
     Scaffold(
@@ -92,6 +132,12 @@ fun MainScreen(
                             )
                         }
                     }
+                    IconButton(onClick = { viewModel.navigateTo(Screen.SETTINGS) }) {
+                        Icon(
+                            imageVector = Icons.Default.Settings,
+                            contentDescription = "Settings"
+                        )
+                    }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.primaryContainer,
@@ -108,11 +154,11 @@ fun MainScreen(
                 .padding(16.dp)
         ) {
             MergeSettingsCard(
-                direction = uiState.direction,
+                direction = currentDirection,
                 onDirectionChange = { viewModel.updateDirection(it) },
-                alignmentMode = uiState.alignmentMode,
+                alignmentMode = currentAlignment,
                 onAlignmentModeChange = { viewModel.updateAlignmentMode(it) },
-                paddingColor = uiState.paddingColor,
+                paddingColor = currentPaddingColor,
                 onPaddingColorChange = { viewModel.updatePaddingColor(it) }
             )
 
@@ -188,7 +234,7 @@ fun MainScreen(
 
                 Button(
                     onClick = {
-                        val filename = "mochistitch_${System.currentTimeMillis()}.jpg"
+                        val filename = viewModel.getExportDefaultFilename()
                         createDocumentLauncher.launch(filename)
                     },
                     modifier = Modifier
@@ -239,8 +285,8 @@ fun MainScreen(
         }
     }
 
-    if (uiState.mergeResult != null && uiState.resultOutputUri != null) {
-        val result = uiState.mergeResult!!
+    if (uiState.exportResult != null && uiState.resultOutputUri != null) {
+        val result = uiState.exportResult!!
         val uri = uiState.resultOutputUri!!
 
         AlertDialog(
@@ -253,14 +299,14 @@ fun MainScreen(
                         tint = MaterialTheme.colorScheme.primary
                     )
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text(text = "Merge Complete!")
+                    Text(text = "Export Complete!")
                 }
             },
             text = {
                 Column {
                     AsyncImage(
                         model = uri,
-                        contentDescription = "Merged Result Preview",
+                        contentDescription = "Export Result Preview",
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(180.dp)
@@ -268,11 +314,15 @@ fun MainScreen(
                     )
                     Spacer(modifier = Modifier.height(12.dp))
                     Text(
+                        text = "Output Files: ${result.outputCount}",
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                    Text(
                         text = "Dimensions: ${result.width} x ${result.height} px",
                         style = MaterialTheme.typography.bodyMedium
                     )
                     Text(
-                        text = "Size: ${formatFileSize(result.bytesWritten)}",
+                        text = "Total Size: ${formatFileSize(result.bytesWritten)}",
                         style = MaterialTheme.typography.bodyMedium
                     )
                 }
@@ -288,7 +338,7 @@ fun MainScreen(
     if (uiState.errorMessage != null) {
         AlertDialog(
             onDismissRequest = { viewModel.dismissError() },
-            title = { Text("Merge Failed") },
+            title = { Text("Export Failed") },
             text = { Text(uiState.errorMessage!!) },
             confirmButton = {
                 TextButton(onClick = { viewModel.dismissError() }) {

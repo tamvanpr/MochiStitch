@@ -21,14 +21,13 @@ class MergeEngine(
 
     data class ImageSize(val uri: Uri, val width: Int, val height: Int)
 
-    suspend fun merge(
+    suspend fun mergeToBitmap(
         imageUris: List<Uri>,
-        outputStream: OutputStream,
         config: MergeConfig = MergeConfig(),
         onProgress: (Float) -> Unit = {}
-    ): MergeResult = withContext(Dispatchers.IO) {
+    ): Result<Bitmap> = withContext(Dispatchers.IO) {
         if (imageUris.isEmpty()) {
-            return@withContext MergeResult.Error("No input images provided.")
+            return@withContext Result.failure(IllegalArgumentException("No input images provided."))
         }
 
         try {
@@ -36,7 +35,7 @@ class MergeEngine(
             val sizes = imageUris.map { uri ->
                 val (w, h) = getImageDimensions(uri)
                 if (w <= 0 || h <= 0) {
-                    return@withContext MergeResult.Error("Failed to decode image dimensions for URI: $uri")
+                    return@withContext Result.failure(IllegalStateException("Failed to decode image dimensions for URI: $uri"))
                 }
                 ImageSize(uri, w, h)
             }
@@ -44,7 +43,6 @@ class MergeEngine(
             val refWidth = sizes.maxOf { it.width }
             val refHeight = sizes.maxOf { it.height }
 
-            // Compute dimensions for each image and total canvas size
             val items = calculateItemPlacements(sizes, refWidth, refHeight, config)
 
             var canvasWidth = if (config.direction == MergeDirection.VERTICAL) {
@@ -59,7 +57,6 @@ class MergeEngine(
                 refHeight
             }
 
-            // Cap max canvas dimensions to prevent OOM on extreme sizes
             val maxCanvasDim = 8192
             var scaleFactor = 1.0f
             if (canvasWidth > maxCanvasDim || canvasHeight > maxCanvasDim) {
@@ -79,7 +76,7 @@ class MergeEngine(
             val totalCount = items.size
             for ((index, item) in items.withIndex()) {
                 val inputStream = openInputStream(item.uri)
-                    ?: return@withContext MergeResult.Error("Could not open stream for URI: ${item.uri}")
+                    ?: return@withContext Result.failure(IllegalStateException("Could not open stream for URI: ${item.uri}"))
 
                 val options = BitmapFactory.Options().apply {
                     inPreferredConfig = Bitmap.Config.ARGB_8888
@@ -89,10 +86,9 @@ class MergeEngine(
 
                 if (srcBitmap == null) {
                     canvasBitmap.recycle()
-                    return@withContext MergeResult.Error("Could not decode bitmap for URI: ${item.uri}")
+                    return@withContext Result.failure(IllegalStateException("Could not decode bitmap for URI: ${item.uri}"))
                 }
 
-                // If canvas was downscaled, adjust destination rect
                 val dstRectF = if (scaleFactor != 1.0f) {
                     RectF(
                         item.dstRect.left * scaleFactor,
@@ -129,21 +125,44 @@ class MergeEngine(
                 onProgress(progress)
             }
 
-            val byteCountingStream = ByteCountingOutputStream(outputStream)
-            canvasBitmap.compress(config.compressFormat, config.quality, byteCountingStream)
-            byteCountingStream.flush()
-            val bytesWritten = byteCountingStream.bytesWritten
-            canvasBitmap.recycle()
-
             onProgress(1.0f)
-            MergeResult.Success(
-                width = canvasWidth,
-                height = canvasHeight,
-                bytesWritten = bytesWritten
-            )
+            Result.success(canvasBitmap)
         } catch (e: Throwable) {
-            MergeResult.Error(e.message ?: "Unknown error occurred during merge", e)
+            Result.failure(e)
         }
+    }
+
+    suspend fun merge(
+        imageUris: List<Uri>,
+        outputStream: OutputStream,
+        config: MergeConfig = MergeConfig(),
+        onProgress: (Float) -> Unit = {}
+    ): MergeResult = withContext(Dispatchers.IO) {
+        mergeToBitmap(imageUris, config, onProgress).fold(
+            onSuccess = { canvasBitmap ->
+                try {
+                    val byteCountingStream = ByteCountingOutputStream(outputStream)
+                    canvasBitmap.compress(config.compressFormat, config.quality, byteCountingStream)
+                    byteCountingStream.flush()
+                    val bytesWritten = byteCountingStream.bytesWritten
+                    val width = canvasBitmap.width
+                    val height = canvasBitmap.height
+                    canvasBitmap.recycle()
+
+                    MergeResult.Success(
+                        width = width,
+                        height = height,
+                        bytesWritten = bytesWritten
+                    )
+                } catch (e: Throwable) {
+                    canvasBitmap.recycle()
+                    MergeResult.Error(e.message ?: "Failed to compress bitmap", e)
+                }
+            },
+            onFailure = { throwable ->
+                MergeResult.Error(throwable.message ?: "Unknown error during merge", throwable)
+            }
+        )
     }
 
     private fun getImageDimensions(uri: Uri): Pair<Int, Int> {
