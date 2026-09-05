@@ -17,7 +17,8 @@ data class StitchResultItem(
     val filename: String,
     val bitmap: Bitmap,
     val width: Int,
-    val height: Int
+    val height: Int,
+    val needsManualReview: Boolean = false
 )
 
 class StitchProcessor(
@@ -75,18 +76,16 @@ class StitchProcessor(
                     onProgress(batchProgressStart + prog * batchProgressRange)
                 }.getOrThrow()
 
-                val slices: List<Bitmap> = if (settings.splitMode == SplitMode.MAX_PIXELS) {
-                    SplitEngine.sliceBitmap(
+                val slices: List<SlicedPiece> = if (settings.splitMode == SplitMode.MAX_PIXELS) {
+                    SplitEngine.sliceBitmapDetailed(
                         source = mergedBitmap,
-                        splitMode = settings.splitMode,
-                        maxPixelLength = settings.maxPixelLength,
-                        direction = settings.readingDirection
+                        settings = settings
                     )
                 } else {
-                    listOf(mergedBitmap)
+                    listOf(SlicedPiece(mergedBitmap, needsManualReview = false))
                 }
 
-                for (slice in slices) {
+                for (piece in slices) {
                     val filename = FilenameFormatter.formatFilename(
                         template = settings.filenameTemplate,
                         project = settings.projectName,
@@ -99,9 +98,10 @@ class StitchProcessor(
                         StitchResultItem(
                             index = totalItemIndex,
                             filename = filename,
-                            bitmap = slice,
-                            width = slice.width,
-                            height = slice.height
+                            bitmap = piece.bitmap,
+                            width = piece.bitmap.width,
+                            height = piece.bitmap.height,
+                            needsManualReview = piece.needsManualReview
                         )
                     )
                     totalItemIndex++

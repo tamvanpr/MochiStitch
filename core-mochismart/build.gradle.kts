@@ -24,6 +24,7 @@ android {
 
 dependencies {
     implementation(project(":core-common"))
+    implementation(project(":core-settings"))
     implementation(libs.androidx.core.ktx)
     implementation(libs.opencv.android)
     testImplementation(libs.junit)

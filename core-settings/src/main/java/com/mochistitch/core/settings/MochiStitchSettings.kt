@@ -24,6 +24,10 @@ enum class PaddingColorSetting {
     WHITE, BLACK, TRANSPARENT
 }
 
+enum class DetectionSensitivity {
+    LOW, MEDIUM, HIGH
+}
+
 data class MochiStitchSettings(
     val outputFormat: OutputFormat = OutputFormat.PNG,
     val jpgQuality: Int = 90,
@@ -39,5 +43,9 @@ data class MochiStitchSettings(
     val maxPagesPerFile: Int = 10,
     val readingDirection: ReadingDirection = ReadingDirection.LTR,
     val alignmentMode: AlignmentModeSetting = AlignmentModeSetting.RESIZE_PROPORTIONAL,
-    val paddingColor: PaddingColorSetting = PaddingColorSetting.WHITE
+    val paddingColor: PaddingColorSetting = PaddingColorSetting.WHITE,
+    val mochiSmartEnabled: Boolean = true,
+    val mochiSmartTolerance: Int = 150,
+    val mochiSmartSensitivity: DetectionSensitivity = DetectionSensitivity.MEDIUM,
+    val showManualReviewMarkers: Boolean = true
 )
