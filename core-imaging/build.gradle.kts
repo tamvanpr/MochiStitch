@@ -28,6 +28,7 @@ android {
 
 dependencies {
     implementation(project(":core-common"))
+    implementation(project(":core-settings"))
     implementation(libs.androidx.core.ktx)
     testImplementation(libs.junit)
 }

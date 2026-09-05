@@ -1,0 +1,43 @@
+package com.mochistitch.core.settings
+
+enum class OutputFormat {
+    PNG, JPG, WEBP
+}
+
+enum class OutputWrapperFormat {
+    LOOSE_FILES, CBZ, ZIP
+}
+
+enum class SplitMode {
+    NO_LIMIT, MAX_PIXELS, PAGES_PER_FILE
+}
+
+enum class ReadingDirection {
+    LTR, RTL, VERTICAL
+}
+
+enum class AlignmentModeSetting {
+    RESIZE_PROPORTIONAL, CENTER_CROP, PADDING
+}
+
+enum class PaddingColorSetting {
+    WHITE, BLACK, TRANSPARENT
+}
+
+data class MochiStitchSettings(
+    val outputFormat: OutputFormat = OutputFormat.PNG,
+    val jpgQuality: Int = 90,
+    val webpQuality: Int = 90,
+    val webpLossless: Boolean = false,
+    val wrapperFormat: OutputWrapperFormat = OutputWrapperFormat.LOOSE_FILES,
+    val projectName: String = "MochiStitch",
+    val chapterName: String = "1",
+    val filenameTemplate: String = "{project}_ch{chapter}_{index}",
+    val indexPaddingDigits: Int = 3,
+    val splitMode: SplitMode = SplitMode.MAX_PIXELS,
+    val maxPixelLength: Int = 5000,
+    val maxPagesPerFile: Int = 10,
+    val readingDirection: ReadingDirection = ReadingDirection.LTR,
+    val alignmentMode: AlignmentModeSetting = AlignmentModeSetting.RESIZE_PROPORTIONAL,
+    val paddingColor: PaddingColorSetting = PaddingColorSetting.WHITE
+)
