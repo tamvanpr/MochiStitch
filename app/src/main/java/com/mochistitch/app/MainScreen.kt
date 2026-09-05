@@ -31,6 +31,8 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -39,6 +41,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -55,6 +58,7 @@ import com.mochistitch.core.settings.PaddingColorSetting
 import com.mochistitch.core.settings.ReadingDirection
 import com.mochistitch.core.ui.ImageReorderList
 import com.mochistitch.core.ui.MergeSettingsCard
+import com.mochistitch.core.ui.PreviewScreenContent
 import com.mochistitch.core.ui.SettingsScreenContent
 import java.util.Locale
 
@@ -66,9 +70,18 @@ fun MainScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val context = LocalContext.current
+    val snackbarHostState = remember { SnackbarHostState() }
 
     LaunchedEffect(Unit) {
         viewModel.initSettings(context)
+    }
+
+    val createDocumentLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.CreateDocument(viewModel.getExportMimeType())
+    ) { uri ->
+        if (uri != null) {
+            viewModel.exportResult(uri, context)
+        }
     }
 
     if (uiState.currentScreen == Screen.SETTINGS) {
@@ -81,19 +94,27 @@ fun MainScreen(
         return
     }
 
+    if (uiState.currentScreen == Screen.PREVIEW) {
+        PreviewScreenContent(
+            slices = uiState.previewSlices,
+            onExportClicked = {
+                val filename = viewModel.getExportDefaultFilename()
+                createDocumentLauncher.launch(filename)
+            },
+            onBackClicked = { viewModel.navigateTo(Screen.MAIN) },
+            modifier = modifier
+        )
+
+        ExportResultDialogs(uiState = uiState, viewModel = viewModel)
+        ProcessingProgressDialog(uiState = uiState)
+        return
+    }
+
     val selectImagesLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenMultipleDocuments()
     ) { uris ->
         if (uris.isNotEmpty()) {
             viewModel.addImages(uris, context)
-        }
-    }
-
-    val createDocumentLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.CreateDocument(viewModel.getExportMimeType())
-    ) { uri ->
-        if (uri != null) {
-            viewModel.startMerge(uri, context)
         }
     }
 
@@ -146,6 +167,7 @@ fun MainScreen(
                 )
             )
         },
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         modifier = modifier
     ) { innerPadding ->
         Column(
@@ -235,8 +257,7 @@ fun MainScreen(
 
                 Button(
                     onClick = {
-                        val filename = viewModel.getExportDefaultFilename()
-                        createDocumentLauncher.launch(filename)
+                        viewModel.generatePreview(context)
                     },
                     modifier = Modifier
                         .fillMaxWidth()
@@ -245,7 +266,7 @@ fun MainScreen(
                 ) {
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        text = "Process Merge",
+                        text = "Process & Preview Merge",
                         style = MaterialTheme.typography.titleMedium
                     )
                 }
@@ -253,6 +274,12 @@ fun MainScreen(
         }
     }
 
+    ProcessingProgressDialog(uiState = uiState)
+    ExportResultDialogs(uiState = uiState, viewModel = viewModel)
+}
+
+@Composable
+private fun ProcessingProgressDialog(uiState: MainUiState) {
     if (uiState.isProcessing) {
         Dialog(onDismissRequest = {}) {
             Card(
@@ -267,13 +294,13 @@ fun MainScreen(
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     Text(
-                        text = "Merging Images...",
+                        text = if (uiState.processingStep.isNotEmpty()) uiState.processingStep else "Processing...",
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold
                     )
                     Spacer(modifier = Modifier.height(16.dp))
                     LinearProgressIndicator(
-                        progress = { uiState.progress },
+                        progress = { uiState.progress.coerceIn(0f, 1f) },
                         modifier = Modifier.fillMaxWidth()
                     )
                     Spacer(modifier = Modifier.height(12.dp))
@@ -285,10 +312,16 @@ fun MainScreen(
             }
         }
     }
+}
 
+@Composable
+private fun ExportResultDialogs(
+    uiState: MainUiState,
+    viewModel: MainViewModel
+) {
     if (uiState.exportResult != null && uiState.resultOutputUri != null) {
-        val result = uiState.exportResult!!
-        val uri = uiState.resultOutputUri!!
+        val result = uiState.exportResult
+        val uri = uiState.resultOutputUri
 
         AlertDialog(
             onDismissRequest = { viewModel.dismissResult() },
