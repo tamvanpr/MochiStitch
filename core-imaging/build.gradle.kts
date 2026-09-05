@@ -7,6 +7,10 @@ android {
     namespace = "com.mochistitch.core.imaging"
     compileSdk = 35
 
+    testOptions {
+        unitTests.isReturnDefaultValues = true
+    }
+
     defaultConfig {
         minSdk = 24
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
