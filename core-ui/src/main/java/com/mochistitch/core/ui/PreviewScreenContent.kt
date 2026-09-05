@@ -1,5 +1,6 @@
 package com.mochistitch.core.ui
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -44,6 +45,8 @@ fun PreviewScreenContent(
     onBackClicked: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    BackHandler(onBack = onBackClicked)
+
     val reviewCount = slices.count { it.needsManualReview }
 
     Scaffold(

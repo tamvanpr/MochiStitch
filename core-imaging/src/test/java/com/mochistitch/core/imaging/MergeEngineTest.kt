@@ -3,6 +3,7 @@ package com.mochistitch.core.imaging
 import android.net.Uri
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.ByteArrayOutputStream
@@ -100,7 +101,10 @@ class MergeEngineTest {
         val totalCanvasHeight = inputs.sumOf { (w, h) ->
             (h.toFloat() * targetWidth.toFloat() / w.toFloat()).toInt()
         }
+        println("[MochiStitch] Calculated max width: $targetWidth")
         println("[MochiStitch] Target Canvas: ${targetWidth}x${totalCanvasHeight}")
+
+        assertNotEquals(45, targetWidth)
         assertEquals(1080, targetWidth)
         assertEquals(6768, totalCanvasHeight)
     }

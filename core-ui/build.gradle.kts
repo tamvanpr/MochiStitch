@@ -32,6 +32,7 @@ dependencies {
     implementation(project(":core-imaging"))
     implementation(project(":core-settings"))
     implementation(libs.androidx.core.ktx)
+    implementation(libs.androidx.activity.compose)
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.ui)
     implementation(libs.androidx.ui.graphics)

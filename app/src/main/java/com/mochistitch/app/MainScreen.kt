@@ -1,5 +1,7 @@
 package com.mochistitch.app
 
+import android.widget.Toast
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
@@ -41,7 +43,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -60,17 +65,22 @@ import com.mochistitch.core.ui.ImageReorderList
 import com.mochistitch.core.ui.MergeSettingsCard
 import com.mochistitch.core.ui.PreviewScreenContent
 import com.mochistitch.core.ui.SettingsScreenContent
+import kotlinx.coroutines.launch
 import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MainScreen(
     viewModel: MainViewModel,
+    onExitApp: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val context = LocalContext.current
     val snackbarHostState = remember { SnackbarHostState() }
+    val scope = rememberCoroutineScope()
+
+    var backPressedTime by remember { mutableStateOf(0L) }
 
     LaunchedEffect(Unit) {
         viewModel.initSettings(context)
@@ -108,6 +118,20 @@ fun MainScreen(
         ExportResultDialogs(uiState = uiState, viewModel = viewModel)
         ProcessingProgressDialog(uiState = uiState)
         return
+    }
+
+    // Main screen double-back exit handling
+    BackHandler {
+        val currentTime = System.currentTimeMillis()
+        if (currentTime - backPressedTime < 2000) {
+            onExitApp()
+        } else {
+            backPressedTime = currentTime
+            scope.launch {
+                snackbarHostState.showSnackbar("Press again to exit")
+            }
+            Toast.makeText(context, "Press again to exit", Toast.LENGTH_SHORT).show()
+        }
     }
 
     val selectImagesLauncher = rememberLauncherForActivityResult(

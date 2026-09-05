@@ -1,5 +1,6 @@
 package com.mochistitch.core.ui
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.clickable
@@ -64,6 +65,8 @@ fun SettingsScreenContent(
     onBackClicked: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    BackHandler(onBack = onBackClicked)
+
     var isAdvancedExpanded by remember { mutableStateOf(false) }
     val arrowRotationAngle by animateFloatAsState(
         targetValue = if (isAdvancedExpanded) 180f else 0f,
@@ -134,6 +137,31 @@ fun SettingsScreenContent(
                             onValueChange = { onSettingsChanged(settings.copy(jpgQuality = it.roundToInt())) },
                             valueRange = 1f..100f
                         )
+                    } else if (settings.outputFormat == OutputFormat.WEBP) {
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text("WEBP Lossless Mode")
+                            Switch(
+                                checked = settings.webpLossless,
+                                onCheckedChange = { onSettingsChanged(settings.copy(webpLossless = it)) }
+                            )
+                        }
+                        if (!settings.webpLossless) {
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                text = "WEBP Quality: ${settings.webpQuality}%",
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+                            Slider(
+                                value = settings.webpQuality.toFloat(),
+                                onValueChange = { onSettingsChanged(settings.copy(webpQuality = it.roundToInt())) },
+                                valueRange = 1f..100f
+                            )
+                        }
                     }
                 }
             }
@@ -395,43 +423,7 @@ fun SettingsScreenContent(
                                 }
                             }
 
-                            // Sub-Section B: Advanced WEBP / Output Format Details
-                            if (settings.outputFormat == OutputFormat.WEBP) {
-                                Column {
-                                    Text(
-                                        text = "WEBP Output Configuration",
-                                        style = MaterialTheme.typography.titleSmall,
-                                        fontWeight = FontWeight.Bold,
-                                        color = MaterialTheme.colorScheme.primary
-                                    )
-                                    Spacer(modifier = Modifier.height(8.dp))
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.SpaceBetween,
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        Text("WEBP Lossless Mode")
-                                        Switch(
-                                            checked = settings.webpLossless,
-                                            onCheckedChange = { onSettingsChanged(settings.copy(webpLossless = it)) }
-                                        )
-                                    }
-                                    if (!settings.webpLossless) {
-                                        Spacer(modifier = Modifier.height(8.dp))
-                                        Text(
-                                            text = "WEBP Quality: ${settings.webpQuality}%",
-                                            style = MaterialTheme.typography.bodyMedium
-                                        )
-                                        Slider(
-                                            value = settings.webpQuality.toFloat(),
-                                            onValueChange = { onSettingsChanged(settings.copy(webpQuality = it.roundToInt())) },
-                                            valueRange = 1f..100f
-                                        )
-                                    }
-                                }
-                            }
-
-                            // Sub-Section C: Output Archive / Container Wrapper
+                            // Sub-Section B: Output Archive / Container Wrapper
                             Column {
                                 Text(
                                     text = "Output Packaging / Wrapper",
@@ -459,7 +451,7 @@ fun SettingsScreenContent(
                                 }
                             }
 
-                            // Sub-Section D: File Naming Template & Metadata
+                            // Sub-Section C: File Naming Template & Metadata
                             Column {
                                 Text(
                                     text = "File Naming & Project Metadata",
