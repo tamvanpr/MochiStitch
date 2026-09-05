@@ -54,17 +54,19 @@ class MergeEngineTest {
         // Item 1 scaled to refWidth 200: height becomes 200 * (200 / 100) = 400
         // Item 2 scaled to refWidth 200: height stays 300
         // Expected total height for vertical merge = 400 + 300 = 700
-        val size1 = MergeEngine.ImageSize(Uri.parse("content://1"), 100, 200)
-        val size2 = MergeEngine.ImageSize(Uri.parse("content://2"), 200, 300)
+        val w1 = 100
+        val h1 = 200
+        val w2 = 200
+        val h2 = 300
 
-        val refWidth = maxOf(size1.width, size2.width)
-        val refHeight = maxOf(size1.height, size2.height)
+        val refWidth = maxOf(w1, w2)
+        val refHeight = maxOf(h1, h2)
 
         assertEquals(200, refWidth)
         assertEquals(300, refHeight)
 
-        val scaledHeight1 = (size1.height.toFloat() * refWidth.toFloat() / size1.width.toFloat()).toInt()
-        val scaledHeight2 = (size2.height.toFloat() * refWidth.toFloat() / size2.width.toFloat()).toInt()
+        val scaledHeight1 = (h1.toFloat() * refWidth.toFloat() / w1.toFloat()).toInt()
+        val scaledHeight2 = (h2.toFloat() * refWidth.toFloat() / w2.toFloat()).toInt()
 
         assertEquals(400, scaledHeight1)
         assertEquals(300, scaledHeight2)
