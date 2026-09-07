@@ -471,6 +471,8 @@ class MainViewModel : ViewModel() {
                     previewSlices.forEach { it.bitmap.recycle() }
                 } else {
                     // Loose files: simpan satu per satu ke folder
+                    val byteCountingStream = ByteCountingOutputStream(outputStream = FileOutputStream(outputFolder.absolutePath + "/placeholder"))
+                    // Actually, we need to write each file individually
                     for ((index, slice) in previewSlices.withIndex()) {
                         _uiState.update { it.copy(progress = (index + 1).toFloat() / previewSlices.size.toFloat()) }
 
