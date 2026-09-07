@@ -184,7 +184,7 @@ fun MainScreen(
                         )
                     }
                 },
-                actions = {\
+                actions = {
                     if (uiState.selectedImages.isNotEmpty()) {
                         if (uiState.isSelectionMode) {
                             // Selection mode actions
