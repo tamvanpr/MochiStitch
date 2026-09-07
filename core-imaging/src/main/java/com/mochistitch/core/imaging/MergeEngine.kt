@@ -67,11 +67,12 @@ class MergeEngine(
             val canvasWidth = if (config.direction == MergeDirection.VERTICAL) {
                 maxInputWidth
             } else {
-                items.maxOfOrNull { it.dstRect.width() } ?: maxInputWidth
+                // Horizontal: jumlahkan semua pageBox.right (posisi absolut di canvas)
+                items.maxOfOrNull { it.pageBox.right } ?: maxInputWidth
             }
 
             val canvasHeight = if (config.direction == MergeDirection.VERTICAL) {
-                items.maxOfOrNull { it.dstRect.bottom } ?: maxInputHeight
+                items.maxOfOrNull { it.pageBox.bottom } ?: maxInputHeight
             } else {
                 maxInputHeight
             }

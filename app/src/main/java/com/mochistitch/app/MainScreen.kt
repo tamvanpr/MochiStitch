@@ -114,7 +114,10 @@ fun MainScreen(
                 val filename = viewModel.getExportDefaultFilename()
                 createDocumentLauncher.launch(filename)
             },
-            onBackClicked = { viewModel.navigateTo(Screen.MAIN) },
+            onBackClicked = {
+                viewModel.clearPreviewSlices()
+                viewModel.navigateTo(Screen.MAIN)
+            },
             modifier = modifier
         )
         ExportResultDialogs(uiState = uiState, viewModel = viewModel)
