@@ -8,6 +8,7 @@ import android.net.Uri
 import android.os.Environment
 import com.mochistitch.core.settings.AlignmentModeSetting
 import com.mochistitch.core.settings.MochiStitchSettings
+import com.mochistitch.core.settings.OutputWrapperFormat
 import com.mochistitch.core.settings.PaddingColorSetting
 import com.mochistitch.core.settings.ReadingDirection
 import com.mochistitch.core.settings.SplitMode
@@ -163,15 +164,15 @@ class StitchProcessor(
      * - Untuk ZIP/CBZ: simpan langsung di Pictures/MochiStitch/
      * - Untuk loose files: buat folder baru berdasarkan tanggal
      */
-    fun getOutputFolder(context: Context, wrapperFormat: com.mochistitch.core.settings.OutputWrapperFormat): File {
+    fun getOutputFolder(context: Context, wrapperFormat: OutputWrapperFormat): File {
         val downloadsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES)
         val mochistitchDir = File(downloadsDir, "MochiStitch")
-        
+
         if (!mochistitchDir.exists()) {
             mochistitchDir.mkdirs()
         }
 
-        return if (wrapperFormat == com.mochistitch.core.settings.OutputWrapperFormat.LOOSE_FILES) {
+        return if (wrapperFormat == OutputWrapperFormat.LOOSE_FILES) {
             // Buat folder baru berdasarkan tanggal untuk loose files
             val dateFormat = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault())
             val timestamp = dateFormat.format(Date())
