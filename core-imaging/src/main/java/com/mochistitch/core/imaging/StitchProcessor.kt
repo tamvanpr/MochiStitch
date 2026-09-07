@@ -8,7 +8,6 @@ import android.net.Uri
 import android.os.Environment
 import com.mochistitch.core.settings.AlignmentModeSetting
 import com.mochistitch.core.settings.MochiStitchSettings
-import com.mochistitch.core.settings.OutputWrapperFormat
 import com.mochistitch.core.settings.PaddingColorSetting
 import com.mochistitch.core.settings.ReadingDirection
 import com.mochistitch.core.settings.SplitMode
@@ -98,7 +97,21 @@ class StitchProcessor(
                     continue
                 }
 
-                // NOT doing downsample - let user's maxPixelLength setting control output size
+                // Downsample jika terlalu besar
+                val maxSafeDim = 4000
+                if (mergedBitmap.width > maxSafeDim || mergedBitmap.height > maxSafeDim) {
+                    val scale = maxSafeDim.toFloat() / maxOf(mergedBitmap.width, mergedBitmap.height)
+                    val newWidth = (mergedBitmap.width * scale).toInt()
+                    val newHeight = (mergedBitmap.height * scale).toInt()
+                    val downscaled = Bitmap.createScaledBitmap(
+                        mergedBitmap,
+                        newWidth,
+                        newHeight,
+                        true
+                    )
+                    mergedBitmap.recycle()
+                    mergedBitmap = downscaled
+                }
 
                 // ── Step 3: Split dengan MochiSmart (jika diperlukan) ────────
                 onProgress(ProcessingStage.SPLITTING, groupProgressBase + 0.6f * groupProgressRange)
@@ -164,15 +177,15 @@ class StitchProcessor(
      * - Untuk ZIP/CBZ: simpan langsung di Pictures/MochiStitch/
      * - Untuk loose files: buat folder baru berdasarkan tanggal
      */
-    fun getOutputFolder(context: Context, wrapperFormat: OutputWrapperFormat): File {
+    fun getOutputFolder(context: Context, wrapperFormat: com.mochistitch.core.settings.OutputWrapperFormat): File {
         val downloadsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES)
         val mochistitchDir = File(downloadsDir, "MochiStitch")
-
+        
         if (!mochistitchDir.exists()) {
             mochistitchDir.mkdirs()
         }
 
-        return if (wrapperFormat == OutputWrapperFormat.LOOSE_FILES) {
+        return if (wrapperFormat == com.mochistitch.core.settings.OutputWrapperFormat.LOOSE_FILES) {
             // Buat folder baru berdasarkan tanggal untuk loose files
             val dateFormat = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault())
             val timestamp = dateFormat.format(Date())
