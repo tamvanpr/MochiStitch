@@ -16,9 +16,6 @@ fun ImageReorderList(
     onMoveUp: (Int) -> Unit,
     onMoveDown: (Int) -> Unit,
     onRemove: (Int) -> Unit,
-    isSelectionMode: Boolean = false,
-    selectedIndexes: Set<Int> = emptySet(),
-    onToggleSelection: (Int) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     LazyColumn(
@@ -36,10 +33,7 @@ fun ImageReorderList(
                 totalCount = items.size,
                 onMoveUp = { onMoveUp(index) },
                 onMoveDown = { onMoveDown(index) },
-                onRemove = { onRemove(index) },
-                isSelectionMode = isSelectionMode,
-                isSelected = index in selectedIndexes,
-                onToggleSelection = { onToggleSelection(index) }
+                onRemove = { onRemove(index) }
             )
         }
     }

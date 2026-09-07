@@ -54,9 +54,7 @@ data class MainUiState(
     val progress: Float = 0f,
     val exportResult: ExportResultInfo? = null,
     val resultOutputUri: Uri? = null,
-    val errorMessage: String? = null,
-    val isSelectionMode: Boolean = false,
-    val selectedIndexes: Set<Int> = emptySet()
+    val errorMessage: String? = null
 )
 
 class MainViewModel : ViewModel() {
@@ -136,50 +134,6 @@ class MainViewModel : ViewModel() {
                 list.removeAt(index)
             }
             state.copy(selectedImages = list)
-        }
-    }
-
-    // Multi-select methods
-    fun toggleSelectionMode() {
-        _uiState.update { it.copy(isSelectionMode = !it.isSelectionMode, selectedIndexes = emptySet()) }
-    }
-
-    fun toggleSelection(index: Int) {
-        _uiState.update { state ->
-            val selected = state.selectedIndexes.toMutableSet()
-            if (index in selected) {
-                selected.remove(index)
-            } else {
-                selected.add(index)
-            }
-            state.copy(selectedIndexes = selected)
-        }
-    }
-
-    fun selectAll() {
-        _uiState.update { state ->
-            state.copy(selectedIndexes = state.selectedImages.indices.toSet())
-        }
-    }
-
-    fun deselectAll() {
-        _uiState.update { it.copy(selectedIndexes = emptySet()) }
-    }
-
-    fun deleteSelected() {
-        _uiState.update { state ->
-            val list = state.selectedImages.toMutableList()
-            // Sort indices in descending order to avoid index shifting issues
-            val sortedIndices = state.selectedIndexes.sortedDescending()
-            for (index in sortedIndices) {
-                if (index in list.indices) {
-                    list.removeAt(index)
-                }
-            }
-            state.copy(
-                selectedImages = list,
-                selectedIndexes = emptySet()
-            )
         }
     }
 
