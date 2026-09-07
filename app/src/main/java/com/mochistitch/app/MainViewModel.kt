@@ -30,8 +30,6 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.io.ByteArrayOutputStream
-import java.io.File
-import java.io.FileOutputStream
 import java.io.OutputStream
 
 enum class Screen {
@@ -411,118 +409,6 @@ class MainViewModel : ViewModel() {
         return name
     }
 
-    /**
-     * Mendapatkan folder output untuk hasil stitch.
-     * - Untuk ZIP/CBZ: simpan langsung di Pictures/MochiStitch/
-     * - Untuk loose files: buat folder baru berdasarkan tanggal
-     */
-    fun getOutputFolder(context: Context): File {
-        val processor = StitchProcessor(context)
-        return processor.getOutputFolder(context, _uiState.value.settings.wrapperFormat)
-    }
-
-    /**
-     * Save hasil ke folder MochiStitch di Pictures
-     */
-    fun saveToMochiStitchFolder(context: Context) {
-        val previewSlices = _uiState.value.previewSlices
-        if (previewSlices.isEmpty()) {
-            _uiState.update { it.copy(errorMessage = "No preview available to export.") }
-            return
-        }
-
-        val settings = _uiState.value.settings
-        val outputFolder = getOutputFolder(context)
-
-        _uiState.update {
-            it.copy(
-                isProcessing = true,
-                processingStep = ProcessingStage.EXPORTING.stepName,
-                progress = 0f,
-                errorMessage = null
-            )
-        }
-
-        viewModelScope.launch {
-            try {
-                var bytesWritten = 0L
-
-                if (settings.wrapperFormat == OutputWrapperFormat.CBZ || settings.wrapperFormat == OutputWrapperFormat.ZIP) {
-                    // Buat file ZIP/CBZ
-                    val outputFile = File(outputFolder, getExportDefaultFilename())
-                    val outputStream = outputFile.outputStream()
-
-                    val archiveEntries = previewSlices.mapIndexed { index, slice ->
-                        _uiState.update { it.copy(progress = (index + 1).toFloat() / previewSlices.size.toFloat()) }
-                        val baos = ByteArrayOutputStream()
-                        ImageCompressor.compress(
-                            bitmap = slice.bitmap,
-                            format = settings.outputFormat,
-                            quality = if (settings.outputFormat == OutputFormat.JPG) settings.jpgQuality else settings.webpQuality,
-                            webpLossless = settings.webpLossless,
-                            outputStream = baos
-                        )
-                        ArchiveEntry(slice.filename, baos.toByteArray())
-                    }
-                    bytesWritten = ArchiveHandler.createArchive(archiveEntries, outputStream)
-                    outputStream.close()
-
-                    // Recycle bitmaps setelah di-compress
-                    previewSlices.forEach { it.bitmap.recycle() }
-                } else {
-                    // Loose files: simpan satu per satu ke folder
-                    val byteCountingStream = ByteCountingOutputStream(outputStream = FileOutputStream(outputFolder.absolutePath + "/placeholder"))
-                    // Actually, we need to write each file individually
-                    for ((index, slice) in previewSlices.withIndex()) {
-                        _uiState.update { it.copy(progress = (index + 1).toFloat() / previewSlices.size.toFloat()) }
-
-                        val outputFile = File(outputFolder, slice.filename)
-                        val fos = FileOutputStream(outputFile)
-                        ImageCompressor.compress(
-                            bitmap = slice.bitmap,
-                            format = settings.outputFormat,
-                            quality = if (settings.outputFormat == OutputFormat.JPG) settings.jpgQuality else settings.webpQuality,
-                            webpLossless = settings.webpLossless,
-                            outputStream = fos
-                        )
-                        fos.close()
-                        bytesWritten += outputFile.length()
-
-                        // Recycle bitmap setelah di-compress
-                        if (!slice.bitmap.isRecycled) {
-                            slice.bitmap.recycle()
-                        }
-                    }
-                }
-
-                val maxW = previewSlices.maxOfOrNull { it.width } ?: 0
-                val totalH = previewSlices.sumOf { it.height }
-                val manualReviewCount = previewSlices.count { it.needsManualReview }
-
-                _uiState.update {
-                    it.copy(
-                        isProcessing = false,
-                        exportResult = ExportResultInfo(
-                            width = maxW,
-                            height = totalH,
-                            bytesWritten = bytesWritten,
-                            outputCount = previewSlices.size,
-                            itemsNeedingManualReview = manualReviewCount
-                        ),
-                        resultOutputUri = null // No URI for folder save
-                    )
-                }
-            } catch (e: Exception) {
-                _uiState.update {
-                    it.copy(
-                        isProcessing = false,
-                        errorMessage = e.message ?: "Failed to perform export operation."
-                    )
-                }
-            }
-        }
-    }
-
     private class ByteCountingOutputStream(private val delegate: OutputStream) : OutputStream() {
         var bytesWritten: Long = 0
             private set
@@ -551,4 +437,3 @@ class MainViewModel : ViewModel() {
         }
     }
 }
-

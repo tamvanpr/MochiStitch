@@ -111,8 +111,8 @@ fun MainScreen(
         PreviewScreenContent(
             slices = uiState.previewSlices,
             onExportClicked = {
-                // Save directly to MochiStitch folder instead of dialog
-                viewModel.saveToMochiStitchFolder(context)
+                val filename = viewModel.getExportDefaultFilename()
+                createDocumentLauncher.launch(filename)
             },
             onBackClicked = { viewModel.navigateTo(Screen.MAIN) },
             modifier = modifier

@@ -2,10 +2,7 @@ package com.mochistitch.core.imaging
 
 import android.content.Context
 import android.graphics.Bitmap
-import android.graphics.Bitmap.Config
-import android.graphics.BitmapFactory
 import android.net.Uri
-import android.os.Environment
 import com.mochistitch.core.settings.AlignmentModeSetting
 import com.mochistitch.core.settings.MochiStitchSettings
 import com.mochistitch.core.settings.PaddingColorSetting
@@ -13,42 +10,28 @@ import com.mochistitch.core.settings.ReadingDirection
 import com.mochistitch.core.settings.SplitMode
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import java.io.File
 import java.io.InputStream
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
-import kotlin.math.max
-import kotlin.math.min
 
 /**
- * ChunkStitchProcessor — versi baru dengan pendekatan chunk-based merging.
+ * StitchProcessor — orkestrasi lengkap: merge → split → output.
  *
- * Flow baru:
- * 1. Kelompokkan gambar berdasarkan tinggi kumulatif (~maxPixelLength per chunk)
- * 2. Merge setiap chunk menjadi bitmap terpisah
- * 3. Gunakan MochiSmart untuk split yang aman (hindari balon/dialog)
+ * Flow:
+ * 1. Kelompokkan input sesuai splitMode (PAGES_PER_FILE atau MAX_PIXELS)
+ * 2. Merge setiap kelompok menjadi bitmap
+ * 3. Split bitmap jika perlu (MAX_PIXELS mode)
  * 4. Kembalikan daftar StitchResultItem
- *
- * Keunggulan:
- * - Memori lebih hemat (tidak perlu simpan semua gambar sekaligus)
- * - Lebih cepat (chunk kecil proses lebih cepat)
- * - MochiSmart tetap aktif untuk menghindari split di area teks/balon
  */
-data class ImageDim(val uri: Uri, val width: Int, val height: Int)
-
 data class StitchResultItem(
     val index: Int,
     val filename: String,
     val bitmap: Bitmap,
     val width: Int,
     val height: Int,
-    val needsManualReview: Boolean = false,
-    val estimatedBytes: Long = 0L
+    val needsManualReview: Boolean = false
 )
 
 enum class ProcessingStage(val stepName: String) {
-    GROUPING("Grouping images"),
+    ALIGNING("Aligning images"),
     MERGING("Merging canvas"),
     SPLITTING("Splitting pieces"),
     EXPORTING("Exporting file")
@@ -74,59 +57,42 @@ class StitchProcessor(
             val mergeConfig = buildMergeConfig(settings)
             val resultItems = mutableListOf<StitchResultItem>()
             var globalIndex = 1
+            val totalBatches = computeBatchCount(imageUris, settings)
 
-            // ── Step 1: Kelompokkan gambar berdasarkan tinggi ──────────────
-            onProgress(ProcessingStage.GROUPING, 0.1f)
-            val groups = chunkImagesByHeight(imageUris, settings, mergeConfig)
-            val totalGroups = groups.size
+            for ((batchIdx, batchUris) in imageUris.batches(settings).withIndex()) {
+                val batchProgressBase = batchIdx.toFloat() / totalBatches
+                val batchProgressRange = 1.0f / totalBatches
 
-            // ── Step 2: Merge setiap kelompok ──────────────────────────────
-            for ((groupIdx, group) in groups.withIndex()) {
-                val groupProgressBase = groupIdx.toFloat() / totalGroups
-                val groupProgressRange = 1.0f / totalGroups
+                // ── Step 1: Merge ──────────────────────────────────────────
+                onProgress(ProcessingStage.MERGING, batchProgressBase + 0.1f * batchProgressRange)
 
-                onProgress(ProcessingStage.MERGING, groupProgressBase + 0.1f * groupProgressRange)
-
-                // Merge satu kelompok
-                var mergedBitmap = mergeEngine.mergeToBitmap(group, mergeConfig) { prog ->
-                    val totalProg = groupProgressBase + (0.1f + prog * 0.5f) * groupProgressRange
+                val mergedBitmap = mergeEngine.mergeToBitmap(batchUris, mergeConfig) { prog ->
+                    val totalProg = batchProgressBase + (0.1f + prog * 0.5f) * batchProgressRange
                     onProgress(ProcessingStage.MERGING, totalProg)
                 }.getOrNull()
 
                 if (mergedBitmap == null) {
+                    onProgress(ProcessingStage.MERGING, batchProgressBase + 0.6f * batchProgressRange)
+                    // Merge gagal untuk batch ini, lewati
                     continue
                 }
 
-                // Downsample jika terlalu besar
-                val maxSafeDim = 4000
-                if (mergedBitmap.width > maxSafeDim || mergedBitmap.height > maxSafeDim) {
-                    val scale = maxSafeDim.toFloat() / maxOf(mergedBitmap.width, mergedBitmap.height)
-                    val newWidth = (mergedBitmap.width * scale).toInt()
-                    val newHeight = (mergedBitmap.height * scale).toInt()
-                    val downscaled = Bitmap.createScaledBitmap(
-                        mergedBitmap,
-                        newWidth,
-                        newHeight,
-                        true
+                // ── Step 2: Split (jika perlu) ────────────────────────────
+                val slicedPieces: List<SlicedPiece>
+                if (settings.splitMode == SplitMode.MAX_PIXELS) {
+                    onProgress(ProcessingStage.SPLITTING, batchProgressBase + 0.6f * batchProgressRange)
+                    slicedPieces = SplitEngine.sliceBitmapDetailed(
+                        source = mergedBitmap,
+                        settings = settings
                     )
-                    mergedBitmap.recycle()
-                    mergedBitmap = downscaled
+                } else {
+                    slicedPieces = listOf(SlicedPiece(mergedBitmap, needsManualReview = false))
                 }
 
-                // ── Step 3: Split dengan MochiSmart (jika diperlukan) ────────
-                onProgress(ProcessingStage.SPLITTING, groupProgressBase + 0.6f * groupProgressRange)
-                
-                val slicedPieces = SplitEngine.sliceBitmapDetailed(
-                    source = mergedBitmap,
-                    settings = settings
-                )
+                onProgress(ProcessingStage.SPLITTING, batchProgressBase + 0.9f * batchProgressRange)
 
-                // ── Step 4: Buat result item ──────────────────────────────────
+                // ── Step 3: Buat result item ──────────────────────────────
                 for (piece in slicedPieces) {
-                    // Buat copy independen agar bitmap tidak terpengaruh recycle source
-                    val independentBitmap = piece.bitmap.copy(requireNotNull(piece.bitmap.config), true)
-                    piece.bitmap.recycle()
-
                     val filename = FilenameFormatter.formatFilename(
                         template = settings.filenameTemplate,
                         project = settings.projectName,
@@ -139,22 +105,19 @@ class StitchProcessor(
                         StitchResultItem(
                             index = globalIndex,
                             filename = filename,
-                            bitmap = independentBitmap,
-                            width = independentBitmap.width,
-                            height = independentBitmap.height,
-                            needsManualReview = piece.needsManualReview,
-                            estimatedBytes = (independentBitmap.width.toLong() * independentBitmap.height * 4L)
+                            bitmap = piece.bitmap,
+                            width = piece.bitmap.width,
+                            height = piece.bitmap.height,
+                            needsManualReview = piece.needsManualReview
                         )
                     )
                     globalIndex++
                 }
 
-                // Recycle bitmap merge setelah di-split
+                // Recycle bitmap asli setelah discopy via slicing
                 if (!mergedBitmap.isRecycled) {
                     mergedBitmap.recycle()
                 }
-
-                onProgress(ProcessingStage.SPLITTING, groupProgressBase + 0.9f * groupProgressRange)
             }
 
             onProgress(ProcessingStage.SPLITTING, 1.0f)
@@ -172,98 +135,7 @@ class StitchProcessor(
         }
     }
 
-    /**
-     * Mendapatkan folder output untuk hasil stitch.
-     * - Untuk ZIP/CBZ: simpan langsung di Pictures/MochiStitch/
-     * - Untuk loose files: buat folder baru berdasarkan tanggal
-     */
-    fun getOutputFolder(context: Context, wrapperFormat: com.mochistitch.core.settings.OutputWrapperFormat): File {
-        val downloadsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES)
-        val mochistitchDir = File(downloadsDir, "MochiStitch")
-        
-        if (!mochistitchDir.exists()) {
-            mochistitchDir.mkdirs()
-        }
-
-        return if (wrapperFormat == com.mochistitch.core.settings.OutputWrapperFormat.LOOSE_FILES) {
-            // Buat folder baru berdasarkan tanggal untuk loose files
-            val dateFormat = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault())
-            val timestamp = dateFormat.format(Date())
-            val sessionDir = File(mochistitchDir, "session_$timestamp")
-            if (!sessionDir.exists()) {
-                sessionDir.mkdirs()
-            }
-            sessionDir
-        } else {
-            // Untuk ZIP/CBZ, simpan langsung di folder MochiStitch
-            mochistitchDir
-        }
-    }
-
     // ─── Private helpers ───────────────────────────────────────────────────────
-
-    /**
-     * Mengelompokkan gambar berdasarkan tinggi kumulatif.
-     * Setiap chunk memiliki total tinggi maksimal maxPixelLength.
-     */
-    private fun chunkImagesByHeight(
-        imageUris: List<Uri>,
-        settings: MochiStitchSettings,
-        config: MergeConfig
-    ): List<List<Uri>> {
-        val groups = mutableListOf<List<Uri>>()
-        val currentGroup = mutableListOf<Uri>()
-        var currentHeight = 0
-        val maxChunkHeight = settings.maxPixelLength
-
-        // Ambil dimensi semua gambar
-        val dims = imageUris.map { uri ->
-            val (w, h) = getImageDimensions(uri, config)
-            ImageDim(uri, w, h)
-        }
-
-        for (dim in dims) {
-            // Untuk vertical: gunakan height, horizontal: gunakan width
-            val itemHeight = if (config.direction == MergeDirection.VERTICAL) dim.height else dim.width
-            
-            // Jika satu gambar sudah lebih besar dari maxChunkHeight, buat group sendiri
-            if (itemHeight > maxChunkHeight && currentGroup.isNotEmpty()) {
-                groups.add(currentGroup.toList())  // FIX: buat copy agar tidak saling影响
-                currentGroup.clear()
-                currentHeight = 0
-            }
-
-            // Tambah ke group saat ini
-            currentGroup.add(dim.uri)
-            currentHeight += itemHeight
-
-            // Jika mencapai limit, tutup group
-            if (currentHeight >= maxChunkHeight && currentGroup.isNotEmpty()) {
-                groups.add(currentGroup.toList())  // FIX: buat copy agar tidak saling影响
-                currentGroup.clear()
-                currentHeight = 0
-            }
-        }
-
-        // Tambahkan group terakhir jika ada
-        if (currentGroup.isNotEmpty()) {
-            groups.add(currentGroup.toList())  // FIX: buat copy agar tidak saling影响
-        }
-
-        return groups
-    }
-
-    private fun getImageDimensions(uri: Uri, config: MergeConfig): Pair<Int, Int> {
-        return try {
-            val stream = openInputStream(uri) ?: return Pair(0, 0)
-            val options = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-            BitmapFactory.decodeStream(stream, null, options)
-            stream.close()
-            Pair(options.outWidth, options.outHeight)
-        } catch (e: Exception) {
-            Pair(0, 0)
-        }
-    }
 
     private fun buildMergeConfig(settings: MochiStitchSettings): MergeConfig {
         return MergeConfig(
@@ -283,5 +155,31 @@ class StitchProcessor(
                 PaddingColorSetting.TRANSPARENT -> PaddingColor.TRANSPARENT
             }
         )
+    }
+
+    /**
+     * Menghitung jumlah batch berdasarkan splitMode.
+     */
+    private fun computeBatchCount(imageUris: List<Uri>, settings: MochiStitchSettings): Int {
+        return when (settings.splitMode) {
+            SplitMode.PAGES_PER_FILE -> {
+                val batchSize = settings.maxPagesPerFile.coerceAtLeast(1)
+                (imageUris.size + batchSize - 1) / batchSize // ceiling division
+            }
+            else -> 1
+        }
+    }
+
+    /**
+     * Membagi URI menjadi batch-batch sesuai splitMode.
+     */
+    private fun List<Uri>.batches(settings: MochiStitchSettings): List<List<Uri>> {
+        return when (settings.splitMode) {
+            SplitMode.PAGES_PER_FILE -> {
+                val batchSize = settings.maxPagesPerFile.coerceAtLeast(1)
+                this.chunked(batchSize)
+            }
+            else -> listOf(this)
+        }
     }
 }
