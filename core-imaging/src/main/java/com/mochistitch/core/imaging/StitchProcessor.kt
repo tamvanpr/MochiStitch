@@ -5,13 +5,19 @@ import android.graphics.Bitmap
 import android.graphics.Bitmap.Config
 import android.graphics.BitmapFactory
 import android.net.Uri
+import android.os.Environment
 import com.mochistitch.core.settings.AlignmentModeSetting
 import com.mochistitch.core.settings.MochiStitchSettings
 import com.mochistitch.core.settings.PaddingColorSetting
 import com.mochistitch.core.settings.ReadingDirection
+import com.mochistitch.core.settings.SplitMode
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import java.io.File
 import java.io.InputStream
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import kotlin.math.max
 import kotlin.math.min
 
@@ -166,6 +172,34 @@ class StitchProcessor(
         }
     }
 
+    /**
+     * Mendapatkan folder output untuk hasil stitch.
+     * - Untuk ZIP/CBZ: simpan langsung di Pictures/MochiStitch/
+     * - Untuk loose files: buat folder baru berdasarkan tanggal
+     */
+    fun getOutputFolder(context: Context, wrapperFormat: com.mochistitch.core.settings.OutputWrapperFormat): File {
+        val downloadsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES)
+        val mochistitchDir = File(downloadsDir, "MochiStitch")
+        
+        if (!mochistitchDir.exists()) {
+            mochistitchDir.mkdirs()
+        }
+
+        return if (wrapperFormat == com.mochistitch.core.settings.OutputWrapperFormat.LOOSE_FILES) {
+            // Buat folder baru berdasarkan tanggal untuk loose files
+            val dateFormat = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault())
+            val timestamp = dateFormat.format(Date())
+            val sessionDir = File(mochistitchDir, "session_$timestamp")
+            if (!sessionDir.exists()) {
+                sessionDir.mkdirs()
+            }
+            sessionDir
+        } else {
+            // Untuk ZIP/CBZ, simpan langsung di folder MochiStitch
+            mochistitchDir
+        }
+    }
+
     // ─── Private helpers ───────────────────────────────────────────────────────
 
     /**
@@ -194,7 +228,7 @@ class StitchProcessor(
             
             // Jika satu gambar sudah lebih besar dari maxChunkHeight, buat group sendiri
             if (itemHeight > maxChunkHeight && currentGroup.isNotEmpty()) {
-                groups.add(currentGroup)
+                groups.add(currentGroup.toList())  // FIX: buat copy agar tidak saling影响
                 currentGroup.clear()
                 currentHeight = 0
             }
@@ -205,7 +239,7 @@ class StitchProcessor(
 
             // Jika mencapai limit, tutup group
             if (currentHeight >= maxChunkHeight && currentGroup.isNotEmpty()) {
-                groups.add(currentGroup)
+                groups.add(currentGroup.toList())  // FIX: buat copy agar tidak saling影响
                 currentGroup.clear()
                 currentHeight = 0
             }
@@ -213,7 +247,7 @@ class StitchProcessor(
 
         // Tambahkan group terakhir jika ada
         if (currentGroup.isNotEmpty()) {
-            groups.add(currentGroup)
+            groups.add(currentGroup.toList())  // FIX: buat copy agar tidak saling影响
         }
 
         return groups
@@ -225,14 +259,7 @@ class StitchProcessor(
             val options = BitmapFactory.Options().apply { inJustDecodeBounds = true }
             BitmapFactory.decodeStream(stream, null, options)
             stream.close()
-            
-            // Untuk vertical mode, yang penting adalah height
-            // Untuk horizontal mode, yang penting adalah width
-            if (config.direction == MergeDirection.VERTICAL) {
-                Pair(options.outWidth, options.outHeight)
-            } else {
-                Pair(options.outWidth, options.outHeight)
-            }
+            Pair(options.outWidth, options.outHeight)
         } catch (e: Exception) {
             Pair(0, 0)
         }
