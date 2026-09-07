@@ -54,7 +54,7 @@ fun PreviewScreenContent(
             TopAppBar(
                 title = {
                     Text(
-                        text = "Output Preview",
+                        text = "Preview",
                         style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold)
                     )
                 },
@@ -78,66 +78,65 @@ fun PreviewScreenContent(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
-                .padding(16.dp)
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
+            // Warning card
             if (reviewCount > 0) {
                 Card(
                     colors = CardDefaults.cardColors(
                         containerColor = MaterialTheme.colorScheme.errorContainer
                     ),
-                    shape = RoundedCornerShape(12.dp),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(bottom = 12.dp)
+                    shape = RoundedCornerShape(12.dp)
                 ) {
                     Row(
-                        modifier = Modifier.padding(12.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(12.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Icon(
                             imageVector = Icons.Default.Warning,
-                            contentDescription = "Review Warning",
+                            contentDescription = null,
                             tint = MaterialTheme.colorScheme.error
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = "$reviewCount piece(s) marked for manual review (possible bubble / text cut).",
-                            style = MaterialTheme.typography.bodyMedium,
+                            text = "$reviewCount piece(s) need manual review (bubble/text overlap)",
+                            style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onErrorContainer,
-                            fontWeight = FontWeight.Bold
+                            fontWeight = FontWeight.Medium
                         )
                     }
                 }
             }
 
+            // Title
             Text(
-                text = "Generated Canvas Pieces (${slices.size})",
+                text = "Generated Pieces (${slices.size})",
                 style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold
+                fontWeight = FontWeight.SemiBold
             )
 
-            Spacer(modifier = Modifier.height(8.dp))
-
+            // Preview list or empty state
             if (slices.isEmpty()) {
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .weight(1f),
+                        .height(200.dp),
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
-                        text = "No preview slices available.",
+                        text = "No preview available",
                         style = MaterialTheme.typography.bodyLarge,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
             } else {
                 LazyColumn(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .weight(1f),
+                    modifier = Modifier.weight(1f),
                     contentPadding = PaddingValues(vertical = 4.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     items(
                         items = slices,
@@ -151,14 +150,14 @@ fun PreviewScreenContent(
                 }
             }
 
-            Spacer(modifier = Modifier.height(12.dp))
-
+            // Export button
             Button(
                 onClick = onExportClicked,
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(52.dp),
-                enabled = slices.isNotEmpty()
+                enabled = slices.isNotEmpty(),
+                shape = RoundedCornerShape(12.dp)
             ) {
                 Icon(
                     imageVector = Icons.Default.Share,
@@ -167,8 +166,9 @@ fun PreviewScreenContent(
                 )
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
-                    text = "Export & Save Result",
-                    style = MaterialTheme.typography.titleMedium
+                    text = "Export Result",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold
                 )
             }
         }

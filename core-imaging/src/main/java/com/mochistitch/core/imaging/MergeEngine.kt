@@ -6,27 +6,34 @@ import android.graphics.BitmapFactory
 import android.graphics.Canvas
 import android.graphics.Paint
 import android.graphics.Rect
-import android.graphics.RectF
 import android.net.Uri
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.InputStream
 import java.io.OutputStream
 import kotlin.math.max
+import kotlin.math.min
 import kotlin.math.roundToInt
 
+/**
+ * MergeEngine — menggabungkan beberapa halaman komik menjadi satu canvas.
+ *
+ * Mendukung:
+ * - Vertical (webtoon), Horizontal LTR, Horizontal RTL
+ * - Alignment: RESIZE_PROPORTIONAL, CENTER_CROP, PADDING
+ * - Output bitmap berukuran asli (tanpa scaling artifak MAX_CANVAS_DIM)
+ */
 class MergeEngine(
     private val openInputStream: (Uri) -> InputStream?
 ) {
     constructor(context: Context) : this({ uri -> context.contentResolver.openInputStream(uri) })
 
-    companion object {
-        private const val TAG = "MochiStitch.MergeEngine"
-        private const val MAX_CANVAS_DIM = 8192
-    }
-
     data class ImageSize(val uri: Uri, val width: Int, val height: Int)
 
+    /**
+     * Menggabungkan daftar URI gambar menjadi satu Bitmap.
+     * Bitmap hasil berukuran asli sesuai dimensi input — tidak ada scaling artifak.
+     */
     suspend fun mergeToBitmap(
         imageUris: List<Uri>,
         config: MergeConfig = MergeConfig(),
@@ -38,49 +45,43 @@ class MergeEngine(
 
         try {
             onProgress(0.05f)
+
+            // Step 1: Ambil dimensi setiap input
             val sizes = imageUris.map { uri ->
                 val (w, h) = getImageDimensions(uri)
                 if (w <= 0 || h <= 0) {
-                    return@withContext Result.failure(IllegalStateException("Failed to decode image dimensions for URI: $uri"))
+                    return@withContext Result.failure(
+                        IllegalStateException("Failed to decode image dimensions for URI: $uri")
+                    )
                 }
-                logMochiStitch("Input Bitmap: ${w}x${h}")
-                logDebug("Input load stage - URI: $uri, width: $w, height: $h")
                 ImageSize(uri, w, h)
             }
 
             val maxInputWidth = sizes.maxOf { it.width }
             val maxInputHeight = sizes.maxOf { it.height }
 
+            // Step 2: Hitung penempatan setiap item
             val items = calculateItemPlacements(sizes, maxInputWidth, maxInputHeight, config)
 
-            var canvasWidth = if (config.direction == MergeDirection.VERTICAL) {
+            // Step 3: Hitung dimensi canvas akhir
+            val canvasWidth = if (config.direction == MergeDirection.VERTICAL) {
                 maxInputWidth
             } else {
-                items.maxOf { item -> item.dstRect.right }
+                items.maxOfOrNull { it.dstRect.width() } ?: maxInputWidth
             }
 
-            var canvasHeight = if (config.direction == MergeDirection.VERTICAL) {
-                items.maxOf { item -> item.dstRect.bottom }
+            val canvasHeight = if (config.direction == MergeDirection.VERTICAL) {
+                items.maxOfOrNull { it.dstRect.bottom } ?: maxInputHeight
             } else {
                 maxInputHeight
             }
 
-            // Log EXACTLY calculated max width before drawing
-            logMochiStitch("Calculated max width: $maxInputWidth")
-            logMochiStitch("Target Canvas: ${canvasWidth}x${canvasHeight}")
+            // Fallback: pastikan dimensi minimal1
+            val finalWidth = max(1, canvasWidth)
+            val finalHeight = max(1, canvasHeight)
 
-            var scaleFactor = 1.0f
-            if (canvasWidth > MAX_CANVAS_DIM || canvasHeight > MAX_CANVAS_DIM) {
-                val scaleW = MAX_CANVAS_DIM.toFloat() / canvasWidth.toFloat()
-                val scaleH = MAX_CANVAS_DIM.toFloat() / canvasHeight.toFloat()
-                scaleFactor = minOf(scaleW, scaleH)
-                canvasWidth = (canvasWidth * scaleFactor).roundToInt().coerceAtLeast(1)
-                canvasHeight = (canvasHeight * scaleFactor).roundToInt().coerceAtLeast(1)
-            }
-
-            logDebug("Dimension calculation stage - maxInputWidth: $maxInputWidth, maxInputHeight: $maxInputHeight, canvasWidth: $canvasWidth, canvasHeight: $canvasHeight, direction: ${config.direction}, alignment: ${config.alignmentMode}")
-
-            val canvasBitmap = Bitmap.createBitmap(canvasWidth, canvasHeight, Bitmap.Config.ARGB_8888)
+            // Step 4: Buat canvas dan gambar semua item
+            val canvasBitmap = Bitmap.createBitmap(finalWidth, finalHeight, Bitmap.Config.ARGB_8888)
             val canvas = Canvas(canvasBitmap)
             canvas.drawColor(config.paddingColor.colorInt)
 
@@ -89,8 +90,11 @@ class MergeEngine(
             val totalCount = items.size
             for ((index, item) in items.withIndex()) {
                 val inputStream = openInputStream(item.uri)
-                    ?: return@withContext Result.failure(IllegalStateException("Could not open stream for URI: ${item.uri}"))
+                    ?: return@withContext Result.failure(
+                        IllegalStateException("Could not open stream for URI: ${item.uri}")
+                    )
 
+                // Decode dengan sample size yang sesuai
                 val sampleSize = calculateInSampleSize(
                     item.srcRect.width(),
                     item.srcRect.height(),
@@ -107,48 +111,29 @@ class MergeEngine(
 
                 if (srcBitmap == null) {
                     canvasBitmap.recycle()
-                    return@withContext Result.failure(IllegalStateException("Could not decode bitmap for URI: ${item.uri}"))
+                    return@withContext Result.failure(
+                        IllegalStateException("Could not decode bitmap for URI: ${item.uri}")
+                    )
                 }
 
+                // Src rect disesuaikan dengan sample size
                 val scaledSrcRect = Rect(
                     item.srcRect.left / sampleSize,
                     item.srcRect.top / sampleSize,
-                    (item.srcRect.right / sampleSize).coerceAtMost(srcBitmap.width),
-                    (item.srcRect.bottom / sampleSize).coerceAtMost(srcBitmap.height)
+                    min(item.srcRect.right / sampleSize, srcBitmap.width),
+                    min(item.srcRect.bottom / sampleSize, srcBitmap.height)
                 )
 
-                val dstRectF = if (scaleFactor != 1.0f) {
-                    RectF(
-                        item.dstRect.left * scaleFactor,
-                        item.dstRect.top * scaleFactor,
-                        item.dstRect.right * scaleFactor,
-                        item.dstRect.bottom * scaleFactor
-                    )
-                } else {
-                    RectF(item.dstRect)
-                }
-
-                logDebug("Canvas draw stage - item $index: URI: ${item.uri}, srcRect: $scaledSrcRect, dstRectF: $dstRectF")
-
+                // Draw background padding if needed
                 if (config.alignmentMode == AlignmentMode.PADDING && config.paddingColor != PaddingColor.TRANSPARENT) {
                     val pageBgPaint = Paint().apply {
                         color = config.paddingColor.colorInt
                         style = Paint.Style.FILL
                     }
-                    val pageBoxF = if (scaleFactor != 1.0f) {
-                        RectF(
-                            item.pageBox.left * scaleFactor,
-                            item.pageBox.top * scaleFactor,
-                            item.pageBox.right * scaleFactor,
-                            item.pageBox.bottom * scaleFactor
-                        )
-                    } else {
-                        RectF(item.pageBox)
-                    }
-                    canvas.drawRect(pageBoxF, pageBgPaint)
+                    canvas.drawRect(item.pageBox.left, item.pageBox.top, item.pageBox.right, item.pageBox.bottom, pageBgPaint)
                 }
 
-                canvas.drawBitmap(srcBitmap, scaledSrcRect, dstRectF, paint)
+                canvas.drawBitmap(srcBitmap, scaledSrcRect, item.dstRect, paint)
                 srcBitmap.recycle()
 
                 val progress = 0.1f + 0.8f * ((index + 1).toFloat() / totalCount.toFloat())
@@ -162,18 +147,9 @@ class MergeEngine(
         }
     }
 
-    private fun calculateInSampleSize(reqSrcW: Int, reqSrcH: Int, reqDstW: Int, reqDstH: Int): Int {
-        var inSampleSize = 1
-        if (reqSrcH > reqDstH * 2 || reqSrcW > reqDstW * 2) {
-            val halfHeight: Int = reqSrcH / 2
-            val halfWidth: Int = reqSrcW / 2
-            while ((halfHeight / inSampleSize) >= reqDstH && (halfWidth / inSampleSize) >= reqDstW) {
-                inSampleSize *= 2
-            }
-        }
-        return max(1, inSampleSize)
-    }
-
+    /**
+     * Merge langsung ke OutputStream (JPEG/PNG/WebP).
+     */
     suspend fun merge(
         imageUris: List<Uri>,
         outputStream: OutputStream,
@@ -181,38 +157,36 @@ class MergeEngine(
         onProgress: (Float) -> Unit = {}
     ): MergeResult = withContext(Dispatchers.IO) {
         mergeToBitmap(imageUris, config, onProgress).fold(
-            onSuccess = { canvasBitmap ->
+            onSuccess = { bitmap ->
                 try {
-                    val byteCountingStream = ByteCountingOutputStream(outputStream)
-                    canvasBitmap.compress(config.compressFormat, config.quality, byteCountingStream)
-                    byteCountingStream.flush()
-                    val bytesWritten = byteCountingStream.bytesWritten
-                    val width = canvasBitmap.width
-                    val height = canvasBitmap.height
-                    canvasBitmap.recycle()
+                    val countingStream = ByteCountingOutputStream(outputStream)
+                    bitmap.compress(config.compressFormat, config.quality, countingStream)
+                    countingStream.flush()
+                    val bytesWritten = countingStream.bytesWritten
+                    bitmap.recycle()
 
                     MergeResult.Success(
-                        width = width,
-                        height = height,
+                        width = bitmap.width,
+                        height = bitmap.height,
                         bytesWritten = bytesWritten
                     )
                 } catch (e: Throwable) {
-                    canvasBitmap.recycle()
+                    bitmap.recycle()
                     MergeResult.Error(e.message ?: "Failed to compress bitmap", e)
                 }
             },
             onFailure = { throwable ->
-                MergeResult.Error(throwable.message ?: "Unknown error during merge", throwable)
+                MergeResult.Error(throwable.message ?: "Unknown merge error", throwable)
             }
         )
     }
 
+    // ─── Private helpers ───────────────────────────────────────────────────────
+
     private fun getImageDimensions(uri: Uri): Pair<Int, Int> {
         return try {
             val stream = openInputStream(uri) ?: return Pair(0, 0)
-            val options = BitmapFactory.Options().apply {
-                inJustDecodeBounds = true
-            }
+            val options = BitmapFactory.Options().apply { inJustDecodeBounds = true }
             BitmapFactory.decodeStream(stream, null, options)
             stream.close()
             Pair(options.outWidth, options.outHeight)
@@ -221,6 +195,177 @@ class MergeEngine(
         }
     }
 
+    private fun calculateInSampleSize(reqSrcW: Int, reqSrcH: Int, reqDstW: Int, reqDstH: Int): Int {
+        var sampleSize = 1
+        if (reqSrcH > reqDstH * 2 || reqSrcW > reqDstW * 2) {
+            val halfH = reqSrcH / 2
+            val halfW = reqSrcW / 2
+            while ((halfH / sampleSize) >= reqDstH && (halfW / sampleSize) >= reqDstW) {
+                sampleSize *= 2
+            }
+        }
+        return max(1, sampleSize)
+    }
+
+    /**
+     * Menghitung posisi penempatan untuk semua item berdasarkan arah dan alignment.
+     */
+    private fun calculateItemPlacements(
+        sizes: List<ImageSize>,
+        refWidth: Int,
+        refHeight: Int,
+        config: MergeConfig
+    ): List<ItemPlacement> {
+        return when (config.direction) {
+            MergeDirection.VERTICAL -> calculateVerticalPlacements(sizes, refWidth, config)
+            MergeDirection.HORIZONTAL_LTR -> calculateHorizontalPlacements(sizes, refWidth, refHeight, config, leftToRight = true)
+            MergeDirection.HORIZONTAL_RTL -> calculateHorizontalPlacements(sizes, refWidth, refHeight, config, leftToRight = false)
+        }
+    }
+
+    private fun calculateVerticalPlacements(
+        sizes: List<ImageSize>,
+        refWidth: Int,
+        config: MergeConfig
+    ): List<ItemPlacement> {
+        val placements = mutableListOf<ItemPlacement>()
+        var currentY = 0
+
+        for (item in sizes) {
+            val placement = computePlacement(item.width, item.height, refWidth, refHeight, config.alignmentMode, isVertical = true)
+            val pageBox = Rect(0, currentY, refWidth, currentY + placement.pageH)
+            val adjustedDst = Rect(
+                placement.dstRect.left,
+                currentY + placement.dstRect.top,
+                placement.dstRect.right,
+                currentY + placement.dstRect.bottom
+            )
+            placements.add(ItemPlacement(item.uri, placement.srcRect, adjustedDst, pageBox))
+            currentY += placement.pageH
+        }
+
+        return placements
+    }
+
+    private fun calculateHorizontalPlacements(
+        sizes: List<ImageSize>,
+        refWidth: Int,
+        refHeight: Int,
+        config: MergeConfig,
+        leftToRight: Boolean
+    ): List<ItemPlacement> {
+        val placements = mutableListOf<ItemPlacement>()
+
+        if (leftToRight) {
+            var currentX = 0
+            for (item in sizes) {
+                val placement = computePlacement(item.width, item.height, refWidth, refHeight, config.alignmentMode, isVertical = false)
+                val pageBox = Rect(currentX, 0, currentX + placement.pageW, refHeight)
+                val adjustedDst = Rect(
+                    currentX + placement.dstRect.left,
+                    placement.dstRect.top,
+                    currentX + placement.dstRect.right,
+                    placement.dstRect.bottom
+                )
+                placements.add(ItemPlacement(item.uri, placement.srcRect, adjustedDst, pageBox))
+                currentX += placement.pageW
+            }
+        } else {
+            // RTL: hitung semua placement dulu, lalu susun dari kanan ke kiri
+            val computed = sizes.map { item ->
+                computePlacement(item.width, item.height, refWidth, refHeight, config.alignmentMode, isVertical = false)
+            }
+            val totalWidth = computed.sumOf { it.pageW }
+            var currentX = totalWidth
+
+            for ((index, item) in sizes.withIndex()) {
+                val placement = computed[index]
+                val itemStartX = currentX - placement.pageW
+                val pageBox = Rect(itemStartX, 0, itemStartX + placement.pageW, refHeight)
+                val adjustedDst = Rect(
+                    itemStartX + placement.dstRect.left,
+                    placement.dstRect.top,
+                    itemStartX + placement.dstRect.right,
+                    placement.dstRect.bottom
+                )
+                placements.add(ItemPlacement(item.uri, placement.srcRect, adjustedDst, pageBox))
+                currentX -= placement.pageW
+            }
+        }
+
+        return placements
+    }
+
+    /**
+     * Menghitung srcRect, dstRect, dan dimensi page untuk satu item.
+     */
+    private fun computePlacement(
+        itemWidth: Int,
+        itemHeight: Int,
+        refWidth: Int,
+        refHeight: Int,
+        alignmentMode: AlignmentMode,
+        isVertical: Boolean
+    ): PlacementSpec {
+        return when (alignmentMode) {
+            AlignmentMode.RESIZE_PROPORTIONAL -> {
+                if (isVertical) {
+                    // Scale width ke refWidth, hitung height proporsional
+                    val dstW = refWidth
+                    val dstH = (itemHeight.toFloat() * refWidth / itemWidth).roundToInt().coerceAtLeast(1)
+                    PlacementSpec(
+                        pageW = refWidth, pageH = dstH,
+                        srcRect = Rect(0, 0, itemWidth, itemHeight),
+                        dstRect = Rect(0, 0, dstW, dstH)
+                    )
+                } else {
+                    // Scale height ke refHeight, hitung width proporsional
+                    val dstH = refHeight
+                    val dstW = (itemWidth.toFloat() * refHeight / itemHeight).roundToInt().coerceAtLeast(1)
+                    PlacementSpec(
+                        pageW = dstW, pageH = refHeight,
+                        srcRect = Rect(0, 0, itemWidth, itemHeight),
+                        dstRect = Rect(0, 0, dstW, dstH)
+                    )
+                }
+            }
+
+            AlignmentMode.PADDING -> {
+                // Scale agar muat di refWidth x refHeight, posisi di tengah
+                val scaleW = refWidth.toFloat() / itemWidth
+                val scaleH = refHeight.toFloat() / itemHeight
+                val scale = min(scaleW, scaleH)
+                val dstW = (itemWidth * scale).roundToInt().coerceAtLeast(1)
+                val dstH = (itemHeight * scale).roundToInt().coerceAtLeast(1)
+                val offsetX = (refWidth - dstW) / 2
+                val offsetY = (refHeight - dstH) / 2
+                PlacementSpec(
+                    pageW = refWidth, pageH = refHeight,
+                    srcRect = Rect(0, 0, itemWidth, itemHeight),
+                    dstRect = Rect(offsetX, offsetY, offsetX + dstW, offsetY + dstH)
+                )
+            }
+
+            AlignmentMode.CENTER_CROP -> {
+                // Crop tengah, scale agar memenuhi refWidth x refHeight
+                val scaleW = refWidth.toFloat() / itemWidth
+                val scaleH = refHeight.toFloat() / itemHeight
+                val scale = max(scaleW, scaleH)
+                val requiredSrcW = (refWidth / scale).roundToInt().coerceIn(1, itemWidth)
+                val requiredSrcH = (refHeight / scale).roundToInt().coerceIn(1, itemHeight)
+                val srcX = (itemWidth - requiredSrcW) / 2
+                val srcY = (itemHeight - requiredSrcH) / 2
+                PlacementSpec(
+                    pageW = refWidth, pageH = refHeight,
+                    srcRect = Rect(srcX, srcY, srcX + requiredSrcW, srcY + requiredSrcH),
+                    dstRect = Rect(0, 0, refWidth, refHeight)
+                )
+            }
+        }
+    }
+
+    // ─── Data classes ──────────────────────────────────────────────────────────
+
     data class ItemPlacement(
         val uri: Uri,
         val srcRect: Rect,
@@ -228,208 +373,21 @@ class MergeEngine(
         val pageBox: Rect
     )
 
-    private fun calculateItemPlacements(
-        sizes: List<ImageSize>,
-        refWidth: Int,
-        refHeight: Int,
-        config: MergeConfig
-    ): List<ItemPlacement> {
-        val placements = mutableListOf<ItemPlacement>()
-
-        when (config.direction) {
-            MergeDirection.VERTICAL -> {
-                var currentY = 0
-                for (item in sizes) {
-                    val (pageW, pageH, srcRect, dstRect) = computePlacementForSingleImage(
-                        itemWidth = item.width,
-                        itemHeight = item.height,
-                        refWidth = refWidth,
-                        refHeight = refHeight,
-                        alignmentMode = config.alignmentMode,
-                        isVertical = true
-                    )
-                    val pageBox = Rect(0, currentY, refWidth, currentY + pageH)
-                    val adjustedDstRect = Rect(
-                        dstRect.left,
-                        currentY + dstRect.top,
-                        dstRect.right,
-                        currentY + dstRect.bottom
-                    )
-                    placements.add(ItemPlacement(item.uri, srcRect, adjustedDstRect, pageBox))
-                    currentY += pageH
-                }
-            }
-
-            MergeDirection.HORIZONTAL_LTR -> {
-                var currentX = 0
-                for (item in sizes) {
-                    val (pageW, pageH, srcRect, dstRect) = computePlacementForSingleImage(
-                        itemWidth = item.width,
-                        itemHeight = item.height,
-                        refWidth = refWidth,
-                        refHeight = refHeight,
-                        alignmentMode = config.alignmentMode,
-                        isVertical = false
-                    )
-                    val pageBox = Rect(currentX, 0, currentX + pageW, refHeight)
-                    val adjustedDstRect = Rect(
-                        currentX + dstRect.left,
-                        dstRect.top,
-                        currentX + dstRect.right,
-                        dstRect.bottom
-                    )
-                    placements.add(ItemPlacement(item.uri, srcRect, adjustedDstRect, pageBox))
-                    currentX += pageW
-                }
-            }
-
-            MergeDirection.HORIZONTAL_RTL -> {
-                val computedSpecs = sizes.map { item ->
-                    computePlacementForSingleImage(
-                        itemWidth = item.width,
-                        itemHeight = item.height,
-                        refWidth = refWidth,
-                        refHeight = refHeight,
-                        alignmentMode = config.alignmentMode,
-                        isVertical = false
-                    )
-                }
-                val totalWidth = computedSpecs.sumOf { it.first }
-                var currentX = totalWidth
-
-                for ((index, item) in sizes.withIndex()) {
-                    val (pageW, pageH, srcRect, dstRect) = computedSpecs[index]
-                    val itemStartX = currentX - pageW
-                    val pageBox = Rect(itemStartX, 0, itemStartX + pageW, refHeight)
-                    val adjustedDstRect = Rect(
-                        itemStartX + dstRect.left,
-                        dstRect.top,
-                        itemStartX + dstRect.right,
-                        dstRect.bottom
-                    )
-                    placements.add(ItemPlacement(item.uri, srcRect, adjustedDstRect, pageBox))
-                    currentX -= pageW
-                }
-            }
-        }
-
-        return placements
-    }
-
-    private fun computePlacementForSingleImage(
-        itemWidth: Int,
-        itemHeight: Int,
-        refWidth: Int,
-        refHeight: Int,
-        alignmentMode: AlignmentMode,
-        isVertical: Boolean
-    ): Quad<Int, Int, Rect, Rect> {
-        return when (alignmentMode) {
-            AlignmentMode.RESIZE_PROPORTIONAL -> {
-                if (isVertical) {
-                    val dstW = refWidth
-                    val dstH = (itemHeight.toFloat() * refWidth.toFloat() / itemWidth.toFloat()).roundToInt().coerceAtLeast(1)
-                    Quad(dstW, dstH, Rect(0, 0, itemWidth, itemHeight), Rect(0, 0, dstW, dstH))
-                } else {
-                    val dstH = refHeight
-                    val dstW = (itemWidth.toFloat() * refHeight.toFloat() / itemHeight.toFloat()).roundToInt().coerceAtLeast(1)
-                    Quad(dstW, dstH, Rect(0, 0, itemWidth, itemHeight), Rect(0, 0, dstW, dstH))
-                }
-            }
-
-            AlignmentMode.PADDING -> {
-                val pageW = refWidth
-                val pageH = refHeight
-                val scaleW = refWidth.toFloat() / itemWidth.toFloat()
-                val scaleH = refHeight.toFloat() / itemHeight.toFloat()
-                val scale = minOf(scaleW, scaleH)
-
-                val dstW = (itemWidth * scale).roundToInt().coerceAtLeast(1)
-                val dstH = (itemHeight * scale).roundToInt().coerceAtLeast(1)
-
-                val offsetX = (pageW - dstW) / 2
-                val offsetY = (pageH - dstH) / 2
-
-                Quad(
-                    pageW,
-                    pageH,
-                    Rect(0, 0, itemWidth, itemHeight),
-                    Rect(offsetX, offsetY, offsetX + dstW, offsetY + dstH)
-                )
-            }
-
-            AlignmentMode.CENTER_CROP -> {
-                val pageW = refWidth
-                val pageH = refHeight
-
-                val scaleW = refWidth.toFloat() / itemWidth.toFloat()
-                val scaleH = refHeight.toFloat() / itemHeight.toFloat()
-                val scale = maxOf(scaleW, scaleH)
-
-                val requiredSrcW = (pageW / scale).roundToInt().coerceIn(1, itemWidth)
-                val requiredSrcH = (pageH / scale).roundToInt().coerceIn(1, itemHeight)
-
-                val srcX = (itemWidth - requiredSrcW) / 2
-                val srcY = (itemHeight - requiredSrcH) / 2
-
-                Quad(
-                    pageW,
-                    pageH,
-                    Rect(srcX, srcY, srcX + requiredSrcW, srcY + requiredSrcH),
-                    Rect(0, 0, pageW, pageH)
-                )
-            }
-        }
-    }
-
-    private fun logMochiStitch(message: String) {
-        try {
-            android.util.Log.d("MochiStitch", message)
-        } catch (t: Throwable) {
-            println("[MochiStitch] $message")
-        }
-    }
-
-    private fun logDebug(message: String) {
-        try {
-            android.util.Log.d(TAG, message)
-        } catch (t: Throwable) {
-            println("[$TAG] $message")
-        }
-    }
-
-    private data class Quad<A, B, C, D>(
-        val first: A,
-        val second: B,
-        val third: C,
-        val fourth: D
+    private data class PlacementSpec(
+        val pageW: Int,
+        val pageH: Int,
+        val srcRect: Rect,
+        val dstRect: Rect
     )
 
     private class ByteCountingOutputStream(private val delegate: OutputStream) : OutputStream() {
         var bytesWritten: Long = 0
             private set
 
-        override fun write(b: Int) {
-            delegate.write(b)
-            bytesWritten++
-        }
-
-        override fun write(b: ByteArray) {
-            delegate.write(b)
-            bytesWritten += b.size
-        }
-
-        override fun write(b: ByteArray, off: Int, len: Int) {
-            delegate.write(b, off, len)
-            bytesWritten += len
-        }
-
-        override fun flush() {
-            delegate.flush()
-        }
-
-        override fun close() {
-            delegate.close()
-        }
+        override fun write(b: Int) { delegate.write(b); bytesWritten++ }
+        override fun write(b: ByteArray) { delegate.write(b); bytesWritten += b.size }
+        override fun write(b: ByteArray, off: Int, len: Int) { delegate.write(b, off, len); bytesWritten += len }
+        override fun flush() { delegate.flush() }
+        override fun close() { delegate.close() }
     }
 }

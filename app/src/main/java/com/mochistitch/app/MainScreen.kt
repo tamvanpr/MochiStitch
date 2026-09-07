@@ -4,6 +4,7 @@ import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -26,12 +27,12 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Divider
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -50,8 +51,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import coil.compose.AsyncImage
@@ -114,13 +117,12 @@ fun MainScreen(
             onBackClicked = { viewModel.navigateTo(Screen.MAIN) },
             modifier = modifier
         )
-
         ExportResultDialogs(uiState = uiState, viewModel = viewModel)
         ProcessingProgressDialog(uiState = uiState)
         return
     }
 
-    // Main screen double-back exit handling
+    // Double-back exit
     BackHandler {
         val currentTime = System.currentTimeMillis()
         if (currentTime - backPressedTime < 2000) {
@@ -130,7 +132,6 @@ fun MainScreen(
             scope.launch {
                 snackbarHostState.showSnackbar("Press again to exit")
             }
-            Toast.makeText(context, "Press again to exit", Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -164,24 +165,37 @@ fun MainScreen(
         topBar = {
             TopAppBar(
                 title = {
-                    Text(
-                        text = "MochiStitch",
-                        style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold)
-                    )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Icon(
+                            Icons.Default.Settings,
+                            contentDescription = null,
+                            modifier = Modifier.size(24.dp),
+                            tint = MaterialTheme.colorScheme.onPrimaryContainer
+                        )
+                        Text(
+                            text = "MochiStitch",
+                            style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold)
+                        )
+                    }
                 },
                 actions = {
                     if (uiState.selectedImages.isNotEmpty()) {
                         IconButton(onClick = { viewModel.clearAll() }) {
                             Icon(
                                 imageVector = Icons.Default.Clear,
-                                contentDescription = "Clear All"
+                                contentDescription = "Clear all",
+                                tint = MaterialTheme.colorScheme.onPrimaryContainer
                             )
                         }
                     }
                     IconButton(onClick = { viewModel.navigateTo(Screen.SETTINGS) }) {
                         Icon(
                             imageVector = Icons.Default.Settings,
-                            contentDescription = "Settings"
+                            contentDescription = "Settings",
+                            tint = MaterialTheme.colorScheme.onPrimaryContainer
                         )
                     }
                 },
@@ -198,8 +212,10 @@ fun MainScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
-                .padding(16.dp)
+                .padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
+            // Settings card
             MergeSettingsCard(
                 direction = currentDirection,
                 onDirectionChange = { viewModel.updateDirection(it) },
@@ -209,36 +225,26 @@ fun MainScreen(
                 onPaddingColorChange = { viewModel.updatePaddingColor(it) }
             )
 
-            Spacer(modifier = Modifier.height(14.dp))
-
+            // Section header + Add button
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = "Selected Pages (${uiState.selectedImages.size})",
+                    text = "Selected Pages",
                     style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold
+                    fontWeight = FontWeight.SemiBold
                 )
-
-                OutlinedButton(
-                    onClick = {
-                        selectImagesLauncher.launch(arrayOf("image/*"))
-                    }
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Add,
-                        contentDescription = null,
-                        modifier = Modifier.size(18.dp)
-                    )
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text(text = "Add Images")
-                }
+                Text(
+                    text = "${uiState.selectedImages.size} page${if (uiState.selectedImages.size != 1) "s" else ""}",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.primary,
+                    fontWeight = FontWeight.Medium
+                )
             }
 
-            Spacer(modifier = Modifier.height(8.dp))
-
+            // Image list or empty state
             if (uiState.selectedImages.isEmpty()) {
                 Box(
                     modifier = Modifier
@@ -247,29 +253,61 @@ fun MainScreen(
                     contentAlignment = Alignment.Center
                 ) {
                     Column(
-                        horizontalAlignment = Alignment.CenterHorizontally
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
-                        Text(
-                            text = "No images selected to stitch",
-                            style = MaterialTheme.typography.bodyLarge,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        Spacer(modifier = Modifier.height(12.dp))
+                        // Empty state icon
+                        Box(
+                            modifier = Modifier
+                                .size(64.dp)
+                                .background(
+                                    MaterialTheme.colorScheme.primaryContainer,
+                                    RoundedCornerShape(16.dp)
+                                ),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                Icons.Default.Add,
+                                contentDescription = null,
+                                modifier = Modifier.size(32.dp),
+                                tint = MaterialTheme.colorScheme.onPrimaryContainer
+                            )
+                        }
+                        
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Text(
+                                text = "No images selected",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            Text(
+                                text = "Add comic pages to stitch them into a long strip",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                textAlign = TextAlign.Center
+                            )
+                        }
+
                         Button(
-                            onClick = {
-                                selectImagesLauncher.launch(arrayOf("image/*"))
-                            }
+                            onClick = { selectImagesLauncher.launch(arrayOf("image/*")) },
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(12.dp)
                         ) {
                             Icon(
                                 imageVector = Icons.Default.Add,
-                                contentDescription = null
+                                contentDescription = null,
+                                modifier = Modifier.size(18.dp)
                             )
                             Spacer(modifier = Modifier.width(8.dp))
-                            Text(text = "Select Images from Device")
+                            Text("Select Images")
                         }
                     }
                 }
             } else {
+                // Image list
                 ImageReorderList(
                     items = uiState.selectedImages,
                     onMoveUp = { viewModel.moveUp(it) },
@@ -278,22 +316,19 @@ fun MainScreen(
                     modifier = Modifier.weight(1f)
                 )
 
-                Spacer(modifier = Modifier.height(12.dp))
-
+                // Stitch button
                 Button(
-                    onClick = {
-                        viewModel.generatePreview(context)
-                    },
+                    onClick = { viewModel.generatePreview(context) },
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(52.dp),
-                    enabled = uiState.selectedImages.isNotEmpty() && !uiState.isProcessing
+                    enabled = uiState.selectedImages.isNotEmpty() && !uiState.isProcessing,
+                    shape = RoundedCornerShape(12.dp)
                 ) {
-                    Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        text = "Stitch & Export Preview",
+                        text = if (uiState.isProcessing) "Processing..." else "Generate Preview",
                         style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold
+                        fontWeight = FontWeight.SemiBold
                     )
                 }
             }
@@ -310,29 +345,27 @@ private fun ProcessingProgressDialog(uiState: MainUiState) {
         Dialog(onDismissRequest = {}) {
             Card(
                 shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surface
-                ),
-                modifier = Modifier.padding(16.dp)
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                modifier = Modifier.padding(24.dp)
             ) {
                 Column(
-                    modifier = Modifier.padding(24.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
+                    modifier = Modifier.padding(20.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     Text(
                         text = if (uiState.processingStep.isNotEmpty()) uiState.processingStep else "Processing...",
                         style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold
+                        fontWeight = FontWeight.SemiBold
                     )
-                    Spacer(modifier = Modifier.height(16.dp))
                     LinearProgressIndicator(
                         progress = { uiState.progress.coerceIn(0f, 1f) },
                         modifier = Modifier.fillMaxWidth()
                     )
-                    Spacer(modifier = Modifier.height(12.dp))
                     Text(
                         text = "${(uiState.progress * 100).toInt()}%",
-                        style = MaterialTheme.typography.bodyMedium
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
             }
@@ -363,53 +396,44 @@ private fun ExportResultDialogs(
                 }
             },
             text = {
-                Column {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     AsyncImage(
                         model = uri,
                         contentDescription = "Export Result Preview",
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(180.dp)
+                            .height(160.dp)
                             .clip(RoundedCornerShape(8.dp))
                     )
-                    Spacer(modifier = Modifier.height(12.dp))
-                    Text(
-                        text = "Output Files: ${result.outputCount}",
-                        style = MaterialTheme.typography.bodyMedium
-                    )
-                    Text(
-                        text = "Dimensions: ${result.width} x ${result.height} px",
-                        style = MaterialTheme.typography.bodyMedium
-                    )
-                    Text(
-                        text = "Total Size: ${formatFileSize(result.bytesWritten)}",
-                        style = MaterialTheme.typography.bodyMedium
-                    )
+                    
+                    Divider()
+                    
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        DetailRow("Files", "${result.outputCount}")
+                        DetailRow("Dimensions", "${result.width} × ${result.height} px")
+                        DetailRow("Size", formatFileSize(result.bytesWritten))
+                    }
+                    
                     if (result.itemsNeedingManualReview > 0) {
-                        Spacer(modifier = Modifier.height(12.dp))
-                        Card(
-                            colors = CardDefaults.cardColors(
-                                containerColor = MaterialTheme.colorScheme.errorContainer
-                            ),
-                            modifier = Modifier.fillMaxWidth()
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(MaterialTheme.colorScheme.errorContainer, RoundedCornerShape(8.dp))
+                                .padding(10.dp),
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Row(
-                                modifier = Modifier.padding(12.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Warning,
-                                    contentDescription = "Needs Manual Review Warning",
-                                    tint = MaterialTheme.colorScheme.error
-                                )
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text(
-                                    text = "${result.itemsNeedingManualReview} piece(s) need manual review (bubble/text overlap)",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onErrorContainer,
-                                    fontWeight = FontWeight.Bold
-                                )
-                            }
+                            Icon(
+                                imageVector = Icons.Default.Warning,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.error,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "${result.itemsNeedingManualReview} piece(s) need manual review",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onErrorContainer
+                            )
                         }
                     }
                 }
@@ -432,6 +456,25 @@ private fun ExportResultDialogs(
                     Text("OK")
                 }
             }
+        )
+    }
+}
+
+@Composable
+private fun DetailRow(label: String, value: String) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Text(
+            text = value,
+            style = MaterialTheme.typography.bodySmall,
+            fontWeight = FontWeight.Medium
         )
     }
 }
