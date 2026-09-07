@@ -12,6 +12,15 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.InputStream
 
+/**
+ * StitchProcessor — orkestrasi lengkap: merge → split → output.
+ *
+ * Flow:
+ * 1. Kelompokkan input sesuai splitMode (PAGES_PER_FILE atau MAX_PIXELS)
+ * 2. Merge setiap kelompok menjadi bitmap
+ * 3. Split bitmap jika perlu (MAX_PIXELS mode)
+ * 4. Kembalikan daftar StitchResultItem
+ */
 data class StitchResultItem(
     val index: Int,
     val filename: String,
@@ -24,7 +33,7 @@ data class StitchResultItem(
 enum class ProcessingStage(val stepName: String) {
     ALIGNING("Aligning images"),
     MERGING("Merging canvas"),
-    MOCHISMART_ANALYSIS("MochiSmart Analysis"),
+    SPLITTING("Splitting pieces"),
     EXPORTING("Exporting file")
 }
 
@@ -45,74 +54,56 @@ class StitchProcessor(
         }
 
         try {
-            onProgress(ProcessingStage.ALIGNING, 0.05f)
-
-            val mergeConfig = MergeConfig(
-                direction = when (settings.readingDirection) {
-                    ReadingDirection.VERTICAL -> MergeDirection.VERTICAL
-                    ReadingDirection.LTR -> MergeDirection.HORIZONTAL_LTR
-                    ReadingDirection.RTL -> MergeDirection.HORIZONTAL_RTL
-                },
-                alignmentMode = when (settings.alignmentMode) {
-                    AlignmentModeSetting.RESIZE_PROPORTIONAL -> AlignmentMode.RESIZE_PROPORTIONAL
-                    AlignmentModeSetting.CENTER_CROP -> AlignmentMode.CENTER_CROP
-                    AlignmentModeSetting.PADDING -> AlignmentMode.PADDING
-                },
-                paddingColor = when (settings.paddingColor) {
-                    PaddingColorSetting.WHITE -> PaddingColor.WHITE
-                    PaddingColorSetting.BLACK -> PaddingColor.BLACK
-                    PaddingColorSetting.TRANSPARENT -> PaddingColor.TRANSPARENT
-                }
-            )
-
-            val batches: List<List<Uri>> = when (settings.splitMode) {
-                SplitMode.PAGES_PER_FILE -> {
-                    val batchSize = settings.maxPagesPerFile.coerceAtLeast(1)
-                    imageUris.chunked(batchSize)
-                }
-                else -> listOf(imageUris)
-            }
-
+            val mergeConfig = buildMergeConfig(settings)
             val resultItems = mutableListOf<StitchResultItem>()
-            var totalItemIndex = 1
-            val totalBatches = batches.size
+            var globalIndex = 1
+            val totalBatches = computeBatchCount(imageUris, settings)
 
-            for ((batchIdx, batchUris) in batches.withIndex()) {
-                val batchProgressStart = batchIdx.toFloat() / totalBatches.toFloat()
-                val batchProgressRange = 1.0f / totalBatches.toFloat()
+            for ((batchIdx, batchUris) in imageUris.batches(settings).withIndex()) {
+                val batchProgressBase = batchIdx.toFloat() / totalBatches
+                val batchProgressRange = 1.0f / totalBatches
 
-                onProgress(ProcessingStage.MERGING, batchProgressStart + 0.1f * batchProgressRange)
+                // ── Step 1: Merge ──────────────────────────────────────────
+                onProgress(ProcessingStage.MERGING, batchProgressBase + 0.1f * batchProgressRange)
 
                 val mergedBitmap = mergeEngine.mergeToBitmap(batchUris, mergeConfig) { prog ->
-                    val totalProg = batchProgressStart + (0.1f + prog * 0.5f) * batchProgressRange
+                    val totalProg = batchProgressBase + (0.1f + prog * 0.5f) * batchProgressRange
                     onProgress(ProcessingStage.MERGING, totalProg)
-                }.getOrThrow()
+                }.getOrNull()
 
-                onProgress(ProcessingStage.MOCHISMART_ANALYSIS, batchProgressStart + 0.65f * batchProgressRange)
+                if (mergedBitmap == null) {
+                    onProgress(ProcessingStage.MERGING, batchProgressBase + 0.6f * batchProgressRange)
+                    // Merge gagal untuk batch ini, lewati
+                    continue
+                }
 
-                val slices: List<SlicedPiece> = if (settings.splitMode == SplitMode.MAX_PIXELS) {
-                    SplitEngine.sliceBitmapDetailed(
+                // ── Step 2: Split (jika perlu) ────────────────────────────
+                val slicedPieces: List<SlicedPiece>
+                if (settings.splitMode == SplitMode.MAX_PIXELS) {
+                    onProgress(ProcessingStage.SPLITTING, batchProgressBase + 0.6f * batchProgressRange)
+                    slicedPieces = SplitEngine.sliceBitmapDetailed(
                         source = mergedBitmap,
                         settings = settings
                     )
                 } else {
-                    listOf(SlicedPiece(mergedBitmap, needsManualReview = false))
+                    slicedPieces = listOf(SlicedPiece(mergedBitmap, needsManualReview = false))
                 }
 
-                onProgress(ProcessingStage.MOCHISMART_ANALYSIS, batchProgressStart + 0.95f * batchProgressRange)
+                onProgress(ProcessingStage.SPLITTING, batchProgressBase + 0.9f * batchProgressRange)
 
-                for (piece in slices) {
+                // ── Step 3: Buat result item ──────────────────────────────
+                for (piece in slicedPieces) {
                     val filename = FilenameFormatter.formatFilename(
                         template = settings.filenameTemplate,
                         project = settings.projectName,
                         chapter = settings.chapterName,
-                        index = totalItemIndex,
+                        index = globalIndex,
                         indexPaddingDigits = settings.indexPaddingDigits,
                         format = settings.outputFormat
                     )
                     resultItems.add(
                         StitchResultItem(
-                            index = totalItemIndex,
+                            index = globalIndex,
                             filename = filename,
                             bitmap = piece.bitmap,
                             width = piece.bitmap.width,
@@ -120,11 +111,16 @@ class StitchProcessor(
                             needsManualReview = piece.needsManualReview
                         )
                     )
-                    totalItemIndex++
+                    globalIndex++
+                }
+
+                // Recycle bitmap asli setelah discopy via slicing
+                if (!mergedBitmap.isRecycled) {
+                    mergedBitmap.recycle()
                 }
             }
 
-            onProgress(ProcessingStage.MOCHISMART_ANALYSIS, 1.0f)
+            onProgress(ProcessingStage.SPLITTING, 1.0f)
             Result.success(resultItems)
         } catch (e: Throwable) {
             Result.failure(e)
@@ -136,6 +132,54 @@ class StitchProcessor(
             if (!item.bitmap.isRecycled) {
                 item.bitmap.recycle()
             }
+        }
+    }
+
+    // ─── Private helpers ───────────────────────────────────────────────────────
+
+    private fun buildMergeConfig(settings: MochiStitchSettings): MergeConfig {
+        return MergeConfig(
+            direction = when (settings.readingDirection) {
+                ReadingDirection.VERTICAL -> MergeDirection.VERTICAL
+                ReadingDirection.LTR -> MergeDirection.HORIZONTAL_LTR
+                ReadingDirection.RTL -> MergeDirection.HORIZONTAL_RTL
+            },
+            alignmentMode = when (settings.alignmentMode) {
+                AlignmentModeSetting.RESIZE_PROPORTIONAL -> AlignmentMode.RESIZE_PROPORTIONAL
+                AlignmentModeSetting.CENTER_CROP -> AlignmentMode.CENTER_CROP
+                AlignmentModeSetting.PADDING -> AlignmentMode.PADDING
+            },
+            paddingColor = when (settings.paddingColor) {
+                PaddingColorSetting.WHITE -> PaddingColor.WHITE
+                PaddingColorSetting.BLACK -> PaddingColor.BLACK
+                PaddingColorSetting.TRANSPARENT -> PaddingColor.TRANSPARENT
+            }
+        )
+    }
+
+    /**
+     * Menghitung jumlah batch berdasarkan splitMode.
+     */
+    private fun computeBatchCount(imageUris: List<Uri>, settings: MochiStitchSettings): Int {
+        return when (settings.splitMode) {
+            SplitMode.PAGES_PER_FILE -> {
+                val batchSize = settings.maxPagesPerFile.coerceAtLeast(1)
+                (imageUris.size + batchSize - 1) / batchSize // ceiling division
+            }
+            else -> 1
+        }
+    }
+
+    /**
+     * Membagi URI menjadi batch-batch sesuai splitMode.
+     */
+    private fun List<Uri>.batches(settings: MochiStitchSettings): List<List<Uri>> {
+        return when (settings.splitMode) {
+            SplitMode.PAGES_PER_FILE -> {
+                val batchSize = settings.maxPagesPerFile.coerceAtLeast(1)
+                this.chunked(batchSize)
+            }
+            else -> listOf(this)
         }
     }
 }
