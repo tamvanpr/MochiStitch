@@ -184,14 +184,48 @@ fun MainScreen(
                         )
                     }
                 },
-                actions = {
+                actions = {\
                     if (uiState.selectedImages.isNotEmpty()) {
-                        IconButton(onClick = { viewModel.clearAll() }) {
-                            Icon(
-                                imageVector = Icons.Default.Clear,
-                                contentDescription = "Clear all",
-                                tint = MaterialTheme.colorScheme.onPrimaryContainer
-                            )
+                        if (uiState.isSelectionMode) {
+                            // Selection mode actions
+                            IconButton(onClick = { viewModel.selectAll() }) {
+                                Icon(
+                                    imageVector = Icons.Default.CheckCircle,
+                                    contentDescription = "Select all",
+                                    tint = MaterialTheme.colorScheme.onPrimaryContainer
+                                )
+                            }
+                            if (uiState.selectedIndexes.isNotEmpty()) {
+                                IconButton(onClick = { viewModel.deleteSelected() }) {
+                                    Icon(
+                                        imageVector = Icons.Default.Delete,
+                                        contentDescription = "Delete selected",
+                                        tint = MaterialTheme.colorScheme.error
+                                    )
+                                }
+                            }
+                            IconButton(onClick = { viewModel.toggleSelectionMode() }) {
+                                Icon(
+                                    imageVector = Icons.Default.Clear,
+                                    contentDescription = "Cancel",
+                                    tint = MaterialTheme.colorScheme.onPrimaryContainer
+                                )
+                            }
+                        } else {
+                            IconButton(onClick = { viewModel.toggleSelectionMode() }) {
+                                Icon(
+                                    imageVector = Icons.Default.Delete,
+                                    contentDescription = "Select for delete",
+                                    tint = MaterialTheme.colorScheme.onPrimaryContainer
+                                )
+                            }
+                            IconButton(onClick = { viewModel.clearAll() }) {
+                                Icon(
+                                    imageVector = Icons.Default.Clear,
+                                    contentDescription = "Clear all",
+                                    tint = MaterialTheme.colorScheme.onPrimaryContainer
+                                )
+                            }
                         }
                     }
                     IconButton(onClick = { viewModel.navigateTo(Screen.SETTINGS) }) {
@@ -316,6 +350,9 @@ fun MainScreen(
                     onMoveUp = { viewModel.moveUp(it) },
                     onMoveDown = { viewModel.moveDown(it) },
                     onRemove = { viewModel.remove(it) },
+                    isSelectionMode = uiState.isSelectionMode,
+                    selectedIndexes = uiState.selectedIndexes,
+                    onToggleSelection = { viewModel.toggleSelection(it) },
                     modifier = Modifier.weight(1f)
                 )
 
