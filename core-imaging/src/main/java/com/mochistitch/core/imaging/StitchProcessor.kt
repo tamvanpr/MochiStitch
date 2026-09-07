@@ -97,21 +97,8 @@ class StitchProcessor(
                     continue
                 }
 
-                // Downsample jika terlalu besar
-                val maxSafeDim = 4000
-                if (mergedBitmap.width > maxSafeDim || mergedBitmap.height > maxSafeDim) {
-                    val scale = maxSafeDim.toFloat() / maxOf(mergedBitmap.width, mergedBitmap.height)
-                    val newWidth = (mergedBitmap.width * scale).toInt()
-                    val newHeight = (mergedBitmap.height * scale).toInt()
-                    val downscaled = Bitmap.createScaledBitmap(
-                        mergedBitmap,
-                        newWidth,
-                        newHeight,
-                        true
-                    )
-                    mergedBitmap.recycle()
-                    mergedBitmap = downscaled
-                }
+                // HAPUS downsample - biarkan bitmap sesuai ukuran asli/user setting
+                // Chunking sudah membantu hemat memori
 
                 // ── Step 3: Split dengan MochiSmart (jika diperlukan) ────────
                 onProgress(ProcessingStage.SPLITTING, groupProgressBase + 0.6f * groupProgressRange)
