@@ -175,7 +175,7 @@ fun MainScreen(
                         Icon(
                             Icons.Default.Settings,
                             contentDescription = null,
-                            modifier = Modifier.size(24.dp),
+                            modifier = Modifier.size(22.dp),
                             tint = MaterialTheme.colorScheme.onPrimaryContainer
                         )
                         Text(
@@ -218,7 +218,7 @@ fun MainScreen(
                 .padding(horizontal = 16.dp, vertical = 12.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            // Settings card
+            // ── Stitch Settings Card ─────────────────────────────────────
             MergeSettingsCard(
                 direction = currentDirection,
                 onDirectionChange = { viewModel.updateDirection(it) },
@@ -228,7 +228,7 @@ fun MainScreen(
                 onPaddingColorChange = { viewModel.updatePaddingColor(it) }
             )
 
-            // Section header + Add button
+            // ── Section header + page count ─────────────────────────────
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -236,81 +236,21 @@ fun MainScreen(
             ) {
                 Text(
                     text = "Selected Pages",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold
+                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold)
                 )
                 Text(
                     text = "${uiState.selectedImages.size} page${if (uiState.selectedImages.size != 1) "s" else ""}",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.primary,
-                    fontWeight = FontWeight.Medium
+                    style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Medium),
+                    color = MaterialTheme.colorScheme.primary
                 )
             }
 
-            // Image list or empty state
+            // ── Image list or empty state ───────────────────────────────
             if (uiState.selectedImages.isEmpty()) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .weight(1f),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        // Empty state icon
-                        Box(
-                            modifier = Modifier
-                                .size(64.dp)
-                                .background(
-                                    MaterialTheme.colorScheme.primaryContainer,
-                                    RoundedCornerShape(16.dp)
-                                ),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                Icons.Default.Add,
-                                contentDescription = null,
-                                modifier = Modifier.size(32.dp),
-                                tint = MaterialTheme.colorScheme.onPrimaryContainer
-                            )
-                        }
-                        
-                        Column(
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.spacedBy(4.dp)
-                        ) {
-                            Text(
-                                text = "No images selected",
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.SemiBold
-                            )
-                            Text(
-                                text = "Add comic pages to stitch them into a long strip",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                textAlign = TextAlign.Center
-                            )
-                        }
-
-                        Button(
-                            onClick = { selectImagesLauncher.launch(arrayOf("image/*")) },
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(12.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Add,
-                                contentDescription = null,
-                                modifier = Modifier.size(18.dp)
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text("Select Images")
-                        }
-                    }
-                }
+                EmptyStateBox(
+                    onSelectClicked = { selectImagesLauncher.launch(arrayOf("image/*")) }
+                )
             } else {
-                // Image list
                 ImageReorderList(
                     items = uiState.selectedImages,
                     onMoveUp = { viewModel.moveUp(it) },
@@ -319,7 +259,6 @@ fun MainScreen(
                     modifier = Modifier.weight(1f)
                 )
 
-                // Stitch button
                 Button(
                     onClick = { viewModel.generatePreview(context) },
                     modifier = Modifier
@@ -330,8 +269,7 @@ fun MainScreen(
                 ) {
                     Text(
                         text = if (uiState.isProcessing) "Processing..." else "Generate Preview",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold
+                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold)
                     )
                 }
             }
@@ -342,6 +280,71 @@ fun MainScreen(
     ExportResultDialogs(uiState = uiState, viewModel = viewModel)
 }
 
+// ── Empty state box ──────────────────────────────────────────────────────────
+@Composable
+private fun EmptyStateBox(onSelectClicked: () -> Unit) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .weight(1f),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(14.dp)
+        ) {
+            // Icon
+            Box(
+                modifier = Modifier
+                    .size(64.dp)
+                    .background(
+                        MaterialTheme.colorScheme.primaryContainer,
+                        RoundedCornerShape(16.dp)
+                    ),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    Icons.Default.Add,
+                    contentDescription = null,
+                    modifier = Modifier.size(32.dp),
+                    tint = MaterialTheme.colorScheme.onPrimaryContainer
+                )
+            }
+
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                Text(
+                    text = "No images yet",
+                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold)
+                )
+                Text(
+                    text = "Add comic pages to stitch them into a long strip",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.Center
+                )
+            }
+
+            Button(
+                onClick = onSelectClicked,
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Add,
+                    contentDescription = null,
+                    modifier = Modifier.size(18.dp)
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("Select Images")
+            }
+        }
+    }
+}
+
+// ── Progress dialog ──────────────────────────────────────────────────────────
 @Composable
 private fun ProcessingProgressDialog(uiState: MainUiState) {
     if (uiState.isProcessing) {
@@ -358,8 +361,7 @@ private fun ProcessingProgressDialog(uiState: MainUiState) {
                 ) {
                     Text(
                         text = if (uiState.processingStep.isNotEmpty()) uiState.processingStep else "Processing...",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold
+                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold)
                     )
                     LinearProgressIndicator(
                         progress = { uiState.progress.coerceIn(0f, 1f) },
@@ -376,6 +378,7 @@ private fun ProcessingProgressDialog(uiState: MainUiState) {
     }
 }
 
+// ── Export result dialog ─────────────────────────────────────────────────────
 @Composable
 private fun ExportResultDialogs(
     uiState: MainUiState,
@@ -408,15 +411,15 @@ private fun ExportResultDialogs(
                             .height(160.dp)
                             .clip(RoundedCornerShape(8.dp))
                     )
-                    
+
                     Divider()
-                    
+
                     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         DetailRow("Files", "${result.outputCount}")
                         DetailRow("Dimensions", "${result.width} × ${result.height} px")
                         DetailRow("Size", formatFileSize(result.bytesWritten))
                     }
-                    
+
                     if (result.itemsNeedingManualReview > 0) {
                         Row(
                             modifier = Modifier
@@ -476,8 +479,7 @@ private fun DetailRow(label: String, value: String) {
         )
         Text(
             text = value,
-            style = MaterialTheme.typography.bodySmall,
-            fontWeight = FontWeight.Medium
+            style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Medium)
         )
     }
 }
