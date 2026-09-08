@@ -7,7 +7,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -69,7 +68,7 @@ fun PreviewSliceCard(
                         .padding(horizontal = 8.dp, vertical = 4.dp)
                 ) {
                     Text(
-                        text = "Piece ${slice.index + 1}/$totalSlices",
+                        text = "Bagian ${slice.index} dari $totalSlices",
                         style = MaterialTheme.typography.labelSmall,
                         fontWeight = FontWeight.SemiBold,
                         color = if (slice.needsManualReview) 
@@ -152,7 +151,7 @@ fun PreviewSliceCard(
                                 modifier = Modifier.size(16.dp)
                             )
                             Text(
-                                text = "Review needed",
+                                text = "Perlu peninjauan manual",
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.error,
                                 fontWeight = FontWeight.SemiBold

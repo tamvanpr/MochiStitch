@@ -50,19 +50,16 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
-import coil.compose.AsyncImage
 import com.mochistitch.core.settings.OutputWrapperFormat
 import com.mochistitch.core.ui.ImageReorderList
 import com.mochistitch.core.ui.PreviewScreenContent
 import com.mochistitch.core.ui.SettingsScreenContent
 import kotlinx.coroutines.launch
-import java.io.File
 import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -127,7 +124,7 @@ fun MainScreen(
         } else {
             backPressedTime = currentTime
             scope.launch {
-                snackbarHostState.showSnackbar("Press again to exit")
+                snackbarHostState.showSnackbar("Tekan sekali lagi untuk keluar")
             }
         }
     }
@@ -162,7 +159,7 @@ fun MainScreen(
                         IconButton(onClick = { viewModel.clearAll() }) {
                             Icon(
                                 imageVector = Icons.Default.Clear,
-                                contentDescription = "Clear all",
+                                contentDescription = "Hapus Semua",
                                 tint = MaterialTheme.colorScheme.onPrimaryContainer
                             )
                         }
@@ -170,7 +167,7 @@ fun MainScreen(
                     IconButton(onClick = { viewModel.navigateTo(Screen.SETTINGS) }) {
                         Icon(
                             imageVector = Icons.Default.Settings,
-                            contentDescription = "Settings",
+                            contentDescription = "Pengaturan",
                             tint = MaterialTheme.colorScheme.onPrimaryContainer
                         )
                     }
@@ -199,7 +196,7 @@ fun MainScreen(
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
-                        text = "Selected Pages",
+                        text = "Halaman Terpilih",
                         style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold)
                     )
                     Spacer(modifier = Modifier.width(8.dp))
@@ -219,7 +216,7 @@ fun MainScreen(
                             modifier = Modifier.size(18.dp)
                         )
                         Spacer(modifier = Modifier.width(4.dp))
-                        Text("Add Images")
+                        Text("Tambah Gambar")
                     }
                 }
             }
@@ -247,7 +244,7 @@ fun MainScreen(
                     shape = RoundedCornerShape(12.dp)
                 ) {
                     Text(
-                        text = if (uiState.isProcessing) "Processing..." else "Generate Preview",
+                        text = if (uiState.isProcessing) "Memproses..." else "Buat Pratinjau",
                         style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold)
                     )
                 }
@@ -270,36 +267,18 @@ private fun EmptyStateBox(onSelectClicked: () -> Unit) {
     ) {
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+            verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            // Icon
-            Box(
-                modifier = Modifier
-                    .size(56.dp)
-                    .background(
-                        MaterialTheme.colorScheme.primaryContainer,
-                        RoundedCornerShape(16.dp)
-                    ),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    Icons.Default.Add,
-                    contentDescription = null,
-                    modifier = Modifier.size(28.dp),
-                    tint = MaterialTheme.colorScheme.onPrimaryContainer
-                )
-            }
-
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(4.dp)
+                verticalArrangement = Arrangement.spacedBy(6.dp)
             ) {
                 Text(
-                    text = "No images yet",
+                    text = "Belum Ada Gambar",
                     style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold)
                 )
                 Text(
-                    text = "Add comic pages to stitch them into a long strip",
+                    text = "Tambahkan halaman komik untuk digabungkan menjadi alur utuh",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     textAlign = TextAlign.Center
@@ -308,7 +287,7 @@ private fun EmptyStateBox(onSelectClicked: () -> Unit) {
 
             Button(
                 onClick = onSelectClicked,
-                modifier = Modifier.fillMaxWidth(0.8f),
+                modifier = Modifier.fillMaxWidth(0.75f),
                 shape = RoundedCornerShape(12.dp)
             ) {
                 Icon(
@@ -317,7 +296,7 @@ private fun EmptyStateBox(onSelectClicked: () -> Unit) {
                     modifier = Modifier.size(18.dp)
                 )
                 Spacer(modifier = Modifier.width(8.dp))
-                Text("Select Images")
+                Text("Pilih Gambar")
             }
         }
     }
@@ -339,7 +318,7 @@ private fun ProcessingProgressDialog(uiState: MainUiState) {
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     Text(
-                        text = if (uiState.processingStep.isNotEmpty()) uiState.processingStep else "Processing...",
+                        text = if (uiState.processingStep.isNotEmpty()) uiState.processingStep else "Memproses...",
                         style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold)
                     )
                     LinearProgressIndicator(
@@ -502,7 +481,7 @@ private fun ExportResultDialogs(
     if (errorMessage != null) {
         AlertDialog(
             onDismissRequest = { viewModel.dismissError() },
-            title = { Text("Ekspor Gagal") },
+            title = { Text("Proses Gagal") },
             text = { Text(errorMessage) },
             confirmButton = {
                 TextButton(onClick = { viewModel.dismissError() }) {

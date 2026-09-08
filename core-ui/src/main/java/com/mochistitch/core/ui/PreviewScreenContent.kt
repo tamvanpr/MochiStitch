@@ -54,7 +54,7 @@ fun PreviewScreenContent(
             TopAppBar(
                 title = {
                     Text(
-                        text = "Preview",
+                        text = "Pratinjau Hasil",
                         style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold)
                     )
                 },
@@ -62,7 +62,7 @@ fun PreviewScreenContent(
                     IconButton(onClick = onBackClicked) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Back"
+                            contentDescription = "Kembali"
                         )
                     }
                 },
@@ -102,7 +102,7 @@ fun PreviewScreenContent(
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = "$reviewCount piece(s) need manual review (bubble/text overlap)",
+                            text = "$reviewCount bagian memerlukan peninjauan manual (area balon kata/teks)",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onErrorContainer,
                             fontWeight = FontWeight.Medium
@@ -113,7 +113,7 @@ fun PreviewScreenContent(
 
             // Title
             Text(
-                text = "Generated Pieces (${slices.size})",
+                text = "Hasil Potongan (${slices.size})",
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.SemiBold
             )
@@ -127,7 +127,7 @@ fun PreviewScreenContent(
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
-                        text = "No preview available",
+                        text = "Pratinjau tidak tersedia",
                         style = MaterialTheme.typography.bodyLarge,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -166,7 +166,7 @@ fun PreviewScreenContent(
                 )
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
-                    text = "Export Result",
+                    text = "Ekspor Hasil",
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.SemiBold
                 )

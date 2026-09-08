@@ -72,17 +72,13 @@ fun SettingsScreenContent(
     BackHandler(onBack = onBackClicked)
 
     var isAdvancedExpanded by remember { mutableStateOf(false) }
-    val arrowRotationAngle by animateFloatAsState(
-        targetValue = if (isAdvancedExpanded) 180f else 0f,
-        label = "AdvancedSettingsArrowRotation"
-    )
 
     Scaffold(
         topBar = {
             TopAppBar(
                 title = {
                     Text(
-                        text = "Settings",
+                        text = "Pengaturan",
                         style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold)
                     )
                 },
@@ -90,7 +86,7 @@ fun SettingsScreenContent(
                     IconButton(onClick = onBackClicked) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Back"
+                            contentDescription = "Kembali"
                         )
                     }
                 },
@@ -110,8 +106,8 @@ fun SettingsScreenContent(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            // ── 1. Output Format ──────────────────────────────────────────
-            SectionCard(title = "Output Format") {
+            // ── 1. Format Hasil ──────────────────────────────────────────
+            SectionCard(title = "Format Gambar Output") {
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutputFormat.entries.forEach { format ->
                         FilterChip(
@@ -130,7 +126,7 @@ fun SettingsScreenContent(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
-                            text = "Quality: ${settings.jpgQuality}%",
+                            text = "Kualitas JPG",
                             style = MaterialTheme.typography.bodyMedium
                         )
                         Text(
@@ -152,7 +148,7 @@ fun SettingsScreenContent(
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text("WEBP Lossless", style = MaterialTheme.typography.bodyMedium)
+                        Text("WEBP Tanpa Kompresi (Lossless)", style = MaterialTheme.typography.bodyMedium)
                         Switch(
                             checked = settings.webpLossless,
                             onCheckedChange = { onSettingsChanged(settings.copy(webpLossless = it)) }
@@ -166,7 +162,7 @@ fun SettingsScreenContent(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text(
-                                text = "Quality: ${settings.webpQuality}%",
+                                text = "Kualitas WEBP",
                                 style = MaterialTheme.typography.bodyMedium
                             )
                             Text(
@@ -185,17 +181,17 @@ fun SettingsScreenContent(
                 }
             }
 
-            // ── 2. Auto-Split Mode ────────────────────────────────────────
-            SectionCard(title = "Split Settings") {
+            // ── 2. Mode Pemotongan ────────────────────────────────────────
+            SectionCard(title = "Pengaturan Pemotongan") {
                 FlowRow(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     SplitMode.entries.forEach { mode ->
                         val label = when (mode) {
-                            SplitMode.NO_LIMIT -> "No Split"
-                            SplitMode.MAX_PIXELS -> "Max Pixels"
-                            SplitMode.PAGES_PER_FILE -> "Pages/File"
+                            SplitMode.NO_LIMIT -> "Tanpa Pemotongan"
+                            SplitMode.MAX_PIXELS -> "Maksimal Piksel"
+                            SplitMode.PAGES_PER_FILE -> "Halaman / Berkas"
                         }
                         FilterChip(
                             selected = settings.splitMode == mode,
@@ -207,10 +203,7 @@ fun SettingsScreenContent(
 
                 if (settings.splitMode == SplitMode.MAX_PIXELS) {
                     Spacer(modifier = Modifier.height(14.dp))
-                    // ── FIX GLITCH: local text state, only commit valid values ──
                     var pixelText by remember { mutableStateOf(settings.maxPixelLength.toString()) }
-                    // Sync text when settings change externally (e.g. from slider)
-                    // but only if text doesn't look like the user is mid-typing
                     LaunchedEffect(settings.maxPixelLength) {
                         pixelText = settings.maxPixelLength.toString()
                     }
@@ -224,8 +217,8 @@ fun SettingsScreenContent(
                                 onSettingsChanged(settings.copy(maxPixelLength = value.coerceIn(1000, 20000)))
                             }
                         },
-                        label = { Text("Max Pixel Height per Slice") },
-                        supportingText = { Text("Min 1,000 · Max 20,000 px") },
+                        label = { Text("Tinggi Maksimal Piksel per Potongan") },
+                        supportingText = { Text("Rentang: 1.000 – 20.000 px") },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true,
@@ -233,7 +226,7 @@ fun SettingsScreenContent(
                     )
                     Spacer(modifier = Modifier.height(10.dp))
                     Text(
-                        text = "Current: ${settings.maxPixelLength} px",
+                        text = "Saat Ini: ${settings.maxPixelLength} px",
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -248,7 +241,6 @@ fun SettingsScreenContent(
 
                 if (settings.splitMode == SplitMode.PAGES_PER_FILE) {
                     Spacer(modifier = Modifier.height(14.dp))
-                    // ── FIX GLITCH: local text state, only commit valid values ──
                     var pagesText by remember { mutableStateOf(settings.maxPagesPerFile.toString()) }
                     LaunchedEffect(settings.maxPagesPerFile) {
                         pagesText = settings.maxPagesPerFile.toString()
@@ -262,8 +254,8 @@ fun SettingsScreenContent(
                             val clamped = value.coerceIn(1, 100)
                             onSettingsChanged(settings.copy(maxPagesPerFile = clamped))
                         },
-                        label = { Text("Max Pages per File") },
-                        supportingText = { Text("Range: 1 – 100") },
+                        label = { Text("Maksimal Halaman per Berkas") },
+                        supportingText = { Text("Rentang: 1 – 100 halaman") },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true,
@@ -271,23 +263,23 @@ fun SettingsScreenContent(
                     )
                     Spacer(modifier = Modifier.height(10.dp))
                     Text(
-                        text = "Current: ${settings.maxPagesPerFile} pages",
+                        text = "Saat Ini: ${settings.maxPagesPerFile} halaman",
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
             }
 
-            // ── 3. Layout Defaults ────────────────────────────────────────
-            SectionCard(title = "Layout Defaults") {
-                SettingSectionLabel("Reading Direction")
+            // ── 3. Tata Letak Utama ────────────────────────────────────────
+            SectionCard(title = "Tata Letak & Arah Baca") {
+                SettingSectionLabel("Arah Baca / Penggabungan")
                 Spacer(modifier = Modifier.height(8.dp))
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     ReadingDirection.entries.forEach { dir ->
                         val label = when (dir) {
-                            ReadingDirection.VERTICAL -> "Vertical"
-                            ReadingDirection.LTR -> "LTR"
-                            ReadingDirection.RTL -> "RTL"
+                            ReadingDirection.VERTICAL -> "Vertikal (Webtoon)"
+                            ReadingDirection.LTR -> "Kiri ke Kanan (LTR)"
+                            ReadingDirection.RTL -> "Kanan ke Kiri (RTL)"
                         }
                         FilterChip(
                             selected = settings.readingDirection == dir,
@@ -298,14 +290,14 @@ fun SettingsScreenContent(
                 }
 
                 Spacer(modifier = Modifier.height(16.dp))
-                SettingSectionLabel("Alignment Mode")
+                SettingSectionLabel("Mode Penyesuaian Dimensi")
                 Spacer(modifier = Modifier.height(8.dp))
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     AlignmentModeSetting.entries.forEach { mode ->
                         val label = when (mode) {
-                            AlignmentModeSetting.RESIZE_PROPORTIONAL -> "Scale to Fit"
-                            AlignmentModeSetting.CENTER_CROP -> "Center Crop"
-                            AlignmentModeSetting.PADDING -> "Padding"
+                            AlignmentModeSetting.RESIZE_PROPORTIONAL -> "Sesuaikan Proporsi"
+                            AlignmentModeSetting.CENTER_CROP -> "Potong Tengah"
+                            AlignmentModeSetting.PADDING -> "Tambah Warna Latar"
                         }
                         FilterChip(
                             selected = settings.alignmentMode == mode,
@@ -317,14 +309,14 @@ fun SettingsScreenContent(
 
                 if (settings.alignmentMode == AlignmentModeSetting.PADDING) {
                     Spacer(modifier = Modifier.height(12.dp))
-                    SettingSectionLabel("Padding Color")
+                    SettingSectionLabel("Warna Latar Margin")
                     Spacer(modifier = Modifier.height(8.dp))
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                         PaddingColorSetting.entries.forEach { color ->
                             val label = when (color) {
-                                PaddingColorSetting.WHITE -> "White"
-                                PaddingColorSetting.BLACK -> "Black"
-                                PaddingColorSetting.TRANSPARENT -> "Transparent"
+                                PaddingColorSetting.WHITE -> "Putih"
+                                PaddingColorSetting.BLACK -> "Hitam"
+                                PaddingColorSetting.TRANSPARENT -> "Transparan"
                             }
                             FilterChip(
                                 selected = settings.paddingColor == color,
@@ -336,7 +328,7 @@ fun SettingsScreenContent(
                 }
             }
 
-            // ── 4. Advanced Settings (collapsible) ────────────────────────
+            // ── 4. Pengaturan Lanjutan (collapsible) ────────────────────────
             AdvancedSettingsCard(
                 isExpanded = isAdvancedExpanded,
                 onToggle = { isAdvancedExpanded = !isAdvancedExpanded },
@@ -395,7 +387,6 @@ private fun AdvancedSettingsCard(
         ),
         modifier = Modifier.fillMaxWidth()
     ) {
-        // Header (always visible)
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -413,14 +404,14 @@ private fun AdvancedSettingsCard(
                 )
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
-                    text = "Advanced",
+                    text = "Pengaturan Tingkat Lanjut",
                     style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
                     color = MaterialTheme.colorScheme.onSurface
                 )
             }
             Icon(
                 imageVector = Icons.Default.KeyboardArrowDown,
-                contentDescription = if (isExpanded) "Collapse" else "Expand",
+                contentDescription = if (isExpanded) "Tutup" else "Buka",
                 modifier = Modifier.rotate(if (isExpanded) 180f else 0f)
             )
         }
@@ -440,7 +431,7 @@ private fun AdvancedSettingsCard(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
-                            text = "MochiSmart Engine",
+                            text = "Deteksi Pintar MochiSmart",
                             style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold),
                             color = MaterialTheme.colorScheme.onSurface
                         )
@@ -452,7 +443,7 @@ private fun AdvancedSettingsCard(
 
                     if (settings.mochiSmartEnabled) {
                         Text(
-                            text = "Tolerance: ${settings.mochiSmartTolerance}px",
+                            text = "Toleransi Jarak Potong: ${settings.mochiSmartTolerance} px",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -463,14 +454,14 @@ private fun AdvancedSettingsCard(
                         )
 
                         Spacer(modifier = Modifier.height(4.dp))
-                        Text("Sensitivity", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Medium)
+                        Text("Sensitivitas Deteksi Teks", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Medium)
                         Spacer(modifier = Modifier.height(6.dp))
                         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             DetectionSensitivity.entries.forEach { sens ->
                                 val label = when (sens) {
-                                    DetectionSensitivity.LOW -> "Low"
-                                    DetectionSensitivity.MEDIUM -> "Balanced"
-                                    DetectionSensitivity.HIGH -> "High"
+                                    DetectionSensitivity.LOW -> "Rendah"
+                                    DetectionSensitivity.MEDIUM -> "Seimbang"
+                                    DetectionSensitivity.HIGH -> "Tinggi"
                                 }
                                 FilterChip(
                                     selected = settings.mochiSmartSensitivity == sens,
@@ -486,7 +477,7 @@ private fun AdvancedSettingsCard(
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text("Show review markers", style = MaterialTheme.typography.bodyMedium)
+                            Text("Tampilkan penanda peninjauan", style = MaterialTheme.typography.bodyMedium)
                             Switch(
                                 checked = settings.showManualReviewMarkers,
                                 onCheckedChange = { onSettingsChanged(settings.copy(showManualReviewMarkers = it)) }
@@ -497,10 +488,10 @@ private fun AdvancedSettingsCard(
 
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
 
-                // ── Packaging ───────────────────────────────────────────
+                // ── Pengemasan ───────────────────────────────────────────
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text(
-                        text = "Output Format",
+                        text = "Format Pengemasan Ekspor",
                         style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold),
                         color = MaterialTheme.colorScheme.onSurface
                     )
@@ -510,9 +501,9 @@ private fun AdvancedSettingsCard(
                     ) {
                         OutputWrapperFormat.entries.forEach { wrapper ->
                             val label = when (wrapper) {
-                                OutputWrapperFormat.LOOSE_FILES -> "Images"
-                                OutputWrapperFormat.CBZ -> "CBZ"
-                                OutputWrapperFormat.ZIP -> "ZIP"
+                                OutputWrapperFormat.LOOSE_FILES -> "Berkas Gambar Terpisah"
+                                OutputWrapperFormat.CBZ -> "Arsip CBZ"
+                                OutputWrapperFormat.ZIP -> "Arsip ZIP"
                             }
                             FilterChip(
                                 selected = settings.wrapperFormat == wrapper,
@@ -525,17 +516,17 @@ private fun AdvancedSettingsCard(
 
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
 
-                // ── Naming ──────────────────────────────────────────────
+                // ── Penamaan ──────────────────────────────────────────────
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text(
-                        text = "Naming",
+                        text = "Penamaan Berkas Hasil",
                         style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold),
                         color = MaterialTheme.colorScheme.onSurface
                     )
                     OutlinedTextField(
                         value = settings.projectName,
                         onValueChange = { onSettingsChanged(settings.copy(projectName = it)) },
-                        label = { Text("Project Name") },
+                        label = { Text("Nama Proyek / Judul Komik") },
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true,
                         shape = RoundedCornerShape(10.dp)
@@ -543,7 +534,7 @@ private fun AdvancedSettingsCard(
                     OutlinedTextField(
                         value = settings.chapterName,
                         onValueChange = { onSettingsChanged(settings.copy(chapterName = it)) },
-                        label = { Text("Chapter / Volume") },
+                        label = { Text("Bab / Volume") },
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true,
                         shape = RoundedCornerShape(10.dp)
@@ -551,13 +542,13 @@ private fun AdvancedSettingsCard(
                     OutlinedTextField(
                         value = settings.filenameTemplate,
                         onValueChange = { onSettingsChanged(settings.copy(filenameTemplate = it)) },
-                        label = { Text("Filename Template ({project} {chapter} {index})") },
+                        label = { Text("Template Nama Berkas ({project} {chapter} {index})") },
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true,
                         shape = RoundedCornerShape(10.dp)
                     )
                     Text(
-                        text = "Index padding: ${settings.indexPaddingDigits} digit${if (settings.indexPaddingDigits != 1) "s" else ""} (e.g. ${"1".padStart(settings.indexPaddingDigits, '0')})",
+                        text = "Jumlah digit indeks: ${settings.indexPaddingDigits} digit (contoh: ${"1".padStart(settings.indexPaddingDigits, '0')})",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )

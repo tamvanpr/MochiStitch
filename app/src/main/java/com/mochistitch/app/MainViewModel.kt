@@ -26,12 +26,14 @@ import com.mochistitch.core.settings.PaddingColorSetting
 import com.mochistitch.core.settings.ReadingDirection
 import com.mochistitch.core.ui.ImageItem
 import com.mochistitch.core.ui.PreviewSliceItem
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.OutputStream
 import java.text.SimpleDateFormat
@@ -77,10 +79,8 @@ class MainViewModel : ViewModel() {
             val repo = MochiStitchSettingsRepository(context)
             settingsRepository = repo
             viewModelScope.launch {
-                // Read initial settings immediately so UI renders with correct values on first frame
                 val initialSettings = repo.settingsFlow.first()
                 _uiState.update { it.copy(settings = initialSettings) }
-                // Collect for future updates
                 repo.settingsFlow.collect { newSettings ->
                     _uiState.update { it.copy(settings = newSettings) }
                 }
@@ -101,37 +101,39 @@ class MainViewModel : ViewModel() {
 
     fun addImages(uris: List<Uri>, context: Context) {
         initSettings(context)
-        val currentUris = _uiState.value.selectedImages.map { it.uri.toString() }.toSet()
-        val distinctUris = uris.distinctBy { it.toString() }
-        val newUris = distinctUris.filterNot { currentUris.contains(it.toString()) }
-        val duplicateCount = uris.size - newUris.size
+        viewModelScope.launch(Dispatchers.IO) {
+            val currentUris = _uiState.value.selectedImages.map { it.uri.toString() }.toSet()
+            val distinctUris = uris.distinctBy { it.toString() }
+            val newUris = distinctUris.filterNot { currentUris.contains(it.toString()) }
+            val duplicateCount = uris.size - newUris.size
 
-        if (newUris.isEmpty()) {
-            if (duplicateCount > 0) {
-                _uiState.update { it.copy(userMessage = "Gambar duplikat diabaikan ($duplicateCount gambar)") }
+            if (newUris.isEmpty()) {
+                if (duplicateCount > 0) {
+                    _uiState.update { it.copy(userMessage = "Gambar duplikat diabaikan ($duplicateCount gambar)") }
+                }
+                return@launch
             }
-            return
-        }
 
-        val newItems = newUris.map { uri ->
-            try {
-                context.contentResolver.takePersistableUriPermission(
-                    uri,
-                    Intent.FLAG_GRANT_READ_URI_PERMISSION
+            val newItems = newUris.map { uri ->
+                try {
+                    context.contentResolver.takePersistableUriPermission(
+                        uri,
+                        Intent.FLAG_GRANT_READ_URI_PERMISSION
+                    )
+                } catch (e: SecurityException) {
+                    // Ignore
+                }
+                val fileName = queryFileName(context, uri) ?: uri.lastPathSegment ?: "Gambar"
+                ImageItem(uri = uri, name = fileName)
+            }
+
+            _uiState.update { state ->
+                val msg = if (duplicateCount > 0) "Gambar duplikat diabaikan ($duplicateCount gambar)" else null
+                state.copy(
+                    selectedImages = state.selectedImages + newItems,
+                    userMessage = msg
                 )
-            } catch (e: SecurityException) {
-                // Ignore
             }
-            val fileName = queryFileName(context, uri) ?: uri.lastPathSegment ?: "Image"
-            ImageItem(uri = uri, name = fileName)
-        }
-
-        _uiState.update { state ->
-            val msg = if (duplicateCount > 0) "Gambar duplikat diabaikan ($duplicateCount gambar)" else null
-            state.copy(
-                selectedImages = state.selectedImages + newItems,
-                userMessage = msg
-            )
         }
     }
 
@@ -175,6 +177,12 @@ class MainViewModel : ViewModel() {
     }
 
     fun clearPreviewSlices() {
+        val currentSlices = _uiState.value.previewSlices
+        currentSlices.forEach { slice ->
+            slice.cacheFilePath?.let { path ->
+                try { File(path).delete() } catch (t: Throwable) {}
+            }
+        }
         _uiState.update { it.copy(previewSlices = emptyList()) }
     }
 
@@ -250,7 +258,7 @@ class MainViewModel : ViewModel() {
         _uiState.update {
             it.copy(
                 isProcessing = true,
-                processingStep = "Aligning images",
+                processingStep = "Menata alur gambar",
                 progress = 0f,
                 errorMessage = null,
                 exportResult = null,
@@ -278,7 +286,11 @@ class MainViewModel : ViewModel() {
                     _uiState.update {
                         it.copy(
                             isProcessing = false,
-                            errorMessage = run { val ex = result.exceptionOrNull(); val isOom = ex is OutOfMemoryError || (ex?.message?.contains("OutOfMemory", ignoreCase = true) == true); if (isOom) "Gagal membuat pratinjau: Memori tidak cukup untuk memproses gambar." else ex?.message ?: "Gagal memproses penggabungan gambar." }
+                            errorMessage = run {
+                                val ex = result.exceptionOrNull()
+                                val isOom = ex is OutOfMemoryError || (ex?.message?.contains("OutOfMemory", ignoreCase = true) == true)
+                                if (isOom) "Gagal membuat pratinjau: Memori tidak cukup untuk memproses gambar." else ex?.message ?: "Gagal memproses penggabungan gambar."
+                            }
                         )
                     }
                     return@launch
@@ -290,7 +302,8 @@ class MainViewModel : ViewModel() {
                     PreviewSliceItem(
                         index = item.index,
                         filename = "${item.filename}.${extension}",
-                        bitmap = item.bitmap,
+                        bitmap = item.previewBitmap,
+                        cacheFilePath = item.cacheFile.absolutePath,
                         width = item.width,
                         height = item.height,
                         needsManualReview = item.needsManualReview,
@@ -309,18 +322,16 @@ class MainViewModel : ViewModel() {
                 _uiState.update {
                     it.copy(
                         isProcessing = false,
-                        errorMessage = run { val isOom = e is OutOfMemoryError || (e.message?.contains("OutOfMemory", ignoreCase = true) == true); if (isOom) "Gagal membuat pratinjau: Memori tidak cukup untuk memproses gambar." else e.message ?: "Gagal membuat pratinjau gambar." }
+                        errorMessage = run {
+                            val isOom = e is OutOfMemoryError || (e.message?.contains("OutOfMemory", ignoreCase = true) == true)
+                            if (isOom) "Gagal membuat pratinjau: Memori tidak cukup untuk memproses gambar." else e.message ?: "Gagal membuat pratinjau gambar."
+                        }
                     )
                 }
             }
         }
     }
 
-    /**
-     * Export the preview slices.
-     * - Loose files: write directly to Pictures/MochiStitch/<timestamp>/ and show path
-     * - CBZ/ZIP: use the traditional content URI flow
-     */
     fun exportResult(outputUri: Uri, context: Context) {
         val previewSlices = _uiState.value.previewSlices
         if (previewSlices.isEmpty()) {
@@ -347,23 +358,21 @@ class MainViewModel : ViewModel() {
                 val manualReviewCount = previewSlices.count { it.needsManualReview }
 
                 if (settings.wrapperFormat == OutputWrapperFormat.CBZ || settings.wrapperFormat == OutputWrapperFormat.ZIP) {
-                    // Archive flow: use content URI as before
                     val outputStream = context.contentResolver.openOutputStream(outputUri)
                     if (outputStream == null) {
                         _uiState.update { it.copy(isProcessing = false, errorMessage = "Tidak dapat membuka lokasi penyimpanan output.") }
                         return@launch
                     }
-                    val quality = if (settings.outputFormat == OutputFormat.JPG) settings.jpgQuality else settings.webpQuality
+
                     val archiveEntries = previewSlices.mapIndexed { index, slice ->
                         _uiState.update { it.copy(progress = (index + 1).toFloat() / previewSlices.size.toFloat()) }
                         ArchiveEntry(slice.filename) { out ->
-                            ImageCompressor.compress(
-                                bitmap = slice.bitmap,
-                                format = settings.outputFormat,
-                                quality = quality,
-                                webpLossless = settings.webpLossless,
-                                outputStream = out
-                            )
+                            val srcFile = slice.cacheFilePath?.let { File(it) }
+                            if (srcFile != null && srcFile.exists()) {
+                                srcFile.inputStream().use { input ->
+                                    input.copyTo(out)
+                                }
+                            }
                         }
                     }
                     bytesWritten = ArchiveHandler.createArchive(archiveEntries, outputStream)
@@ -381,7 +390,6 @@ class MainViewModel : ViewModel() {
                         )
                     }
                 } else {
-                    // Loose files: write directly to Pictures/MochiStitch/<timestamp>/
                     val downloadsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES)
                     val mochistitchDir = File(downloadsDir, "MochiStitch")
                     if (!mochistitchDir.exists()) mochistitchDir.mkdirs()
@@ -391,21 +399,14 @@ class MainViewModel : ViewModel() {
                     val outputFolder = File(mochistitchDir, "export_$timestamp")
                     if (!outputFolder.exists()) outputFolder.mkdirs()
 
-                    val quality = if (settings.outputFormat == OutputFormat.JPG) settings.jpgQuality else settings.webpQuality
-
                     previewSlices.forEachIndexed { index, slice ->
                         _uiState.update { it.copy(progress = (index + 1).toFloat() / previewSlices.size.toFloat()) }
-                        val file = File(outputFolder, slice.filename)
-                        file.outputStream().use { out ->
-                            ImageCompressor.compress(
-                                bitmap = slice.bitmap,
-                                format = settings.outputFormat,
-                                quality = quality,
-                                webpLossless = settings.webpLossless,
-                                outputStream = out
-                            )
+                        val destFile = File(outputFolder, slice.filename)
+                        val srcFile = slice.cacheFilePath?.let { File(it) }
+                        if (srcFile != null && srcFile.exists()) {
+                            srcFile.copyTo(destFile, overwrite = true)
+                            bytesWritten += destFile.length()
                         }
-                        bytesWritten += file.length()
                     }
 
                     _uiState.update {
@@ -424,25 +425,22 @@ class MainViewModel : ViewModel() {
                 _uiState.update {
                     it.copy(
                         isProcessing = false,
-                        errorMessage = run { val isOom = e is OutOfMemoryError || (e.message?.contains("OutOfMemory", ignoreCase = true) == true); if (isOom) "Gagal menyimpan: Memori tidak cukup untuk memproses gambar." else e.message ?: "Gagal melakukan proses ekspor." }
+                        errorMessage = run {
+                            val isOom = e is OutOfMemoryError || (e.message?.contains("OutOfMemory", ignoreCase = true) == true)
+                            if (isOom) "Gagal menyimpan: Memori tidak cukup untuk memproses gambar." else e.message ?: "Gagal melakukan proses ekspor."
+                        }
                     )
                 }
             }
         }
     }
 
-    /**
-     * Export loose file slices directly to Pictures/MochiStitch/<timestamp>/
-     * then update UI state with the output folder path for sharing.
-     */
     fun exportLooseFiles(context: Context) {
         val previewSlices = _uiState.value.previewSlices
         if (previewSlices.isEmpty()) {
             _uiState.update { it.copy(errorMessage = "Tidak ada pratinjau yang tersedia untuk diekspor.") }
             return
         }
-
-        val settings = _uiState.value.settings
 
         _uiState.update {
             it.copy(
@@ -469,21 +467,14 @@ class MainViewModel : ViewModel() {
                 val outputFolder = File(mochistitchDir, "export_$timestamp")
                 if (!outputFolder.exists()) outputFolder.mkdirs()
 
-                val quality = if (settings.outputFormat == OutputFormat.JPG) settings.jpgQuality else settings.webpQuality
-
                 previewSlices.forEachIndexed { index, slice ->
                     _uiState.update { it.copy(progress = (index + 1).toFloat() / previewSlices.size.toFloat()) }
-                    val file = File(outputFolder, slice.filename)
-                    file.outputStream().use { out ->
-                        ImageCompressor.compress(
-                            bitmap = slice.bitmap,
-                            format = settings.outputFormat,
-                            quality = quality,
-                            webpLossless = settings.webpLossless,
-                            outputStream = out
-                        )
+                    val destFile = File(outputFolder, slice.filename)
+                    val srcFile = slice.cacheFilePath?.let { File(it) }
+                    if (srcFile != null && srcFile.exists()) {
+                        srcFile.copyTo(destFile, overwrite = true)
+                        bytesWritten += destFile.length()
                     }
-                    bytesWritten += file.length()
                 }
 
                 _uiState.update {
@@ -501,7 +492,10 @@ class MainViewModel : ViewModel() {
                 _uiState.update {
                     it.copy(
                         isProcessing = false,
-                        errorMessage = run { val isOom = e is OutOfMemoryError || (e.message?.contains("OutOfMemory", ignoreCase = true) == true); if (isOom) "Gagal menyimpan: Memori tidak cukup untuk memproses gambar." else e.message ?: "Gagal melakukan proses ekspor." }
+                        errorMessage = run {
+                            val isOom = e is OutOfMemoryError || (e.message?.contains("OutOfMemory", ignoreCase = true) == true)
+                            if (isOom) "Gagal menyimpan: Memori tidak cukup untuk memproses gambar." else e.message ?: "Gagal melakukan proses ekspor."
+                        }
                     )
                 }
             }
@@ -512,9 +506,6 @@ class MainViewModel : ViewModel() {
         _uiState.update { it.copy(exportResult = null, resultOutputUri = null) }
     }
 
-    /**
-     * Share the exported loose files folder via Android share intent.
-     */
     fun shareExportedFolder(context: Context, folderPath: String) {
         val folder = File(folderPath)
         if (!folder.exists() || !folder.isDirectory) {
@@ -522,7 +513,6 @@ class MainViewModel : ViewModel() {
             return
         }
 
-        // Find the first image file to use as a preview
         val files = folder.listFiles { _, name ->
             name.lowercase().endsWith(".jpg") ||
                     name.lowercase().endsWith(".jpeg") ||
@@ -542,10 +532,10 @@ class MainViewModel : ViewModel() {
             putExtra(Intent.EXTRA_STREAM, fileUri)
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
             putExtra(Intent.EXTRA_SUBJECT, "MochiStitch Export")
-            putExtra(Intent.EXTRA_TEXT, "Exported ${folder.absolutePath}")
+            putExtra(Intent.EXTRA_TEXT, "Hasil ekspor dari MochiStitch: ${folder.absolutePath}")
         }
 
-        val chooser = Intent.createChooser(shareIntent, "Share images from MochiStitch")
+        val chooser = Intent.createChooser(shareIntent, "Bagikan hasil ekspor MochiStitch")
         chooser.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         context.startActivity(chooser)
     }
