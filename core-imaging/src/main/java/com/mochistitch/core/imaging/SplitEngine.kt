@@ -7,6 +7,7 @@ import com.mochistitch.core.settings.DetectionSensitivity
 import com.mochistitch.core.settings.MochiStitchSettings
 import com.mochistitch.core.settings.ReadingDirection
 import com.mochistitch.core.settings.SplitMode
+import kotlin.math.min
 
 data class SlicedPiece(
     val bitmap: Bitmap,
