@@ -367,7 +367,6 @@ private fun ExportResultDialogs(
     // Archive export dialog
     if (uiState.exportResult != null && uiState.resultOutputUri != null) {
         val result = uiState.exportResult
-        val uri = uiState.resultOutputUri
 
         AlertDialog(
             onDismissRequest = { viewModel.dismissResult() },
@@ -384,14 +383,17 @@ private fun ExportResultDialogs(
             },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    AsyncImage(
-                        model = uri,
-                        contentDescription = "Export Result Preview",
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(160.dp)
-                            .clip(RoundedCornerShape(8.dp))
-                    )
+                    val firstSliceBitmap = uiState.previewSlices.firstOrNull()?.bitmap
+                    if (firstSliceBitmap != null && !firstSliceBitmap.isRecycled) {
+                        AsyncImage(
+                            model = firstSliceBitmap,
+                            contentDescription = "Export Result Preview",
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(160.dp)
+                                .clip(RoundedCornerShape(8.dp))
+                        )
+                    }
 
                     HorizontalDivider()
 
