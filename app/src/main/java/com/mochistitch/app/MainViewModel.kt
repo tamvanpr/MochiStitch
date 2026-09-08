@@ -259,15 +259,14 @@ class MainViewModel : ViewModel() {
                 }
 
                 val items = result.getOrThrow()
-                val previewSlices = items.map { item ->
+                val previewSlices = items.mapIndexed { index, item ->
                     PreviewSliceItem(
-                        index = item.index,
+                        index = index,
                         filename = item.filename,
                         bitmap = item.bitmap,
                         width = item.width,
                         height = item.height,
-                        needsManualReview = item.needsManualReview,
-                        bytesWritten = item.estimatedBytes
+                        needsManualReview = item.needsManualReview
                     )
                 }
 
