@@ -27,6 +27,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -174,21 +175,10 @@ fun MainScreen(
         topBar = {
             TopAppBar(
                 title = {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Icon(
-                            Icons.Default.Settings,
-                            contentDescription = null,
-                            modifier = Modifier.size(22.dp),
-                            tint = MaterialTheme.colorScheme.onPrimaryContainer
-                        )
-                        Text(
-                            text = "MochiStitch",
-                            style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold)
-                        )
-                    }
+                    Text(
+                        text = "MochiStitch",
+                        style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold)
+                    )
                 },
                 actions = {
                     if (uiState.selectedImages.isNotEmpty()) {
@@ -215,6 +205,20 @@ fun MainScreen(
             )
         },
         snackbarHost = { SnackbarHost(snackbarHostState) },
+        floatingActionButton = {
+            if (uiState.currentScreen == Screen.MAIN && uiState.selectedImages.isEmpty()) {
+                FloatingActionButton(
+                    onClick = { selectImagesLauncher.launch(arrayOf("image/*")) },
+                    modifier = Modifier.padding(end = 16.dp, bottom = 16.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Add,
+                        contentDescription = "Add images",
+                        modifier = Modifier.size(24.dp)
+                    )
+                }
+            }
+        },
         modifier = modifier
     ) { innerPadding ->
         Column(
