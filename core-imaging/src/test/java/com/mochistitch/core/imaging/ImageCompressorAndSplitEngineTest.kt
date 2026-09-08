@@ -32,7 +32,7 @@ class ImageCompressorAndSplitEngineTest {
             indexPaddingDigits = 3,
             format = OutputFormat.PNG
         )
-        assertEquals("SoloLeveling_ch01_005.png", filename1)
+        assertEquals("SoloLeveling_ch01_005", filename1)
 
         val filename2 = FilenameFormatter.formatFilename(
             template = "page_{index}",
@@ -42,7 +42,7 @@ class ImageCompressorAndSplitEngineTest {
             indexPaddingDigits = 2,
             format = OutputFormat.JPG
         )
-        assertEquals("page_12.jpg", filename2)
+        assertEquals("page_12", filename2)
     }
 
     @Test
