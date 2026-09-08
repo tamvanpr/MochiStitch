@@ -109,9 +109,11 @@ class StitchProcessor(
 
                 // ── Step 4: Buat result item ──────────────────────────────────
                 for (piece in slicedPieces) {
-                    // Buat copy independen agar bitmap tidak terpengaruh recycle source
+                    // Buat copy independen agar bitmap tidak terpengaruh recycle source.
+                    // Catatan: piece.bitmap adalah view/window (sub-bitmap) dari mergedBitmap,
+                    // bukan bitmap independen. Jangan panggil piece.bitmap.recycle() di sini
+                    // karena merecycle-nya prematurely dapat menyebabkan Native crash / OOM.
                     val independentBitmap = piece.bitmap.copy(requireNotNull(piece.bitmap.config), true)
-                    piece.bitmap.recycle()
 
                     val filename = FilenameFormatter.formatFilename(
                         template = settings.filenameTemplate,
@@ -135,7 +137,7 @@ class StitchProcessor(
                     globalIndex++
                 }
 
-                // Recycle bitmap merge setelah di-split
+                // Recycle bitmap merge setelah semua slice di-copy dengan aman
                 if (!mergedBitmap.isRecycled) {
                     mergedBitmap.recycle()
                 }
