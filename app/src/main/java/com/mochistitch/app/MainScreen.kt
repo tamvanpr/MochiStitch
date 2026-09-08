@@ -5,7 +5,6 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -56,18 +55,21 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
+import androidx.core.content.FileProvider
 import coil.compose.AsyncImage
 import com.mochistitch.core.imaging.AlignmentMode
 import com.mochistitch.core.imaging.MergeDirection
 import com.mochistitch.core.imaging.PaddingColor
 import com.mochistitch.core.settings.AlignmentModeSetting
 import com.mochistitch.core.settings.PaddingColorSetting
+import com.mochistitch.core.settings.OutputWrapperFormat
 import com.mochistitch.core.settings.ReadingDirection
 import com.mochistitch.core.ui.ImageReorderList
 import com.mochistitch.core.ui.MergeSettingsCard
 import com.mochistitch.core.ui.PreviewScreenContent
 import com.mochistitch.core.ui.SettingsScreenContent
 import kotlinx.coroutines.launch
+import java.io.File
 import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -110,8 +112,12 @@ fun MainScreen(
         PreviewScreenContent(
             slices = uiState.previewSlices,
             onExportClicked = {
-                val filename = viewModel.getExportDefaultFilename()
-                createDocumentLauncher.launch(filename)
+                if (uiState.settings.wrapperFormat == OutputWrapperFormat.LOOSE_FILES) {
+                    viewModel.exportLooseFiles(context)
+                } else {
+                    val filename = viewModel.getExportDefaultFilename()
+                    createDocumentLauncher.launch(filename)
+                }
             },
             onBackClicked = {
                 viewModel.clearPreviewSlices()
@@ -119,7 +125,7 @@ fun MainScreen(
             },
             modifier = modifier
         )
-        ExportResultDialogs(uiState = uiState, viewModel = viewModel)
+        ExportResultDialogs(uiState = uiState, viewModel = viewModel, context = context)
         ProcessingProgressDialog(uiState = uiState)
         return
     }
@@ -276,7 +282,7 @@ fun MainScreen(
     }
 
     ProcessingProgressDialog(uiState = uiState)
-    ExportResultDialogs(uiState = uiState, viewModel = viewModel)
+    ExportResultDialogs(uiState = uiState, viewModel = viewModel, context = context)
 }
 
 // ── Empty state box ──────────────────────────────────────────────────────────
@@ -381,8 +387,10 @@ private fun ProcessingProgressDialog(uiState: MainUiState) {
 @Composable
 private fun ExportResultDialogs(
     uiState: MainUiState,
-    viewModel: MainViewModel
+    viewModel: MainViewModel,
+    context: android.content.Context
 ) {
+    // Archive export dialog
     if (uiState.exportResult != null && uiState.resultOutputUri != null) {
         val result = uiState.exportResult
         val uri = uiState.resultOutputUri
@@ -446,6 +454,84 @@ private fun ExportResultDialogs(
             confirmButton = {
                 TextButton(onClick = { viewModel.dismissResult() }) {
                     Text("Done")
+                }
+            }
+        )
+    }
+
+    // Loose files export dialog
+    if (uiState.exportResult != null && uiState.exportResult!!.exportFolderPath != null) {
+        val result = uiState.exportResult!!
+
+        AlertDialog(
+            onDismissRequest = { viewModel.dismissResult() },
+            title = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Default.CheckCircle,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(text = "Export Complete!")
+                }
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        DetailRow("Files", "${result.outputCount}")
+                        DetailRow("Dimensions", "${result.width} × ${result.height} px")
+                        DetailRow("Size", formatFileSize(result.bytesWritten))
+                        if (result.itemsNeedingManualReview > 0) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .background(MaterialTheme.colorScheme.errorContainer, RoundedCornerShape(8.dp))
+                                    .padding(10.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Warning,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.error,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = "${result.itemsNeedingManualReview} piece(s) need manual review",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onErrorContainer
+                                )
+                            }
+                        }
+                    }
+
+                    HorizontalDivider()
+
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text(
+                            text = "Saved to:",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Text(
+                            text = result.exportFolderPath!!,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    TextButton(onClick = { viewModel.dismissResult() }) {
+                        Text("Done")
+                    }
+                    Button(
+                        onClick = { viewModel.shareExportedFolder(context, result.exportFolderPath!!) }
+                    ) {
+                        Text("Share")
+                    }
                 }
             }
         )

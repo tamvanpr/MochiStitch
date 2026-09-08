@@ -54,21 +54,20 @@ object SplitEngine {
                 }
 
                 val candidate = currentY + maxPixelLength
+                val clampedCandidate = min(candidate, totalLength - 1)
                 val (splitPos, needsReview) = if (mochiSmartEnabled) {
                     ContourDetector.findSafeSplitPoint(
                         totalLength = totalLength,
-                        candidate = candidate,
+                        candidate = clampedCandidate,
                         tolerance = tolerance,
                         isVertical = true,
                         boundingBoxes = boundingBoxes,
                         bitmap = source
                     )
-                } else {
-                    SmartSplitResult(candidate, false)
-                }
-
-                val targetPos = if (splitPos <= currentY) candidate else splitPos
-                val sliceHeight = (targetPos - currentY).coerceIn(1, remaining)
+                } else SmartSplitResult(clampedCandidate, false)
+                // Ensure splitPos advances at least 1px and stays within bounds
+                val effectiveSplitPos = splitPos.coerceIn(currentY + 1, totalLength - 1)
+                val sliceHeight = (effectiveSplitPos - currentY).coerceIn(1, remaining)
                 val slice = Bitmap.createBitmap(source, 0, currentY, source.width, sliceHeight)
                 slices.add(SlicedPiece(slice, needsReview))
                 currentY += sliceHeight
@@ -84,21 +83,20 @@ object SplitEngine {
                 }
 
                 val candidate = currentX + maxPixelLength
+                val clampedCandidate = min(candidate, totalLength - 1)
                 val (splitPos, needsReview) = if (mochiSmartEnabled) {
                     ContourDetector.findSafeSplitPoint(
                         totalLength = totalLength,
-                        candidate = candidate,
+                        candidate = clampedCandidate,
                         tolerance = tolerance,
                         isVertical = false,
                         boundingBoxes = boundingBoxes,
                         bitmap = source
                     )
-                } else {
-                    SmartSplitResult(candidate, false)
-                }
-
-                val targetPos = if (splitPos <= currentX) candidate else splitPos
-                val sliceWidth = (targetPos - currentX).coerceIn(1, remaining)
+                } else SmartSplitResult(clampedCandidate, false)
+                // Ensure splitPos advances at least 1px and stays within bounds
+                val effectiveSplitPos = splitPos.coerceIn(currentX + 1, totalLength - 1)
+                val sliceWidth = (effectiveSplitPos - currentX).coerceIn(1, remaining)
                 val slice = Bitmap.createBitmap(source, currentX, 0, sliceWidth, source.height)
                 slices.add(SlicedPiece(slice, needsReview))
                 currentX += sliceWidth
