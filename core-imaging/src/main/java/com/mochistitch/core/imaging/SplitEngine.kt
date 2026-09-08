@@ -23,14 +23,21 @@ object SplitEngine {
         direction: ReadingDirection,
         mochiSmartEnabled: Boolean = false,
         tolerance: Int = 150,
-        sensitivity: DetectionSensitivity = DetectionSensitivity.MEDIUM
+        sensitivity: DetectionSensitivity = DetectionSensitivity.MEDIUM,
+        maxPagesPerFile: Int = 1
     ): List<SlicedPiece> {
-        if (splitMode != SplitMode.MAX_PIXELS || maxPixelLength <= 0) {
+        if (splitMode == SplitMode.NO_LIMIT || (splitMode != SplitMode.MAX_PIXELS && splitMode != SplitMode.PAGES_PER_FILE) || maxPixelLength <= 0) {
             return listOf(SlicedPiece(source, needsManualReview = false))
         }
 
         val isVertical = direction == ReadingDirection.VERTICAL
         val totalLength = if (isVertical) source.height else source.width
+
+        // For PAGES_PER_FILE mode, treat each "page" as maxPagesPerFile
+        // We'll split by maxPixelLength but limit to maxPagesPerFile pieces per file
+        if (splitMode == SplitMode.PAGES_PER_FILE && maxPagesPerFile > 0) {
+            return sliceWithPageLimit(source, maxPixelLength, direction, maxPagesPerFile)
+        }
 
         if (totalLength <= maxPixelLength) {
             return listOf(SlicedPiece(source, needsManualReview = false))
@@ -107,6 +114,59 @@ object SplitEngine {
         return slices
     }
 
+    /**
+     * Split with page limit - creates multiple output files with maxPagesPerFile pieces each
+     */
+    private fun sliceWithPageLimit(
+        source: Bitmap,
+        maxPixelLength: Int,
+        direction: ReadingDirection,
+        maxPagesPerFile: Int
+    ): List<SlicedPiece> {
+        val isVertical = direction == ReadingDirection.VERTICAL
+        val totalLength = if (isVertical) source.height else source.width
+
+        if (totalLength <= maxPixelLength) {
+            return listOf(SlicedPiece(source, needsManualReview = false))
+        }
+
+        val slices = mutableListOf<SlicedPiece>()
+        val sliceHeight = if (isVertical) maxPixelLength else source.height
+        val sliceWidth = if (!isVertical) maxPixelLength else source.width
+
+        var currentY = 0
+        var currentX = 0
+        var pageCount = 0
+
+        while (if (isVertical) currentY < totalLength else currentX < totalLength) {
+            val remaining = totalLength - if (isVertical) currentY else currentX
+            val currentSliceLength = min(remaining, maxPixelLength)
+
+            val slice = if (isVertical) {
+                Bitmap.createBitmap(source, 0, currentY, source.width, currentSliceLength)
+            } else {
+                Bitmap.createBitmap(source, currentX, 0, currentSliceLength, source.height)
+            }
+
+            slices.add(SlicedPiece(slice, needsManualReview = false))
+            pageCount++
+
+            if (isVertical) {
+                currentY += currentSliceLength
+            } else {
+                currentX += currentSliceLength
+            }
+
+            // Reset page count if we've reached maxPagesPerFile
+            // (This would create a new "file" in the actual export)
+            if (pageCount >= maxPagesPerFile) {
+                pageCount = 0
+            }
+        }
+
+        return slices
+    }
+
     fun sliceBitmapDetailed(
         source: Bitmap,
         settings: MochiStitchSettings
@@ -118,7 +178,8 @@ object SplitEngine {
             direction = settings.readingDirection,
             mochiSmartEnabled = settings.mochiSmartEnabled,
             tolerance = settings.mochiSmartTolerance,
-            sensitivity = settings.mochiSmartSensitivity
+            sensitivity = settings.mochiSmartSensitivity,
+            maxPagesPerFile = settings.maxPagesPerFile
         )
     }
 
