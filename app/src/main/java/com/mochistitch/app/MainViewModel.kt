@@ -36,6 +36,7 @@ import java.io.OutputStream
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import androidx.core.content.FileProvider
 
 enum class Screen {
     MAIN, SETTINGS, PREVIEW
