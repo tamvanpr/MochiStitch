@@ -4,6 +4,7 @@ import android.graphics.Bitmap
 import com.mochistitch.core.settings.DetectionSensitivity
 import org.opencv.android.OpenCVLoader
 import org.opencv.android.Utils
+import org.opencv.core.Core
 import org.opencv.core.Mat
 import org.opencv.core.MatOfPoint
 import org.opencv.core.Size
@@ -53,32 +54,63 @@ object ContourDetector {
             val blurMat = Mat()
             Imgproc.GaussianBlur(grayMat, blurMat, Size(3.0, 3.0), 0.0)
 
-            // Use multiple detection methods to catch speech bubbles with different characteristics
+            // Method 1: Adaptive Thresholding (catches speech bubbles with low contrast / soft outlines)
+            val adaptiveMat = Mat()
+            val (blockSize, cVal) = when (sensitivity) {
+                DetectionSensitivity.LOW -> Pair(15, 5.0)
+                DetectionSensitivity.MEDIUM -> Pair(11, 3.0)
+                DetectionSensitivity.HIGH -> Pair(7, 2.0)
+            }
+            Imgproc.adaptiveThreshold(
+                blurMat,
+                adaptiveMat,
+                255.0,
+                Imgproc.ADAPTIVE_THRESH_GAUSSIAN_C,
+                Imgproc.THRESH_BINARY_INV,
+                blockSize,
+                cVal
+            )
 
-            // Method 1: Canny edge detection with adjusted thresholds for comic pages
+            // Method 2: Canny Edge Detection with adjusted thresholds based on sensitivity
             val edgesMat = Mat()
             val (lowThresh, highThresh) = when (sensitivity) {
-                DetectionSensitivity.LOW -> Pair(30.0, 100.0)
+                DetectionSensitivity.LOW -> Pair(40.0, 120.0)
                 DetectionSensitivity.MEDIUM -> Pair(20.0, 80.0)
                 DetectionSensitivity.HIGH -> Pair(10.0, 50.0)
             }
             Imgproc.Canny(blurMat, edgesMat, lowThresh, highThresh)
 
-            // Morphological closing to connect nearby edges and fill gaps in bubble outlines
-            val kernelSize = when (sensitivity) {
+            // Combine Adaptive Thresholding and Canny edge maps via bitwise OR
+            val combinedMat = Mat()
+            Core.bitwise_or(edgesMat, adaptiveMat, combinedMat)
+
+            // Morphological Closing to connect nearby edges and seal speech bubble outlines
+            val closeKernelSize = when (sensitivity) {
                 DetectionSensitivity.LOW -> 3
                 DetectionSensitivity.MEDIUM -> 5
                 DetectionSensitivity.HIGH -> 3
             }
-            val kernel = Imgproc.getStructuringElement(Imgproc.MORPH_ELLIPSE, Size(kernelSize.toDouble(), kernelSize.toDouble()))
+            val closeKernel = Imgproc.getStructuringElement(
+                Imgproc.MORPH_ELLIPSE,
+                Size(closeKernelSize.toDouble(), closeKernelSize.toDouble())
+            )
             val closedMat = Mat()
-            Imgproc.morphologyEx(edgesMat, closedMat, Imgproc.MORPH_CLOSE, kernel)
-            kernel.release()
+            Imgproc.morphologyEx(combinedMat, closedMat, Imgproc.MORPH_CLOSE, closeKernel)
+            closeKernel.release()
+
+            // Morphological Opening after Closing to eliminate small isolated noise pixels
+            val openKernel = Imgproc.getStructuringElement(
+                Imgproc.MORPH_ELLIPSE,
+                Size(3.0, 3.0)
+            )
+            val processedMat = Mat()
+            Imgproc.morphologyEx(closedMat, processedMat, Imgproc.MORPH_OPEN, openKernel)
+            openKernel.release()
 
             val contours = ArrayList<MatOfPoint>()
             val hierarchy = Mat()
             Imgproc.findContours(
-                closedMat,
+                processedMat,
                 contours,
                 hierarchy,
                 Imgproc.RETR_EXTERNAL,
@@ -89,26 +121,31 @@ object ContourDetector {
             val imageHeight = bitmap.height
             val totalArea = imageWidth.toDouble() * imageHeight.toDouble()
 
-            // Lower minimum area ratio to detect smaller speech bubbles
+            // Lower minimum area ratios to catch smaller speech bubbles
             val minAreaRatio = when (sensitivity) {
-                DetectionSensitivity.LOW -> 0.0003
-                DetectionSensitivity.MEDIUM -> 0.00015
-                DetectionSensitivity.HIGH -> 0.00008
+                DetectionSensitivity.LOW -> 0.0001
+                DetectionSensitivity.MEDIUM -> 0.00005
+                DetectionSensitivity.HIGH -> 0.00002
             }
             val minArea = totalArea * minAreaRatio
             val maxArea = totalArea * 0.95
+
+            // Tighter aspect ratio filter (max 5.0) and min dimension constraints
+            // to drastically reduce false positives from text lines/strokes
+            val maxAspectRatio = 5.0
+            val minDimension = 8
 
             val boundingBoxes = mutableListOf<BoundingBox>()
 
             for (contour in contours) {
                 val openCVRect = Imgproc.boundingRect(contour)
-                val area = openCVRect.width.toDouble() * openCVRect.height.toDouble()
+                val w = openCVRect.width.toDouble()
+                val h = openCVRect.height.toDouble()
+                val area = w * h
 
-                if (area in minArea..maxArea) {
-                    // Filter out very thin lines (likely text strokes, not bubbles)
-                    val aspectRatio = maxOf(openCVRect.width.toDouble() / openCVRect.height.toDouble(),
-                                          openCVRect.height.toDouble() / openCVRect.width.toDouble())
-                    if (aspectRatio < 20.0) { // Ignore very thin lines
+                if (area in minArea..maxArea && openCVRect.width >= minDimension && openCVRect.height >= minDimension) {
+                    val aspectRatio = maxOf(w / h, h / w)
+                    if (aspectRatio <= maxAspectRatio) {
                         boundingBoxes.add(
                             BoundingBox(
                                 left = openCVRect.x,
@@ -125,8 +162,11 @@ object ContourDetector {
             mat.release()
             grayMat.release()
             blurMat.release()
+            adaptiveMat.release()
             edgesMat.release()
+            combinedMat.release()
             closedMat.release()
+            processedMat.release()
             hierarchy.release()
 
             boundingBoxes

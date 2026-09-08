@@ -10,13 +10,13 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
@@ -28,8 +28,8 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
@@ -56,17 +56,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
-import androidx.core.content.FileProvider
 import coil.compose.AsyncImage
-import com.mochistitch.core.imaging.AlignmentMode
-import com.mochistitch.core.imaging.MergeDirection
-import com.mochistitch.core.imaging.PaddingColor
-import com.mochistitch.core.settings.AlignmentModeSetting
-import com.mochistitch.core.settings.PaddingColorSetting
 import com.mochistitch.core.settings.OutputWrapperFormat
-import com.mochistitch.core.settings.ReadingDirection
 import com.mochistitch.core.ui.ImageReorderList
-import com.mochistitch.core.ui.MergeSettingsCard
 import com.mochistitch.core.ui.PreviewScreenContent
 import com.mochistitch.core.ui.SettingsScreenContent
 import kotlinx.coroutines.launch
@@ -156,24 +148,6 @@ fun MainScreen(
         }
     }
 
-    val currentDirection = when (uiState.settings.readingDirection) {
-        ReadingDirection.VERTICAL -> MergeDirection.VERTICAL
-        ReadingDirection.LTR -> MergeDirection.HORIZONTAL_LTR
-        ReadingDirection.RTL -> MergeDirection.HORIZONTAL_RTL
-    }
-
-    val currentAlignment = when (uiState.settings.alignmentMode) {
-        AlignmentModeSetting.RESIZE_PROPORTIONAL -> AlignmentMode.RESIZE_PROPORTIONAL
-        AlignmentModeSetting.CENTER_CROP -> AlignmentMode.CENTER_CROP
-        AlignmentModeSetting.PADDING -> AlignmentMode.PADDING
-    }
-
-    val currentPaddingColor = when (uiState.settings.paddingColor) {
-        PaddingColorSetting.WHITE -> PaddingColor.WHITE
-        PaddingColorSetting.BLACK -> PaddingColor.BLACK
-        PaddingColorSetting.TRANSPARENT -> PaddingColor.TRANSPARENT
-    }
-
     Scaffold(
         topBar = {
             TopAppBar(
@@ -214,19 +188,9 @@ fun MainScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
-                .padding(horizontal = 16.dp, vertical = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+                .padding(horizontal = 12.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            // ── Stitch Settings Card ─────────────────────────────────────
-            MergeSettingsCard(
-                direction = currentDirection,
-                onDirectionChange = { viewModel.updateDirection(it) },
-                alignmentMode = currentAlignment,
-                onAlignmentModeChange = { viewModel.updateAlignmentMode(it) },
-                paddingColor = currentPaddingColor,
-                onPaddingColorChange = { viewModel.updatePaddingColor(it) }
-            )
-
             // ── Section header + page count ─────────────────────────────
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -278,7 +242,7 @@ fun MainScreen(
                     onClick = { viewModel.generatePreview(context) },
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(52.dp),
+                        .height(48.dp),
                     enabled = uiState.selectedImages.isNotEmpty() && !uiState.isProcessing,
                     shape = RoundedCornerShape(12.dp)
                 ) {
@@ -301,17 +265,17 @@ private fun EmptyStateBox(onSelectClicked: () -> Unit) {
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .fillMaxHeight(0.5f),
+            .fillMaxHeight(0.6f),
         contentAlignment = Alignment.Center
     ) {
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(14.dp)
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             // Icon
             Box(
                 modifier = Modifier
-                    .size(64.dp)
+                    .size(56.dp)
                     .background(
                         MaterialTheme.colorScheme.primaryContainer,
                         RoundedCornerShape(16.dp)
@@ -321,7 +285,7 @@ private fun EmptyStateBox(onSelectClicked: () -> Unit) {
                 Icon(
                     Icons.Default.Add,
                     contentDescription = null,
-                    modifier = Modifier.size(32.dp),
+                    modifier = Modifier.size(28.dp),
                     tint = MaterialTheme.colorScheme.onPrimaryContainer
                 )
             }
@@ -344,7 +308,7 @@ private fun EmptyStateBox(onSelectClicked: () -> Unit) {
 
             Button(
                 onClick = onSelectClicked,
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth(0.8f),
                 shape = RoundedCornerShape(12.dp)
             ) {
                 Icon(
