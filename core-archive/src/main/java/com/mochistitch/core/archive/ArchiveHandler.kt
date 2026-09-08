@@ -8,9 +8,38 @@ import java.util.zip.ZipOutputStream
 
 data class ArchiveEntry(
     val filename: String,
-    val openStream: () -> InputStream
+    val writeTo: (OutputStream) -> Unit
 ) {
-    constructor(filename: String, bytes: ByteArray) : this(filename, { ByteArrayInputStream(bytes) })
+    companion object {
+        fun fromStream(filename: String, openStream: () -> InputStream): ArchiveEntry {
+            return ArchiveEntry(filename) { out ->
+                val buffer = ByteArray(8192)
+                openStream().use { input ->
+                    var read: Int
+                    while (input.read(buffer).also { read = it } != -1) {
+                        out.write(buffer, 0, read)
+                    }
+                }
+            }
+        }
+
+        fun fromBytes(filename: String, bytes: ByteArray): ArchiveEntry {
+            return fromStream(filename) { ByteArrayInputStream(bytes) }
+        }
+    }
+
+    constructor(filename: String, bytes: ByteArray) : this(
+        filename,
+        { out ->
+            val buffer = ByteArray(8192)
+            ByteArrayInputStream(bytes).use { input ->
+                var read: Int
+                while (input.read(buffer).also { read = it } != -1) {
+                    out.write(buffer, 0, read)
+                }
+            }
+        }
+    )
 }
 
 object ArchiveHandler {
@@ -25,23 +54,47 @@ object ArchiveHandler {
     ): Long {
         var totalBytesRead: Long = 0
         ZipOutputStream(outputStream.buffered()).use { zipOut ->
-            val buffer = ByteArray(8192)
+            val countingStream = CountingOutputStream(zipOut)
             for (entry in entries) {
                 val zipEntry = ZipEntry(entry.filename)
                 zipOut.putNextEntry(zipEntry)
-
-                entry.openStream().use { input ->
-                    var read: Int
-                    while (input.read(buffer).also { read = it } != -1) {
-                        zipOut.write(buffer, 0, read)
-                        totalBytesRead += read
-                    }
-                }
+                val bytesBefore = countingStream.bytesWritten
+                entry.writeTo(countingStream)
+                val writtenForEntry = countingStream.bytesWritten - bytesBefore
+                totalBytesRead += if (writtenForEntry > 0) writtenForEntry else 1L
                 zipOut.closeEntry()
             }
             zipOut.finish()
         }
         return totalBytesRead
+    }
+
+    private class CountingOutputStream(private val delegate: OutputStream) : OutputStream() {
+        var bytesWritten: Long = 0
+            private set
+
+        override fun write(b: Int) {
+            delegate.write(b)
+            bytesWritten++
+        }
+
+        override fun write(b: ByteArray) {
+            delegate.write(b)
+            bytesWritten += b.size
+        }
+
+        override fun write(b: ByteArray, off: Int, len: Int) {
+            delegate.write(b, off, len)
+            bytesWritten += len
+        }
+
+        override fun flush() {
+            delegate.flush()
+        }
+
+        override fun close() {
+            // Do not close delegate ZipOutputStream
+        }
     }
 
     fun exportCbz(): Boolean = true

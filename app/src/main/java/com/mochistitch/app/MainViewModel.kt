@@ -5,6 +5,7 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Environment
 import android.provider.OpenableColumns
+import androidx.core.content.FileProvider
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.mochistitch.core.archive.ArchiveEntry
@@ -25,19 +26,17 @@ import com.mochistitch.core.settings.PaddingColorSetting
 import com.mochistitch.core.settings.ReadingDirection
 import com.mochistitch.core.ui.ImageItem
 import com.mochistitch.core.ui.PreviewSliceItem
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.OutputStream
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
-import androidx.core.content.FileProvider
 
 enum class Screen {
     MAIN, SETTINGS, PREVIEW
@@ -312,7 +311,7 @@ class MainViewModel : ViewModel() {
                         currentScreen = Screen.PREVIEW
                     )
                 }
-            } catch (e: Exception) {
+            } catch (e: Throwable) {
                 _uiState.update {
                     it.copy(
                         isProcessing = false,
@@ -360,18 +359,18 @@ class MainViewModel : ViewModel() {
                         _uiState.update { it.copy(isProcessing = false, errorMessage = "Could not open output destination.") }
                         return@launch
                     }
+                    val quality = if (settings.outputFormat == OutputFormat.JPG) settings.jpgQuality else settings.webpQuality
                     val archiveEntries = previewSlices.mapIndexed { index, slice ->
                         _uiState.update { it.copy(progress = (index + 1).toFloat() / previewSlices.size.toFloat()) }
-                        val baos = ByteArrayOutputStream()
-                        val quality = if (settings.outputFormat == OutputFormat.JPG) settings.jpgQuality else settings.webpQuality
-                        ImageCompressor.compress(
-                            bitmap = slice.bitmap,
-                            format = settings.outputFormat,
-                            quality = quality,
-                            webpLossless = settings.webpLossless,
-                            outputStream = baos
-                        )
-                        ArchiveEntry("${slice.filename}", baos.toByteArray())
+                        ArchiveEntry(slice.filename) { out ->
+                            ImageCompressor.compress(
+                                bitmap = slice.bitmap,
+                                format = settings.outputFormat,
+                                quality = quality,
+                                webpLossless = settings.webpLossless,
+                                outputStream = out
+                            )
+                        }
                     }
                     bytesWritten = ArchiveHandler.createArchive(archiveEntries, outputStream)
                     outputStream.close()
@@ -427,7 +426,7 @@ class MainViewModel : ViewModel() {
                         )
                     }
                 }
-            } catch (e: Exception) {
+            } catch (e: Throwable) {
                 _uiState.update {
                     it.copy(
                         isProcessing = false,
@@ -504,7 +503,7 @@ class MainViewModel : ViewModel() {
                         )
                     )
                 }
-            } catch (e: Exception) {
+            } catch (e: Throwable) {
                 _uiState.update {
                     it.copy(
                         isProcessing = false,
