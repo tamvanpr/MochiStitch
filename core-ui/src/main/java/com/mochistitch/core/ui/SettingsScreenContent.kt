@@ -336,6 +336,7 @@ fun SettingsScreenContent(
 }
 
 // ── Reusable section card ─────────────────────────────────────────────────────
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun SectionCard(title: String, content: @Composable () -> Unit) {
     Card(
@@ -367,6 +368,7 @@ private fun SettingSectionLabel(text: String) {
 }
 
 // ── Advanced settings collapsible card ────────────────────────────────────────
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun AdvancedSettingsCard(
     isExpanded: Boolean,
