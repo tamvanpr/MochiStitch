@@ -78,7 +78,12 @@ class MainViewModel : ViewModel() {
         if (settingsRepository == null) {
             val repo = MochiStitchSettingsRepository(context)
             settingsRepository = repo
-            viewModelScope.launch {
+            viewModelScope.launch(Dispatchers.IO) {
+                try {
+                    com.mochistitch.core.mochismart.ContourDetector.initOpenCV()
+                } catch (t: Throwable) {
+                    // Ignore background pre-warm failure
+                }
                 val initialSettings = repo.settingsFlow.first()
                 _uiState.update { it.copy(settings = initialSettings) }
                 repo.settingsFlow.collect { newSettings ->
