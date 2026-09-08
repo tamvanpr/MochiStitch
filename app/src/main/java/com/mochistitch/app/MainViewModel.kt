@@ -175,13 +175,7 @@ class MainViewModel : ViewModel() {
     }
 
     fun clearPreviewSlices() {
-        val slices = _uiState.value.previewSlices
         _uiState.update { it.copy(previewSlices = emptyList()) }
-        slices.forEach { slice ->
-            if (!slice.bitmap.isRecycled) {
-                slice.bitmap.recycle()
-            }
-        }
     }
 
     fun updateDirection(direction: MergeDirection) {
@@ -245,7 +239,7 @@ class MainViewModel : ViewModel() {
         initSettings(context)
         val images = _uiState.value.selectedImages
         if (images.isEmpty()) {
-            _uiState.update { it.copy(errorMessage = "No images selected to merge.") }
+            _uiState.update { it.copy(errorMessage = "Tidak ada gambar yang dipilih untuk digabungkan.") }
             return
         }
 
@@ -284,7 +278,7 @@ class MainViewModel : ViewModel() {
                     _uiState.update {
                         it.copy(
                             isProcessing = false,
-                            errorMessage = result.exceptionOrNull()?.message ?: "Failed to process image stitching."
+                            errorMessage = run { val ex = result.exceptionOrNull(); val isOom = ex is OutOfMemoryError || (ex?.message?.contains("OutOfMemory", ignoreCase = true) == true); if (isOom) "Gagal membuat pratinjau: Memori tidak cukup untuk memproses gambar." else ex?.message ?: "Gagal memproses penggabungan gambar." }
                         )
                     }
                     return@launch
@@ -315,7 +309,7 @@ class MainViewModel : ViewModel() {
                 _uiState.update {
                     it.copy(
                         isProcessing = false,
-                        errorMessage = e.message ?: "Failed to generate preview."
+                        errorMessage = run { val isOom = e is OutOfMemoryError || (e.message?.contains("OutOfMemory", ignoreCase = true) == true); if (isOom) "Gagal membuat pratinjau: Memori tidak cukup untuk memproses gambar." else e.message ?: "Gagal membuat pratinjau gambar." }
                     )
                 }
             }
@@ -330,7 +324,7 @@ class MainViewModel : ViewModel() {
     fun exportResult(outputUri: Uri, context: Context) {
         val previewSlices = _uiState.value.previewSlices
         if (previewSlices.isEmpty()) {
-            _uiState.update { it.copy(errorMessage = "No preview available to export.") }
+            _uiState.update { it.copy(errorMessage = "Tidak ada pratinjau yang tersedia untuk diekspor.") }
             return
         }
 
@@ -356,7 +350,7 @@ class MainViewModel : ViewModel() {
                     // Archive flow: use content URI as before
                     val outputStream = context.contentResolver.openOutputStream(outputUri)
                     if (outputStream == null) {
-                        _uiState.update { it.copy(isProcessing = false, errorMessage = "Could not open output destination.") }
+                        _uiState.update { it.copy(isProcessing = false, errorMessage = "Tidak dapat membuka lokasi penyimpanan output.") }
                         return@launch
                     }
                     val quality = if (settings.outputFormat == OutputFormat.JPG) settings.jpgQuality else settings.webpQuality
@@ -430,7 +424,7 @@ class MainViewModel : ViewModel() {
                 _uiState.update {
                     it.copy(
                         isProcessing = false,
-                        errorMessage = e.message ?: "Failed to perform export operation."
+                        errorMessage = run { val isOom = e is OutOfMemoryError || (e.message?.contains("OutOfMemory", ignoreCase = true) == true); if (isOom) "Gagal menyimpan: Memori tidak cukup untuk memproses gambar." else e.message ?: "Gagal melakukan proses ekspor." }
                     )
                 }
             }
@@ -444,7 +438,7 @@ class MainViewModel : ViewModel() {
     fun exportLooseFiles(context: Context) {
         val previewSlices = _uiState.value.previewSlices
         if (previewSlices.isEmpty()) {
-            _uiState.update { it.copy(errorMessage = "No preview available to export.") }
+            _uiState.update { it.copy(errorMessage = "Tidak ada pratinjau yang tersedia untuk diekspor.") }
             return
         }
 
@@ -507,7 +501,7 @@ class MainViewModel : ViewModel() {
                 _uiState.update {
                     it.copy(
                         isProcessing = false,
-                        errorMessage = e.message ?: "Failed to perform export operation."
+                        errorMessage = run { val isOom = e is OutOfMemoryError || (e.message?.contains("OutOfMemory", ignoreCase = true) == true); if (isOom) "Gagal menyimpan: Memori tidak cukup untuk memproses gambar." else e.message ?: "Gagal melakukan proses ekspor." }
                     )
                 }
             }
@@ -524,7 +518,7 @@ class MainViewModel : ViewModel() {
     fun shareExportedFolder(context: Context, folderPath: String) {
         val folder = File(folderPath)
         if (!folder.exists() || !folder.isDirectory) {
-            _uiState.update { it.copy(errorMessage = "Export folder not found.") }
+            _uiState.update { it.copy(errorMessage = "Folder ekspor tidak ditemukan.") }
             return
         }
 
@@ -537,7 +531,7 @@ class MainViewModel : ViewModel() {
         }?.toList() ?: emptyList()
 
         if (files.isEmpty()) {
-            _uiState.update { it.copy(errorMessage = "No image files found in export folder.") }
+            _uiState.update { it.copy(errorMessage = "Tidak ada berkas gambar yang ditemukan di folder ekspor.") }
             return
         }
 
