@@ -211,24 +211,30 @@ class StitchProcessor(
         for (dim in dims) {
             // Untuk vertical: gunakan height, horizontal: gunakan width
             val itemHeight = if (config.direction == MergeDirection.VERTICAL) dim.height else dim.width
-            
-            // Jika satu gambar sudah lebih besar dari maxChunkHeight, buat group sendiri
-            if (itemHeight > maxChunkHeight && currentGroup.isNotEmpty()) {
-                groups.add(currentGroup.toList())  // FIX: buat copy agar tidak saling影响
+
+            // Cek dulu: jika menambah gambar ini akan melebihi limit, tutup group dulu
+            if (currentHeight + itemHeight > maxChunkHeight && currentGroup.isNotEmpty()) {
+                groups.add(currentGroup.toList())
                 currentGroup.clear()
                 currentHeight = 0
+            }
+
+            // Jika satu gambar sudah lebih besar dari maxChunkHeight, buat group sendiri
+            if (itemHeight > maxChunkHeight) {
+                if (currentGroup.isNotEmpty()) {
+                    groups.add(currentGroup.toList())
+                    currentGroup.clear()
+                    currentHeight = 0
+                }
+                // Tambahkan gambar besar ini sebagai group tersendiri
+                groups.add(listOf(dim.uri))
+                currentHeight = 0
+                continue
             }
 
             // Tambah ke group saat ini
             currentGroup.add(dim.uri)
             currentHeight += itemHeight
-
-            // Jika mencapai limit, tutup group
-            if (currentHeight >= maxChunkHeight && currentGroup.isNotEmpty()) {
-                groups.add(currentGroup.toList())  // FIX: buat copy agar tidak saling影响
-                currentGroup.clear()
-                currentHeight = 0
-            }
         }
 
         // Tambahkan group terakhir jika ada
