@@ -13,7 +13,7 @@ class AppSettingsTest {
     @Test
     fun testDefaultSettings() {
         val settings = MochiStitchSettings()
-        assertEquals(OutputFormat.PNG, settings.outputFormat)
+        assertEquals(OutputFormat.JPG, settings.outputFormat)
         assertEquals(90, settings.jpgQuality)
         assertEquals(90, settings.webpQuality)
         assertEquals(false, settings.webpLossless)

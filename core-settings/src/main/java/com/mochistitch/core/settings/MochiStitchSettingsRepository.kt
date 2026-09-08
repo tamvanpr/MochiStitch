@@ -41,7 +41,7 @@ class MochiStitchSettingsRepository(private val dataStore: DataStore<Preferences
 
     val settingsFlow: Flow<MochiStitchSettings> = dataStore.data.map { prefs ->
         MochiStitchSettings(
-            outputFormat = prefs[KEY_OUTPUT_FORMAT]?.let { runCatching { OutputFormat.valueOf(it) }.getOrNull() } ?: OutputFormat.PNG,
+            outputFormat = prefs[KEY_OUTPUT_FORMAT]?.let { runCatching { OutputFormat.valueOf(it) }.getOrNull() } ?: OutputFormat.JPG,
             jpgQuality = prefs[KEY_JPG_QUALITY] ?: 90,
             webpQuality = prefs[KEY_WEBP_QUALITY] ?: 90,
             webpLossless = prefs[KEY_WEBP_LOSSLESS] ?: false,

@@ -29,7 +29,7 @@ enum class DetectionSensitivity {
 }
 
 data class MochiStitchSettings(
-    val outputFormat: OutputFormat = OutputFormat.PNG,
+    val outputFormat: OutputFormat = OutputFormat.JPG,
     val jpgQuality: Int = 90,
     val webpQuality: Int = 90,
     val webpLossless: Boolean = false,

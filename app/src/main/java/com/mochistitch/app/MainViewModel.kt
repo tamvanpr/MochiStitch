@@ -76,6 +76,10 @@ class MainViewModel : ViewModel() {
             val repo = MochiStitchSettingsRepository(context)
             settingsRepository = repo
             viewModelScope.launch {
+                // Read initial settings immediately so UI renders with correct values on first frame
+                val initialSettings = repo.settingsFlow.first()
+                _uiState.update { it.copy(settings = initialSettings) }
+                // Collect for future updates
                 repo.settingsFlow.collect { newSettings ->
                     _uiState.update { it.copy(settings = newSettings) }
                 }
