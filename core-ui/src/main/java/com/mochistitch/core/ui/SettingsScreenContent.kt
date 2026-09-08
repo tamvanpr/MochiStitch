@@ -248,9 +248,15 @@ fun SettingsScreenContent(
 
                 if (settings.splitMode == SplitMode.PAGES_PER_FILE) {
                     Spacer(modifier = Modifier.height(14.dp))
+                    // ── FIX GLITCH: local text state, only commit valid values ──
+                    var pagesText by remember { mutableStateOf(settings.maxPagesPerFile.toString()) }
+                    LaunchedEffect(settings.maxPagesPerFile) {
+                        pagesText = settings.maxPagesPerFile.toString()
+                    }
                     OutlinedTextField(
-                        value = settings.maxPagesPerFile.toString(),
+                        value = pagesText,
                         onValueChange = {
+                            pagesText = it
                             val cleaned = it.replace("[^0-9]".toRegex(), "")
                             val value = cleaned.toIntOrNull() ?: 0
                             val clamped = value.coerceIn(1, 100)
@@ -262,6 +268,12 @@ fun SettingsScreenContent(
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true,
                         shape = RoundedCornerShape(10.dp)
+                    )
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Text(
+                        text = "Current: ${settings.maxPagesPerFile} pages",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
             }
