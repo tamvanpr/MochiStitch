@@ -102,15 +102,24 @@ fun PreviewSliceCard(
                 verticalAlignment = Alignment.Top
             ) {
                 // Thumbnail
-                AsyncImage(
-                    model = slice.bitmap,
-                    contentDescription = slice.filename,
-                    contentScale = ContentScale.Fit,
-                    modifier = Modifier
-                        .size(80.dp)
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.1f))
-                )
+                if (!slice.bitmap.isRecycled) {
+                    AsyncImage(
+                        model = slice.bitmap,
+                        contentDescription = slice.filename,
+                        contentScale = ContentScale.Fit,
+                        modifier = Modifier
+                            .size(80.dp)
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.1f))
+                    )
+                } else {
+                    Box(
+                        modifier = Modifier
+                            .size(80.dp)
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.1f))
+                    )
+                }
 
                 Spacer(modifier = Modifier.width(12.dp))
 

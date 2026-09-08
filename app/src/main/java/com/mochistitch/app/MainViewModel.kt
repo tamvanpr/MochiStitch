@@ -62,7 +62,8 @@ data class MainUiState(
     val progress: Float = 0f,
     val exportResult: ExportResultInfo? = null,
     val resultOutputUri: Uri? = null,
-    val errorMessage: String? = null
+    val errorMessage: String? = null,
+    val userMessage: String? = null
 )
 
 class MainViewModel : ViewModel() {
@@ -101,7 +102,19 @@ class MainViewModel : ViewModel() {
 
     fun addImages(uris: List<Uri>, context: Context) {
         initSettings(context)
-        val newItems = uris.map { uri ->
+        val currentUris = _uiState.value.selectedImages.map { it.uri.toString() }.toSet()
+        val distinctUris = uris.distinctBy { it.toString() }
+        val newUris = distinctUris.filterNot { currentUris.contains(it.toString()) }
+        val duplicateCount = uris.size - newUris.size
+
+        if (newUris.isEmpty()) {
+            if (duplicateCount > 0) {
+                _uiState.update { it.copy(userMessage = "Gambar duplikat diabaikan ($duplicateCount gambar)") }
+            }
+            return
+        }
+
+        val newItems = newUris.map { uri ->
             try {
                 context.contentResolver.takePersistableUriPermission(
                     uri,
@@ -115,8 +128,16 @@ class MainViewModel : ViewModel() {
         }
 
         _uiState.update { state ->
-            state.copy(selectedImages = state.selectedImages + newItems)
+            val msg = if (duplicateCount > 0) "Gambar duplikat diabaikan ($duplicateCount gambar)" else null
+            state.copy(
+                selectedImages = state.selectedImages + newItems,
+                userMessage = msg
+            )
         }
+    }
+
+    fun dismissUserMessage() {
+        _uiState.update { it.copy(userMessage = null) }
     }
 
     fun moveUp(index: Int) {
@@ -156,12 +177,12 @@ class MainViewModel : ViewModel() {
 
     fun clearPreviewSlices() {
         val slices = _uiState.value.previewSlices
+        _uiState.update { it.copy(previewSlices = emptyList()) }
         slices.forEach { slice ->
             if (!slice.bitmap.isRecycled) {
                 slice.bitmap.recycle()
             }
         }
-        _uiState.update { it.copy(previewSlices = emptyList()) }
     }
 
     fun updateDirection(direction: MergeDirection) {
@@ -353,7 +374,6 @@ class MainViewModel : ViewModel() {
                         ArchiveEntry("${slice.filename}", baos.toByteArray())
                     }
                     bytesWritten = ArchiveHandler.createArchive(archiveEntries, outputStream)
-                    previewSlices.forEach { it.bitmap.recycle() }
                     outputStream.close()
 
                     _uiState.update {
@@ -393,7 +413,6 @@ class MainViewModel : ViewModel() {
                             )
                         }
                         bytesWritten += file.length()
-                        if (!slice.bitmap.isRecycled) slice.bitmap.recycle()
                     }
 
                     _uiState.update {
@@ -472,7 +491,6 @@ class MainViewModel : ViewModel() {
                         )
                     }
                     bytesWritten += file.length()
-                    if (!slice.bitmap.isRecycled) slice.bitmap.recycle()
                 }
 
                 _uiState.update {

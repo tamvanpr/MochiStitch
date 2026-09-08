@@ -140,6 +140,14 @@ fun MainScreen(
         }
     }
 
+    val userMessage = uiState.userMessage
+    androidx.compose.runtime.LaunchedEffect(userMessage) {
+        if (userMessage != null) {
+            snackbarHostState.showSnackbar(userMessage)
+            viewModel.dismissUserMessage()
+        }
+    }
+
     val selectImagesLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.PickMultipleVisualMedia()
     ) { uris ->
@@ -225,15 +233,31 @@ fun MainScreen(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(
-                    text = "Selected Pages",
-                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold)
-                )
-                Text(
-                    text = "${uiState.selectedImages.size} page${if (uiState.selectedImages.size != 1) "s" else ""}",
-                    style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Medium),
-                    color = MaterialTheme.colorScheme.primary
-                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = "Selected Pages",
+                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "(${uiState.selectedImages.size})",
+                        style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Medium),
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
+                if (uiState.selectedImages.isNotEmpty()) {
+                    TextButton(
+                        onClick = { selectImagesLauncher.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Add,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("Add Images")
+                    }
+                }
             }
 
             // ── Image list or empty state ───────────────────────────────
