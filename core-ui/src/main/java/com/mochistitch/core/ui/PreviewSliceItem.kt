@@ -6,6 +6,7 @@ data class PreviewSliceItem(
     val index: Int,
     val filename: String,
     val bitmap: Bitmap,
+    val cacheFilePath: String? = null,
     val width: Int,
     val height: Int,
     val needsManualReview: Boolean = false,

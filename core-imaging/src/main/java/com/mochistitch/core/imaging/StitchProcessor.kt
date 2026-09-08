@@ -2,10 +2,13 @@ package com.mochistitch.core.imaging
 
 import android.content.Context
 import android.graphics.Bitmap
-import android.graphics.Bitmap.Config
 import android.graphics.BitmapFactory
+import android.graphics.Canvas
+import android.graphics.Paint
+import android.graphics.Rect
 import android.net.Uri
 import android.os.Environment
+import com.mochistitch.core.mochismart.ContourDetector
 import com.mochistitch.core.settings.AlignmentModeSetting
 import com.mochistitch.core.settings.MochiStitchSettings
 import com.mochistitch.core.settings.PaddingColorSetting
@@ -20,27 +23,13 @@ import java.util.Date
 import java.util.Locale
 import kotlin.math.max
 import kotlin.math.min
-
-/**
- * ChunkStitchProcessor — versi baru dengan pendekatan chunk-based merging.
- *
- * Flow baru:
- * 1. Kelompokkan gambar berdasarkan tinggi kumulatif (~maxPixelLength per chunk)
- * 2. Merge setiap chunk menjadi bitmap terpisah
- * 3. Gunakan MochiSmart untuk split yang aman (hindari balon/dialog)
- * 4. Kembalikan daftar StitchResultItem
- *
- * Keunggulan:
- * - Memori lebih hemat (tidak perlu simpan semua gambar sekaligus)
- * - Lebih cepat (chunk kecil proses lebih cepat)
- * - MochiSmart tetap aktif untuk menghindari split di area teks/balon
- */
-data class ImageDim(val uri: Uri, val width: Int, val height: Int)
+import kotlin.math.roundToInt
 
 data class StitchResultItem(
     val index: Int,
     val filename: String,
-    val bitmap: Bitmap,
+    val previewBitmap: Bitmap,
+    val cacheFile: File,
     val width: Int,
     val height: Int,
     val needsManualReview: Boolean = false,
@@ -48,18 +37,20 @@ data class StitchResultItem(
 )
 
 enum class ProcessingStage(val stepName: String) {
-    GROUPING("Grouping images"),
-    MERGING("Merging canvas"),
-    SPLITTING("Splitting pieces"),
-    EXPORTING("Exporting file")
+    GROUPING("Menata alur gambar"),
+    MERGING("Menggabungkan canvas"),
+    SPLITTING("Memotong bagian gambar"),
+    EXPORTING("Mengekspor berkas")
 }
 
 class StitchProcessor(
-    private val openInputStream: (Uri) -> InputStream?
+    private val openInputStream: (Uri) -> InputStream?,
+    private val cacheDir: File
 ) {
-    constructor(context: Context) : this({ uri -> context.contentResolver.openInputStream(uri) })
-
-    private val mergeEngine = MergeEngine(openInputStream)
+    constructor(context: Context) : this(
+        openInputStream = { uri -> context.contentResolver.openInputStream(uri) },
+        cacheDir = context.cacheDir
+    )
 
     suspend fun process(
         imageUris: List<Uri>,
@@ -67,76 +58,158 @@ class StitchProcessor(
         onProgress: (ProcessingStage, Float) -> Unit = { _, _ -> }
     ): Result<List<StitchResultItem>> = withContext(Dispatchers.IO) {
         if (imageUris.isEmpty()) {
-            return@withContext Result.failure(IllegalArgumentException("No input images provided."))
+            return@withContext Result.failure(IllegalArgumentException("Tidak ada gambar yang dipilih."))
         }
 
         try {
+            onProgress(ProcessingStage.GROUPING, 0.05f)
+
+            // Step 1: Hitung penempatan semua gambar pada virtual continuous canvas
             val mergeConfig = buildMergeConfig(settings)
+            val sizes = imageUris.mapNotNull { uri ->
+                val (w, h) = getImageDimensions(uri)
+                if (w > 0 && h > 0) MergeEngine.ImageSize(uri, w, h) else null
+            }
+
+            if (sizes.isEmpty()) {
+                return@withContext Result.failure(IllegalStateException("Gagal membaca dimensi gambar."))
+            }
+
+            val maxInputWidth = sizes.maxOf { it.width }
+            val maxInputHeight = sizes.maxOf { it.height }
+
+            val placements = calculateItemPlacements(sizes, maxInputWidth, maxInputHeight, mergeConfig)
+            val isVertical = mergeConfig.direction == MergeDirection.VERTICAL
+
+            val totalCanvasWidth = if (isVertical) maxInputWidth else placements.maxOf { it.pageBox.right }
+            val totalCanvasHeight = if (isVertical) placements.maxOf { it.pageBox.bottom } else maxInputHeight
+
+            val totalLength = if (isVertical) totalCanvasHeight else totalCanvasWidth
+
+            onProgress(ProcessingStage.GROUPING, 0.2f)
+
+            // Step 2: Tentukan interval pemotongan (slice intervals) pada canvas gabungan
+            val sliceIntervals = calculateSliceIntervals(
+                totalLength = totalLength,
+                isVertical = isVertical,
+                totalCanvasWidth = totalCanvasWidth,
+                totalCanvasHeight = totalCanvasHeight,
+                placements = placements,
+                settings = settings,
+                mergeConfig = mergeConfig
+            )
+
+            onProgress(ProcessingStage.MERGING, 0.3f)
+
+            // Step 3: Render setiap interval menjadi Bitmap, simpan ke File Cache, dan buat Preview Thumbnail
             val resultItems = mutableListOf<StitchResultItem>()
-            var globalIndex = 1
+            val totalSlices = sliceIntervals.size
 
-            // ── Step 1: Kelompokkan gambar berdasarkan tinggi ──────────────
-            onProgress(ProcessingStage.GROUPING, 0.1f)
-            val groups = chunkImagesByHeight(imageUris, settings, mergeConfig)
-            val totalGroups = groups.size
+            for ((indexZeroBased, interval) in sliceIntervals.withIndex()) {
+                val sliceIndex = indexZeroBased + 1 // 1-based index (1, 2, 3...)
+                val (startPos, endPos, needsReview) = interval
+                val sliceLen = endPos - startPos
 
-            // ── Step 2: Merge setiap kelompok ──────────────────────────────
-            for ((groupIdx, group) in groups.withIndex()) {
-                val groupProgressBase = groupIdx.toFloat() / totalGroups
-                val groupProgressRange = 1.0f / totalGroups
+                val sliceWidth = if (isVertical) totalCanvasWidth else sliceLen
+                val sliceHeight = if (isVertical) sliceLen else totalCanvasHeight
 
-                onProgress(ProcessingStage.MERGING, groupProgressBase + 0.1f * groupProgressRange)
+                // Buat bitmap potongan
+                val sliceBitmap = Bitmap.createBitmap(sliceWidth, sliceHeight, Bitmap.Config.RGB_565)
+                val canvas = Canvas(sliceBitmap)
+                canvas.drawColor(mergeConfig.paddingColor.colorInt)
 
-                // Merge satu kelompok
-                var mergedBitmap = mergeEngine.mergeToBitmap(group, mergeConfig) { prog ->
-                    val totalProg = groupProgressBase + (0.1f + prog * 0.5f) * groupProgressRange
-                    onProgress(ProcessingStage.MERGING, totalProg)
-                }.getOrNull()
+                val paint = Paint(Paint.FILTER_BITMAP_FLAG or Paint.ANTI_ALIAS_FLAG)
 
-                if (mergedBitmap == null) {
-                    continue
+                // Gambar item yang tumpang tindih dengan interval ini
+                for (item in placements) {
+                    val itemStart = if (isVertical) item.pageBox.top else item.pageBox.left
+                    val itemEnd = if (isVertical) item.pageBox.bottom else item.pageBox.right
+
+                    if (itemEnd > startPos && itemStart < endPos) {
+                        val inputStream = openInputStream(item.uri) ?: continue
+
+                        val sampleSize = calculateInSampleSize(
+                            item.srcRect.width(),
+                            item.srcRect.height(),
+                            item.dstRect.width(),
+                            item.dstRect.height()
+                        )
+
+                        val options = BitmapFactory.Options().apply {
+                            inPreferredConfig = Bitmap.Config.RGB_565
+                            inSampleSize = sampleSize
+                        }
+                        val srcBitmap = BitmapFactory.decodeStream(inputStream, null, options)
+                        inputStream.close()
+
+                        if (srcBitmap != null) {
+                            val scaledSrcRect = Rect(
+                                item.srcRect.left / sampleSize,
+                                item.srcRect.top / sampleSize,
+                                min(item.srcRect.right / sampleSize, srcBitmap.width),
+                                min(item.srcRect.bottom / sampleSize, srcBitmap.height)
+                            )
+
+                            // Sesuaikan dstRect relatif terhadap slice Canvas
+                            val dstRectInSlice = if (isVertical) {
+                                Rect(
+                                    item.dstRect.left,
+                                    item.dstRect.top - startPos,
+                                    item.dstRect.right,
+                                    item.dstRect.bottom - startPos
+                                )
+                            } else {
+                                Rect(
+                                    item.dstRect.left - startPos,
+                                    item.dstRect.top,
+                                    item.dstRect.right - startPos,
+                                    item.dstRect.bottom
+                                )
+                            }
+
+                            canvas.drawBitmap(srcBitmap, scaledSrcRect, dstRectInSlice, paint)
+                            srcBitmap.recycle()
+                        }
+                    }
                 }
 
-                // NOT doing downsample - let user's maxPixelLength setting control output size
+                // Simpan sliceBitmap ke file temporary di cacheDir
+                val timeStamp = System.currentTimeMillis()
+                val tempFile = File(cacheDir, "mochistitch_slice_${timeStamp}_${sliceIndex}.tmp")
+                tempFile.outputStream().use { out ->
+                    sliceBitmap.compress(Bitmap.CompressFormat.JPEG, 92, out)
+                }
 
-                // ── Step 3: Split dengan MochiSmart (jika diperlukan) ────────
-                onProgress(ProcessingStage.SPLITTING, groupProgressBase + 0.6f * groupProgressRange)
-                
-                val slicedPieces = SplitEngine.sliceBitmapDetailed(
-                    source = mergedBitmap,
-                    settings = settings
+                val previewBitmap = createPreviewThumbnail(sliceBitmap, maxDim = 800)
+                val estimatedBytes = tempFile.length()
+
+                // Recycle full-res bitmap langsung untuk membebaskan RAM
+                sliceBitmap.recycle()
+
+                val filename = FilenameFormatter.formatFilename(
+                    template = settings.filenameTemplate,
+                    project = settings.projectName,
+                    chapter = settings.chapterName,
+                    index = sliceIndex,
+                    indexPaddingDigits = settings.indexPaddingDigits,
+                    format = settings.outputFormat
                 )
 
-                // ── Step 4: Buat result item ──────────────────────────────────
-                for (piece in slicedPieces) {
-                    val filename = FilenameFormatter.formatFilename(
-                        template = settings.filenameTemplate,
-                        project = settings.projectName,
-                        chapter = settings.chapterName,
-                        index = globalIndex,
-                        indexPaddingDigits = settings.indexPaddingDigits,
-                        format = settings.outputFormat
+                resultItems.add(
+                    StitchResultItem(
+                        index = sliceIndex,
+                        filename = filename,
+                        previewBitmap = previewBitmap,
+                        cacheFile = tempFile,
+                        width = sliceWidth,
+                        height = sliceHeight,
+                        needsManualReview = needsReview,
+                        estimatedBytes = estimatedBytes
                     )
-                    resultItems.add(
-                        StitchResultItem(
-                            index = globalIndex,
-                            filename = filename,
-                            bitmap = piece.bitmap,
-                            width = piece.bitmap.width,
-                            height = piece.bitmap.height,
-                            needsManualReview = piece.needsManualReview,
-                            estimatedBytes = (piece.bitmap.width.toLong() * piece.bitmap.height * 4L)
-                        )
-                    )
-                    globalIndex++
-                }
+                )
 
-                // Recycle bitmap merge setelah semua slice di-copy dengan aman
-                if (!mergedBitmap.isRecycled) {
-                    mergedBitmap.recycle()
-                }
-
-                onProgress(ProcessingStage.SPLITTING, groupProgressBase + 0.9f * groupProgressRange)
+                val prog = 0.3f + 0.65f * (sliceIndex.toFloat() / totalSlices.toFloat())
+                onProgress(ProcessingStage.SPLITTING, prog)
             }
 
             onProgress(ProcessingStage.SPLITTING, 1.0f)
@@ -148,100 +221,149 @@ class StitchProcessor(
 
     fun recycleAll(items: List<StitchResultItem>) {
         items.forEach { item ->
-            if (!item.bitmap.isRecycled) {
-                item.bitmap.recycle()
+            if (!item.previewBitmap.isRecycled) {
+                item.previewBitmap.recycle()
             }
-        }
-    }
-
-    /**
-     * Mendapatkan folder output untuk hasil stitch.
-     * - Untuk ZIP/CBZ: simpan langsung di Pictures/MochiStitch/
-     * - Untuk loose files: buat folder baru berdasarkan tanggal
-     */
-    fun getOutputFolder(context: Context, wrapperFormat: com.mochistitch.core.settings.OutputWrapperFormat): File {
-        val downloadsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES)
-        val mochistitchDir = File(downloadsDir, "MochiStitch")
-        
-        if (!mochistitchDir.exists()) {
-            mochistitchDir.mkdirs()
-        }
-
-        return if (wrapperFormat == com.mochistitch.core.settings.OutputWrapperFormat.LOOSE_FILES) {
-            // Buat folder baru berdasarkan tanggal untuk loose files
-            val dateFormat = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault())
-            val timestamp = dateFormat.format(Date())
-            val sessionDir = File(mochistitchDir, "session_$timestamp")
-            if (!sessionDir.exists()) {
-                sessionDir.mkdirs()
-            }
-            sessionDir
-        } else {
-            // Untuk ZIP/CBZ, simpan langsung di folder MochiStitch
-            mochistitchDir
-        }
-    }
-
-    // ─── Private helpers ───────────────────────────────────────────────────────
-
-    /**
-     * Mengelompokkan gambar berdasarkan tinggi kumulatif.
-     * Setiap chunk memiliki total tinggi maksimal maxPixelLength.
-     */
-    private fun chunkImagesByHeight(
-        imageUris: List<Uri>,
-        settings: MochiStitchSettings,
-        config: MergeConfig
-    ): List<List<Uri>> {
-        val groups = mutableListOf<List<Uri>>()
-        val currentGroup = mutableListOf<Uri>()
-        var currentHeight = 0
-        val maxChunkHeight = settings.maxPixelLength
-
-        // Ambil dimensi semua gambar
-        val dims = imageUris.map { uri ->
-            val (w, h) = getImageDimensions(uri, config)
-            ImageDim(uri, w, h)
-        }
-
-        for (dim in dims) {
-            // Untuk vertical: gunakan height, horizontal: gunakan width
-            val itemHeight = if (config.direction == MergeDirection.VERTICAL) dim.height else dim.width
-
-            // Cek dulu: jika menambah gambar ini akan melebihi limit, tutup group dulu
-            if (currentHeight + itemHeight > maxChunkHeight && currentGroup.isNotEmpty()) {
-                groups.add(currentGroup.toList())
-                currentGroup.clear()
-                currentHeight = 0
-            }
-
-            // Jika satu gambar sudah lebih besar dari maxChunkHeight, buat group sendiri
-            if (itemHeight > maxChunkHeight) {
-                if (currentGroup.isNotEmpty()) {
-                    groups.add(currentGroup.toList())
-                    currentGroup.clear()
-                    currentHeight = 0
+            try {
+                if (item.cacheFile.exists()) {
+                    item.cacheFile.delete()
                 }
-                // Tambahkan gambar besar ini sebagai group tersendiri
-                groups.add(listOf(dim.uri))
-                currentHeight = 0
-                continue
+            } catch (t: Throwable) {
+                // Ignore
             }
-
-            // Tambah ke group saat ini
-            currentGroup.add(dim.uri)
-            currentHeight += itemHeight
         }
-
-        // Tambahkan group terakhir jika ada
-        if (currentGroup.isNotEmpty()) {
-            groups.add(currentGroup.toList())  // FIX: buat copy agar tidak saling影响
-        }
-
-        return groups
     }
 
-    private fun getImageDimensions(uri: Uri, config: MergeConfig): Pair<Int, Int> {
+    private fun createPreviewThumbnail(source: Bitmap, maxDim: Int = 800): Bitmap {
+        val w = source.width
+        val h = source.height
+        if (w <= maxDim && h <= maxDim) {
+            return source.copy(source.config ?: Bitmap.Config.RGB_565, false)
+        }
+        val scale = min(maxDim.toFloat() / w, maxDim.toFloat() / h)
+        val dstW = (w * scale).roundToInt().coerceAtLeast(1)
+        val dstH = (h * scale).roundToInt().coerceAtLeast(1)
+        return Bitmap.createScaledBitmap(source, dstW, dstH, true)
+    }
+
+    private fun calculateSliceIntervals(
+        totalLength: Int,
+        isVertical: Boolean,
+        totalCanvasWidth: Int,
+        totalCanvasHeight: Int,
+        placements: List<MergeEngine.ItemPlacement>,
+        settings: MochiStitchSettings,
+        mergeConfig: MergeConfig
+    ): List<Triple<Int, Int, Boolean>> {
+        val intervals = mutableListOf<Triple<Int, Int, Boolean>>()
+        val maxLen = settings.maxPixelLength
+
+        if (settings.splitMode == SplitMode.NO_LIMIT || totalLength <= maxLen || maxLen <= 0) {
+            intervals.add(Triple(0, totalLength, false))
+            return intervals
+        }
+
+        var currentPos = 0
+        val minTailLength = min(600, maxLen / 4)
+
+        while (currentPos < totalLength) {
+            val remaining = totalLength - currentPos
+            if (remaining <= maxLen) {
+                intervals.add(Triple(currentPos, totalLength, false))
+                break
+            }
+
+            // Jika sisa setelah candidate sangat kecil, gabungkan langsung ke potongan terakhir
+            if (remaining - maxLen < minTailLength) {
+                intervals.add(Triple(currentPos, totalLength, false))
+                break
+            }
+
+            val candidate = currentPos + maxLen
+            var safeSplit = candidate
+            var needsReview = false
+
+            if (settings.mochiSmartEnabled) {
+                val tolerance = settings.mochiSmartTolerance
+                val bandStart = max(0, candidate - tolerance)
+                val bandEnd = min(totalLength, candidate + tolerance)
+                val bandLen = bandEnd - bandStart
+
+                if (bandLen > 0) {
+                    val bandWidth = if (isVertical) totalCanvasWidth else bandLen
+                    val bandHeight = if (isVertical) bandLen else totalCanvasHeight
+
+                    val bandBitmap = Bitmap.createBitmap(bandWidth, bandHeight, Bitmap.Config.RGB_565)
+                    val canvas = Canvas(bandBitmap)
+                    canvas.drawColor(mergeConfig.paddingColor.colorInt)
+                    val paint = Paint(Paint.FILTER_BITMAP_FLAG or Paint.ANTI_ALIAS_FLAG)
+
+                    for (item in placements) {
+                        val itemStart = if (isVertical) item.pageBox.top else item.pageBox.left
+                        val itemEnd = if (isVertical) item.pageBox.bottom else item.pageBox.right
+
+                        if (itemEnd > bandStart && itemStart < bandEnd) {
+                            val stream = openInputStream(item.uri) ?: continue
+                            val sampleSize = calculateInSampleSize(
+                                item.srcRect.width(), item.srcRect.height(),
+                                item.dstRect.width(), item.dstRect.height()
+                            )
+                            val options = BitmapFactory.Options().apply {
+                                inPreferredConfig = Bitmap.Config.RGB_565
+                                inSampleSize = sampleSize
+                            }
+                            val srcBitmap = BitmapFactory.decodeStream(stream, null, options)
+                            stream.close()
+
+                            if (srcBitmap != null) {
+                                val scaledSrcRect = Rect(
+                                    item.srcRect.left / sampleSize,
+                                    item.srcRect.top / sampleSize,
+                                    min(item.srcRect.right / sampleSize, srcBitmap.width),
+                                    min(item.srcRect.bottom / sampleSize, srcBitmap.height)
+                                )
+                                val dstRectInBand = if (isVertical) {
+                                    Rect(item.dstRect.left, item.dstRect.top - bandStart, item.dstRect.right, item.dstRect.bottom - bandStart)
+                                } else {
+                                    Rect(item.dstRect.left - bandStart, item.dstRect.top, item.dstRect.right - bandStart, item.dstRect.bottom)
+                                }
+                                canvas.drawBitmap(srcBitmap, scaledSrcRect, dstRectInBand, paint)
+                                srcBitmap.recycle()
+                            }
+                        }
+                    }
+
+                    val boxes = ContourDetector.detectBoundingBoxes(bandBitmap, settings.mochiSmartSensitivity)
+                    val localCandidate = candidate - bandStart
+                    val smartRes = ContourDetector.findSafeSplitPoint(
+                        totalLength = bandLen,
+                        candidate = localCandidate,
+                        tolerance = tolerance,
+                        isVertical = isVertical,
+                        boundingBoxes = boxes,
+                        bitmap = bandBitmap
+                    )
+
+                    safeSplit = bandStart + smartRes.splitPosition
+                    needsReview = smartRes.needsManualReview
+                    bandBitmap.recycle()
+                }
+            }
+
+            // Pastikan safeSplit tidak membuat potongan mini/mikro
+            var effectiveSplit = safeSplit.coerceIn(currentPos + min(1000, maxLen / 2), totalLength - 1)
+            if (totalLength - effectiveSplit < minTailLength) {
+                effectiveSplit = totalLength
+            }
+
+            intervals.add(Triple(currentPos, effectiveSplit, needsReview))
+            currentPos = effectiveSplit
+        }
+
+        return intervals
+    }
+
+    private fun getImageDimensions(uri: Uri): Pair<Int, Int> {
         return try {
             val stream = openInputStream(uri) ?: return Pair(0, 0)
             val options = BitmapFactory.Options().apply { inJustDecodeBounds = true }
@@ -252,6 +374,172 @@ class StitchProcessor(
             Pair(0, 0)
         }
     }
+
+    private fun calculateInSampleSize(reqSrcW: Int, reqSrcH: Int, reqDstW: Int, reqDstH: Int): Int {
+        var sampleSize = 1
+        if (reqSrcH > reqDstH * 2 || reqSrcW > reqDstW * 2) {
+            val halfH = reqSrcH / 2
+            val halfW = reqSrcW / 2
+            while ((halfH / sampleSize) >= reqDstH && (halfW / sampleSize) >= reqDstW) {
+                sampleSize *= 2
+            }
+        }
+        return max(1, sampleSize)
+    }
+
+    private fun calculateItemPlacements(
+        sizes: List<MergeEngine.ImageSize>,
+        refWidth: Int,
+        refHeight: Int,
+        config: MergeConfig
+    ): List<MergeEngine.ItemPlacement> {
+        return when (config.direction) {
+            MergeDirection.VERTICAL -> calculateVerticalPlacements(sizes, refWidth, refHeight, config)
+            MergeDirection.HORIZONTAL_LTR -> calculateHorizontalPlacements(sizes, refWidth, refHeight, config, leftToRight = true)
+            MergeDirection.HORIZONTAL_RTL -> calculateHorizontalPlacements(sizes, refWidth, refHeight, config, leftToRight = false)
+        }
+    }
+
+    private fun calculateVerticalPlacements(
+        sizes: List<MergeEngine.ImageSize>,
+        refWidth: Int,
+        refHeight: Int,
+        config: MergeConfig
+    ): List<MergeEngine.ItemPlacement> {
+        val placements = mutableListOf<MergeEngine.ItemPlacement>()
+        var currentY = 0
+
+        for (item in sizes) {
+            val placement = computePlacement(item.width, item.height, refWidth, refHeight, config.alignmentMode, isVertical = true)
+            val pageBox = Rect(0, currentY, refWidth, currentY + placement.pageH)
+            val adjustedDst = Rect(
+                placement.dstRect.left,
+                currentY + placement.dstRect.top,
+                placement.dstRect.right,
+                currentY + placement.dstRect.bottom
+            )
+            placements.add(MergeEngine.ItemPlacement(item.uri, placement.srcRect, adjustedDst, pageBox))
+            currentY += placement.pageH
+        }
+
+        return placements
+    }
+
+    private fun calculateHorizontalPlacements(
+        sizes: List<MergeEngine.ImageSize>,
+        refWidth: Int,
+        refHeight: Int,
+        config: MergeConfig,
+        leftToRight: Boolean
+    ): List<MergeEngine.ItemPlacement> {
+        val placements = mutableListOf<MergeEngine.ItemPlacement>()
+
+        if (leftToRight) {
+            var currentX = 0
+            for (item in sizes) {
+                val placement = computePlacement(item.width, item.height, refWidth, refHeight, config.alignmentMode, isVertical = false)
+                val pageBox = Rect(currentX, 0, currentX + placement.pageW, refHeight)
+                val adjustedDst = Rect(
+                    currentX + placement.dstRect.left,
+                    placement.dstRect.top,
+                    currentX + placement.dstRect.right,
+                    placement.dstRect.bottom
+                )
+                placements.add(MergeEngine.ItemPlacement(item.uri, placement.srcRect, adjustedDst, pageBox))
+                currentX += placement.pageW
+            }
+        } else {
+            val computed = sizes.map { item ->
+                computePlacement(item.width, item.height, refWidth, refHeight, config.alignmentMode, isVertical = false)
+            }
+            val totalWidth = computed.sumOf { it.pageW }
+            var currentX = totalWidth
+
+            for ((index, item) in sizes.withIndex()) {
+                val placement = computed[index]
+                val itemStartX = currentX - placement.pageW
+                val pageBox = Rect(itemStartX, 0, itemStartX + placement.pageW, refHeight)
+                val adjustedDst = Rect(
+                    itemStartX + placement.dstRect.left,
+                    placement.dstRect.top,
+                    itemStartX + placement.dstRect.right,
+                    placement.dstRect.bottom
+                )
+                placements.add(MergeEngine.ItemPlacement(item.uri, placement.srcRect, adjustedDst, pageBox))
+                currentX -= placement.pageW
+            }
+        }
+
+        return placements
+    }
+
+    private fun computePlacement(
+        itemWidth: Int,
+        itemHeight: Int,
+        refWidth: Int,
+        refHeight: Int,
+        alignmentMode: AlignmentMode,
+        isVertical: Boolean
+    ): PlacementSpec {
+        return when (alignmentMode) {
+            AlignmentMode.RESIZE_PROPORTIONAL -> {
+                if (isVertical) {
+                    val dstW = refWidth
+                    val dstH = (itemHeight.toFloat() * refWidth / itemWidth).roundToInt().coerceAtLeast(1)
+                    PlacementSpec(
+                        pageW = refWidth, pageH = dstH,
+                        srcRect = Rect(0, 0, itemWidth, itemHeight),
+                        dstRect = Rect(0, 0, dstW, dstH)
+                    )
+                } else {
+                    val dstH = refHeight
+                    val dstW = (itemWidth.toFloat() * refHeight / itemHeight).roundToInt().coerceAtLeast(1)
+                    PlacementSpec(
+                        pageW = dstW, pageH = refHeight,
+                        srcRect = Rect(0, 0, itemWidth, itemHeight),
+                        dstRect = Rect(0, 0, dstW, dstH)
+                    )
+                }
+            }
+
+            AlignmentMode.PADDING -> {
+                val scaleW = refWidth.toFloat() / itemWidth
+                val scaleH = refHeight.toFloat() / itemHeight
+                val scale = min(scaleW, scaleH)
+                val dstW = (itemWidth * scale).roundToInt().coerceAtLeast(1)
+                val dstH = (itemHeight * scale).roundToInt().coerceAtLeast(1)
+                val offsetX = (refWidth - dstW) / 2
+                val offsetY = (refHeight - dstH) / 2
+                PlacementSpec(
+                    pageW = refWidth, pageH = refHeight,
+                    srcRect = Rect(0, 0, itemWidth, itemHeight),
+                    dstRect = Rect(offsetX, offsetY, offsetX + dstW, offsetY + dstH)
+                )
+            }
+
+            AlignmentMode.CENTER_CROP -> {
+                val scaleW = refWidth.toFloat() / itemWidth
+                val scaleH = refHeight.toFloat() / itemHeight
+                val scale = max(scaleW, scaleH)
+                val requiredSrcW = (refWidth / scale).roundToInt().coerceIn(1, itemWidth)
+                val requiredSrcH = (refHeight / scale).roundToInt().coerceIn(1, itemHeight)
+                val srcX = (itemWidth - requiredSrcW) / 2
+                val srcY = (itemHeight - requiredSrcH) / 2
+                PlacementSpec(
+                    pageW = refWidth, pageH = refHeight,
+                    srcRect = Rect(srcX, srcY, srcX + requiredSrcW, srcY + requiredSrcH),
+                    dstRect = Rect(0, 0, refWidth, refHeight)
+                )
+            }
+        }
+    }
+
+    private data class PlacementSpec(
+        val pageW: Int,
+        val pageH: Int,
+        val srcRect: Rect,
+        val dstRect: Rect
+    )
 
     private fun buildMergeConfig(settings: MochiStitchSettings): MergeConfig {
         return MergeConfig(
