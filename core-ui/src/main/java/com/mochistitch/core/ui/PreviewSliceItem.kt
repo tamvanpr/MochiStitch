@@ -8,5 +8,6 @@ data class PreviewSliceItem(
     val bitmap: Bitmap,
     val width: Int,
     val height: Int,
-    val needsManualReview: Boolean = false
+    val needsManualReview: Boolean = false,
+    val bytesWritten: Long = 0L
 )

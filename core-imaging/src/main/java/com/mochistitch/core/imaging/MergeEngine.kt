@@ -67,11 +67,12 @@ class MergeEngine(
             val canvasWidth = if (config.direction == MergeDirection.VERTICAL) {
                 maxInputWidth
             } else {
-                items.maxOfOrNull { it.dstRect.width() } ?: maxInputWidth
+                // Horizontal: jumlahkan semua pageBox.right (posisi absolut di canvas)
+                items.maxOfOrNull { it.pageBox.right } ?: maxInputWidth
             }
 
             val canvasHeight = if (config.direction == MergeDirection.VERTICAL) {
-                items.maxOfOrNull { it.dstRect.bottom } ?: maxInputHeight
+                items.maxOfOrNull { it.pageBox.bottom } ?: maxInputHeight
             } else {
                 maxInputHeight
             }
@@ -130,7 +131,7 @@ class MergeEngine(
                         color = config.paddingColor.colorInt
                         style = Paint.Style.FILL
                     }
-                    canvas.drawRect(item.pageBox.left, item.pageBox.top, item.pageBox.right, item.pageBox.bottom, pageBgPaint)
+                    canvas.drawRect(item.pageBox.left.toFloat(), item.pageBox.top.toFloat(), item.pageBox.right.toFloat(), item.pageBox.bottom.toFloat(), pageBgPaint)
                 }
 
                 canvas.drawBitmap(srcBitmap, scaledSrcRect, item.dstRect, paint)
@@ -217,7 +218,7 @@ class MergeEngine(
         config: MergeConfig
     ): List<ItemPlacement> {
         return when (config.direction) {
-            MergeDirection.VERTICAL -> calculateVerticalPlacements(sizes, refWidth, config)
+            MergeDirection.VERTICAL -> calculateVerticalPlacements(sizes, refWidth, refHeight, config)
             MergeDirection.HORIZONTAL_LTR -> calculateHorizontalPlacements(sizes, refWidth, refHeight, config, leftToRight = true)
             MergeDirection.HORIZONTAL_RTL -> calculateHorizontalPlacements(sizes, refWidth, refHeight, config, leftToRight = false)
         }
@@ -226,6 +227,7 @@ class MergeEngine(
     private fun calculateVerticalPlacements(
         sizes: List<ImageSize>,
         refWidth: Int,
+        refHeight: Int,
         config: MergeConfig
     ): List<ItemPlacement> {
         val placements = mutableListOf<ItemPlacement>()

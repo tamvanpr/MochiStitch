@@ -142,7 +142,7 @@ class MainViewModel : ViewModel() {
         _uiState.update { it.copy(selectedImages = emptyList()) }
     }
 
-    private fun clearPreviewSlices() {
+    fun clearPreviewSlices() {
         val slices = _uiState.value.previewSlices
         slices.forEach { slice ->
             if (!slice.bitmap.isRecycled) {
@@ -266,7 +266,8 @@ class MainViewModel : ViewModel() {
                         bitmap = item.bitmap,
                         width = item.width,
                         height = item.height,
-                        needsManualReview = item.needsManualReview
+                        needsManualReview = item.needsManualReview,
+                        bytesWritten = item.estimatedBytes
                     )
                 }
 
@@ -325,6 +326,7 @@ class MainViewModel : ViewModel() {
                     val archiveEntries = previewSlices.mapIndexed { index, slice ->
                         _uiState.update { it.copy(progress = (index + 1).toFloat() / previewSlices.size.toFloat()) }
                         val baos = ByteArrayOutputStream()
+                        val quality = if (settings.outputFormat == OutputFormat.JPG) settings.jpgQuality else settings.webpQuality
                         ImageCompressor.compress(
                             bitmap = slice.bitmap,
                             format = settings.outputFormat,
@@ -335,6 +337,8 @@ class MainViewModel : ViewModel() {
                         ArchiveEntry(slice.filename, baos.toByteArray())
                     }
                     bytesWritten = ArchiveHandler.createArchive(archiveEntries, outputStream)
+                    // Recycle bitmaps setelah di-compress
+                    previewSlices.forEach { it.bitmap.recycle() }
                 } else {
                     val byteCountingStream = ByteCountingOutputStream(outputStream)
                     for ((index, slice) in previewSlices.withIndex()) {
@@ -346,6 +350,10 @@ class MainViewModel : ViewModel() {
                             webpLossless = settings.webpLossless,
                             outputStream = byteCountingStream
                         )
+                        // Recycle bitmap setelah di-compress untuk hemat memori
+                        if (!slice.bitmap.isRecycled) {
+                            slice.bitmap.recycle()
+                        }
                     }
                     byteCountingStream.flush()
                     bytesWritten = byteCountingStream.bytesWritten
