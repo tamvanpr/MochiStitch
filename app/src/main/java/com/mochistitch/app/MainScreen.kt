@@ -364,10 +364,10 @@ private fun ExportResultDialogs(
     viewModel: MainViewModel,
     context: android.content.Context
 ) {
-    // Archive export dialog
-    if (uiState.exportResult != null && uiState.resultOutputUri != null) {
-        val result = uiState.exportResult
+    val exportResult = uiState.exportResult
 
+    // Archive export dialog
+    if (exportResult != null && uiState.resultOutputUri != null) {
         AlertDialog(
             onDismissRequest = { viewModel.dismissResult() },
             title = {
@@ -378,32 +378,18 @@ private fun ExportResultDialogs(
                         tint = MaterialTheme.colorScheme.primary
                     )
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text(text = "Export Complete!")
+                    Text(text = "Ekspor Selesai!")
                 }
             },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    val firstSliceBitmap = uiState.previewSlices.firstOrNull()?.bitmap
-                    if (firstSliceBitmap != null && !firstSliceBitmap.isRecycled) {
-                        AsyncImage(
-                            model = firstSliceBitmap,
-                            contentDescription = "Export Result Preview",
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(160.dp)
-                                .clip(RoundedCornerShape(8.dp))
-                        )
-                    }
-
-                    HorizontalDivider()
-
                     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        DetailRow("Files", "${result.outputCount}")
-                        DetailRow("Dimensions", "${result.width} × ${result.height} px")
-                        DetailRow("Size", formatFileSize(result.bytesWritten))
+                        DetailRow("Jumlah Berkas", "${exportResult.outputCount}")
+                        DetailRow("Dimensi", "${exportResult.width} × ${exportResult.height} px")
+                        DetailRow("Ukuran Berkas", formatFileSize(exportResult.bytesWritten))
                     }
 
-                    if (result.itemsNeedingManualReview > 0) {
+                    if (exportResult.itemsNeedingManualReview > 0) {
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -419,7 +405,7 @@ private fun ExportResultDialogs(
                             )
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(
-                                text = "${result.itemsNeedingManualReview} piece(s) need manual review",
+                                text = "${exportResult.itemsNeedingManualReview} bagian perlu peninjauan manual",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onErrorContainer
                             )
@@ -429,16 +415,15 @@ private fun ExportResultDialogs(
             },
             confirmButton = {
                 TextButton(onClick = { viewModel.dismissResult() }) {
-                    Text("Done")
+                    Text("Selesai")
                 }
             }
         )
     }
 
     // Loose files export dialog
-    if (uiState.exportResult != null && uiState.exportResult!!.exportFolderPath != null) {
-        val result = uiState.exportResult!!
-
+    val folderPath = exportResult?.exportFolderPath
+    if (exportResult != null && folderPath != null) {
         AlertDialog(
             onDismissRequest = { viewModel.dismissResult() },
             title = {
@@ -449,16 +434,16 @@ private fun ExportResultDialogs(
                         tint = MaterialTheme.colorScheme.primary
                     )
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text(text = "Export Complete!")
+                    Text(text = "Ekspor Selesai!")
                 }
             },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        DetailRow("Files", "${result.outputCount}")
-                        DetailRow("Dimensions", "${result.width} × ${result.height} px")
-                        DetailRow("Size", formatFileSize(result.bytesWritten))
-                        if (result.itemsNeedingManualReview > 0) {
+                        DetailRow("Jumlah Berkas", "${exportResult.outputCount}")
+                        DetailRow("Dimensi", "${exportResult.width} × ${exportResult.height} px")
+                        DetailRow("Ukuran Berkas", formatFileSize(exportResult.bytesWritten))
+                        if (exportResult.itemsNeedingManualReview > 0) {
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -474,7 +459,7 @@ private fun ExportResultDialogs(
                                 )
                                 Spacer(modifier = Modifier.width(8.dp))
                                 Text(
-                                    text = "${result.itemsNeedingManualReview} piece(s) need manual review",
+                                    text = "${exportResult.itemsNeedingManualReview} bagian perlu peninjauan manual",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onErrorContainer
                                 )
@@ -486,12 +471,12 @@ private fun ExportResultDialogs(
 
                     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         Text(
-                            text = "Saved to:",
+                            text = "Disimpan di:",
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                         Text(
-                            text = result.exportFolderPath!!,
+                            text = folderPath,
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.primary
                         )
@@ -501,23 +486,24 @@ private fun ExportResultDialogs(
             confirmButton = {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     TextButton(onClick = { viewModel.dismissResult() }) {
-                        Text("Done")
+                        Text("Selesai")
                     }
                     Button(
-                        onClick = { viewModel.shareExportedFolder(context, result.exportFolderPath!!) }
+                        onClick = { viewModel.shareExportedFolder(context, folderPath) }
                     ) {
-                        Text("Share")
+                        Text("Bagikan")
                     }
                 }
             }
         )
     }
 
-    if (uiState.errorMessage != null) {
+    val errorMessage = uiState.errorMessage
+    if (errorMessage != null) {
         AlertDialog(
             onDismissRequest = { viewModel.dismissError() },
-            title = { Text("Export Failed") },
-            text = { Text(uiState.errorMessage!!) },
+            title = { Text("Ekspor Gagal") },
+            text = { Text(errorMessage) },
             confirmButton = {
                 TextButton(onClick = { viewModel.dismissError() }) {
                     Text("OK")
