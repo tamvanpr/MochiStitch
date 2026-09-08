@@ -11,17 +11,12 @@ object FilenameFormatter {
         indexPaddingDigits: Int,
         format: OutputFormat
     ): String {
-        val extension = ImageCompressor.getFileExtension(format)
         val paddedIndex = index.toString().padStart(indexPaddingDigits.coerceAtLeast(1), '0')
         val formattedName = template
             .replace("{project}", project.ifBlank { "MochiStitch" })
             .replace("{chapter}", chapter.ifBlank { "1" })
             .replace("{index}", paddedIndex)
 
-        return if (formattedName.endsWith(".$extension", ignoreCase = true)) {
-            formattedName
-        } else {
-            "$formattedName.$extension"
-        }
+        return formattedName
     }
 }

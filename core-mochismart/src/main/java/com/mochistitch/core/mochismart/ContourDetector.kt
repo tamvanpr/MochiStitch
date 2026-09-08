@@ -53,18 +53,32 @@ object ContourDetector {
             val blurMat = Mat()
             Imgproc.GaussianBlur(grayMat, blurMat, Size(3.0, 3.0), 0.0)
 
+            // Use multiple detection methods to catch speech bubbles with different characteristics
+
+            // Method 1: Canny edge detection with adjusted thresholds for comic pages
             val edgesMat = Mat()
             val (lowThresh, highThresh) = when (sensitivity) {
-                DetectionSensitivity.LOW -> Pair(100.0, 200.0)
-                DetectionSensitivity.MEDIUM -> Pair(50.0, 150.0)
-                DetectionSensitivity.HIGH -> Pair(20.0, 80.0)
+                DetectionSensitivity.LOW -> Pair(30.0, 100.0)
+                DetectionSensitivity.MEDIUM -> Pair(20.0, 80.0)
+                DetectionSensitivity.HIGH -> Pair(10.0, 50.0)
             }
             Imgproc.Canny(blurMat, edgesMat, lowThresh, highThresh)
+
+            // Morphological closing to connect nearby edges and fill gaps in bubble outlines
+            val kernelSize = when (sensitivity) {
+                DetectionSensitivity.LOW -> 3
+                DetectionSensitivity.MEDIUM -> 5
+                DetectionSensitivity.HIGH -> 3
+            }
+            val kernel = Imgproc.getStructuringElement(Imgproc.MORPH_ELLIPSE, Size(kernelSize.toDouble(), kernelSize.toDouble()))
+            val closedMat = Mat()
+            Imgproc.morphologyEx(edgesMat, closedMat, Imgproc.MORPH_CLOSE, kernel)
+            kernel.release()
 
             val contours = ArrayList<MatOfPoint>()
             val hierarchy = Mat()
             Imgproc.findContours(
-                edgesMat,
+                closedMat,
                 contours,
                 hierarchy,
                 Imgproc.RETR_EXTERNAL,
@@ -75,10 +89,11 @@ object ContourDetector {
             val imageHeight = bitmap.height
             val totalArea = imageWidth.toDouble() * imageHeight.toDouble()
 
+            // Lower minimum area ratio to detect smaller speech bubbles
             val minAreaRatio = when (sensitivity) {
-                DetectionSensitivity.LOW -> 0.0005
-                DetectionSensitivity.MEDIUM -> 0.0002
-                DetectionSensitivity.HIGH -> 0.00005
+                DetectionSensitivity.LOW -> 0.0003
+                DetectionSensitivity.MEDIUM -> 0.00015
+                DetectionSensitivity.HIGH -> 0.00008
             }
             val minArea = totalArea * minAreaRatio
             val maxArea = totalArea * 0.95
@@ -90,14 +105,19 @@ object ContourDetector {
                 val area = openCVRect.width.toDouble() * openCVRect.height.toDouble()
 
                 if (area in minArea..maxArea) {
-                    boundingBoxes.add(
-                        BoundingBox(
-                            left = openCVRect.x,
-                            top = openCVRect.y,
-                            right = openCVRect.x + openCVRect.width,
-                            bottom = openCVRect.y + openCVRect.height
+                    // Filter out very thin lines (likely text strokes, not bubbles)
+                    val aspectRatio = maxOf(openCVRect.width.toDouble() / openCVRect.height.toDouble(),
+                                          openCVRect.height.toDouble() / openCVRect.width.toDouble())
+                    if (aspectRatio < 20.0) { // Ignore very thin lines
+                        boundingBoxes.add(
+                            BoundingBox(
+                                left = openCVRect.x,
+                                top = openCVRect.y,
+                                right = openCVRect.x + openCVRect.width,
+                                bottom = openCVRect.y + openCVRect.height
+                            )
                         )
-                    )
+                    }
                 }
                 contour.release()
             }
@@ -106,6 +126,7 @@ object ContourDetector {
             grayMat.release()
             blurMat.release()
             edgesMat.release()
+            closedMat.release()
             hierarchy.release()
 
             boundingBoxes

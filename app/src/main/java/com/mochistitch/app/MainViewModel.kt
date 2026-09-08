@@ -271,10 +271,11 @@ class MainViewModel : ViewModel() {
                 }
 
                 val items = result.getOrThrow()
+                val extension = ImageCompressor.getFileExtension(settings.outputFormat)
                 val previewSlices = items.map { item ->
                     PreviewSliceItem(
                         index = item.index,
-                        filename = item.filename,
+                        filename = "${item.filename}.${extension}",
                         bitmap = item.bitmap,
                         width = item.width,
                         height = item.height,
@@ -349,7 +350,7 @@ class MainViewModel : ViewModel() {
                             webpLossless = settings.webpLossless,
                             outputStream = baos
                         )
-                        ArchiveEntry(slice.filename, baos.toByteArray())
+                        ArchiveEntry("${slice.filename}", baos.toByteArray())
                     }
                     bytesWritten = ArchiveHandler.createArchive(archiveEntries, outputStream)
                     previewSlices.forEach { it.bitmap.recycle() }
@@ -378,11 +379,10 @@ class MainViewModel : ViewModel() {
                     if (!outputFolder.exists()) outputFolder.mkdirs()
 
                     val quality = if (settings.outputFormat == OutputFormat.JPG) settings.jpgQuality else settings.webpQuality
-                    val extension = ImageCompressor.getFileExtension(settings.outputFormat)
 
                     previewSlices.forEachIndexed { index, slice ->
                         _uiState.update { it.copy(progress = (index + 1).toFloat() / previewSlices.size.toFloat()) }
-                        val file = File(outputFolder, "${slice.filename}.${extension}")
+                        val file = File(outputFolder, slice.filename)
                         file.outputStream().use { out ->
                             ImageCompressor.compress(
                                 bitmap = slice.bitmap,
@@ -458,11 +458,10 @@ class MainViewModel : ViewModel() {
                 if (!outputFolder.exists()) outputFolder.mkdirs()
 
                 val quality = if (settings.outputFormat == OutputFormat.JPG) settings.jpgQuality else settings.webpQuality
-                val extension = ImageCompressor.getFileExtension(settings.outputFormat)
 
                 previewSlices.forEachIndexed { index, slice ->
                     _uiState.update { it.copy(progress = (index + 1).toFloat() / previewSlices.size.toFloat()) }
-                    val file = File(outputFolder, "${slice.filename}.${extension}")
+                    val file = File(outputFolder, slice.filename)
                     file.outputStream().use { out ->
                         ImageCompressor.compress(
                             bitmap = slice.bitmap,

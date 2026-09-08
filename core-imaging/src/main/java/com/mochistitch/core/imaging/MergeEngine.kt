@@ -82,7 +82,7 @@ class MergeEngine(
             val finalHeight = max(1, canvasHeight)
 
             // Step 4: Buat canvas dan gambar semua item
-            val canvasBitmap = Bitmap.createBitmap(finalWidth, finalHeight, Bitmap.Config.ARGB_8888)
+            val canvasBitmap = Bitmap.createBitmap(finalWidth, finalHeight, Bitmap.Config.RGB_565)
             val canvas = Canvas(canvasBitmap)
             canvas.drawColor(config.paddingColor.colorInt)
 
@@ -104,7 +104,7 @@ class MergeEngine(
                 )
 
                 val options = BitmapFactory.Options().apply {
-                    inPreferredConfig = Bitmap.Config.ARGB_8888
+                    inPreferredConfig = Bitmap.Config.RGB_565
                     inSampleSize = sampleSize
                 }
                 val srcBitmap = BitmapFactory.decodeStream(inputStream, null, options)

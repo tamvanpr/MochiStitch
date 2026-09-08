@@ -27,7 +27,6 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -200,20 +199,6 @@ fun MainScreen(
             )
         },
         snackbarHost = { SnackbarHost(snackbarHostState) },
-        floatingActionButton = {
-            if (uiState.currentScreen == Screen.MAIN && uiState.selectedImages.isEmpty()) {
-                FloatingActionButton(
-                    onClick = { selectImagesLauncher.launch(arrayOf("image/*")) },
-                    modifier = Modifier.padding(end = 16.dp, bottom = 16.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Add,
-                        contentDescription = "Add images",
-                        modifier = Modifier.size(24.dp)
-                    )
-                }
-            }
-        },
         modifier = modifier
     ) { innerPadding ->
         Column(
