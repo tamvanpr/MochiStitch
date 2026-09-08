@@ -1,6 +1,9 @@
 package com.mochistitch.core.imaging
 
 import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.Paint
+import android.graphics.Rect
 import com.mochistitch.core.mochismart.ContourDetector
 import com.mochistitch.core.mochismart.SmartSplitResult
 import com.mochistitch.core.settings.DetectionSensitivity
@@ -16,6 +19,28 @@ data class SlicedPiece(
 
 object SplitEngine {
 
+    private fun createIndependentSlice(
+        source: Bitmap,
+        x: Int,
+        y: Int,
+        width: Int,
+        height: Int
+    ): Bitmap {
+        val config = source.config ?: Bitmap.Config.RGB_565
+        val independent = Bitmap.createBitmap(width, height, config)
+        val canvas = Canvas(independent)
+        val srcRect = Rect(x, y, x + width, y + height)
+        val dstRect = Rect(0, 0, width, height)
+        val paint = Paint(Paint.FILTER_BITMAP_FLAG or Paint.ANTI_ALIAS_FLAG)
+        canvas.drawBitmap(source, srcRect, dstRect, paint)
+        return independent
+    }
+
+    private fun copyBitmap(source: Bitmap): Bitmap {
+        val config = source.config ?: Bitmap.Config.RGB_565
+        return source.copy(config, true)
+    }
+
     fun sliceBitmapDetailed(
         source: Bitmap,
         splitMode: SplitMode,
@@ -27,20 +52,19 @@ object SplitEngine {
         maxPagesPerFile: Int = 1
     ): List<SlicedPiece> {
         if (splitMode == SplitMode.NO_LIMIT || (splitMode != SplitMode.MAX_PIXELS && splitMode != SplitMode.PAGES_PER_FILE) || maxPixelLength <= 0) {
-            return listOf(SlicedPiece(source, needsManualReview = false))
+            return listOf(SlicedPiece(copyBitmap(source), needsManualReview = false))
         }
 
         val isVertical = direction == ReadingDirection.VERTICAL
         val totalLength = if (isVertical) source.height else source.width
 
         // For PAGES_PER_FILE mode, treat each "page" as maxPagesPerFile
-        // We'll split by maxPixelLength but limit to maxPagesPerFile pieces per file
         if (splitMode == SplitMode.PAGES_PER_FILE && maxPagesPerFile > 0) {
             return sliceWithPageLimit(source, maxPixelLength, direction, maxPagesPerFile)
         }
 
         if (totalLength <= maxPixelLength) {
-            return listOf(SlicedPiece(source, needsManualReview = false))
+            return listOf(SlicedPiece(copyBitmap(source), needsManualReview = false))
         }
 
         val boundingBoxes = if (mochiSmartEnabled) {
@@ -56,7 +80,7 @@ object SplitEngine {
             while (currentY < totalLength) {
                 val remaining = totalLength - currentY
                 if (remaining <= maxPixelLength) {
-                    val slice = Bitmap.createBitmap(source, 0, currentY, source.width, remaining)
+                    val slice = createIndependentSlice(source, 0, currentY, source.width, remaining)
                     slices.add(SlicedPiece(slice, needsManualReview = false))
                     break
                 }
@@ -73,10 +97,10 @@ object SplitEngine {
                         bitmap = source
                     )
                 } else SmartSplitResult(clampedCandidate, false)
-                // Ensure splitPos advances at least 1px and stays within bounds
+
                 val effectiveSplitPos = splitPos.coerceIn(currentY + 1, totalLength - 1)
                 val sliceHeight = (effectiveSplitPos - currentY).coerceIn(1, remaining)
-                val slice = Bitmap.createBitmap(source, 0, currentY, source.width, sliceHeight)
+                val slice = createIndependentSlice(source, 0, currentY, source.width, sliceHeight)
                 slices.add(SlicedPiece(slice, needsReview))
                 currentY += sliceHeight
             }
@@ -85,7 +109,7 @@ object SplitEngine {
             while (currentX < totalLength) {
                 val remaining = totalLength - currentX
                 if (remaining <= maxPixelLength) {
-                    val slice = Bitmap.createBitmap(source, currentX, 0, remaining, source.height)
+                    val slice = createIndependentSlice(source, currentX, 0, remaining, source.height)
                     slices.add(SlicedPiece(slice, needsManualReview = false))
                     break
                 }
@@ -102,10 +126,10 @@ object SplitEngine {
                         bitmap = source
                     )
                 } else SmartSplitResult(clampedCandidate, false)
-                // Ensure splitPos advances at least 1px and stays within bounds
+
                 val effectiveSplitPos = splitPos.coerceIn(currentX + 1, totalLength - 1)
                 val sliceWidth = (effectiveSplitPos - currentX).coerceIn(1, remaining)
-                val slice = Bitmap.createBitmap(source, currentX, 0, sliceWidth, source.height)
+                val slice = createIndependentSlice(source, currentX, 0, sliceWidth, source.height)
                 slices.add(SlicedPiece(slice, needsReview))
                 currentX += sliceWidth
             }
@@ -114,9 +138,6 @@ object SplitEngine {
         return slices
     }
 
-    /**
-     * Split with page limit - creates multiple output files with maxPagesPerFile pieces each
-     */
     private fun sliceWithPageLimit(
         source: Bitmap,
         maxPixelLength: Int,
@@ -127,13 +148,10 @@ object SplitEngine {
         val totalLength = if (isVertical) source.height else source.width
 
         if (totalLength <= maxPixelLength) {
-            return listOf(SlicedPiece(source, needsManualReview = false))
+            return listOf(SlicedPiece(copyBitmap(source), needsManualReview = false))
         }
 
         val slices = mutableListOf<SlicedPiece>()
-        val sliceHeight = if (isVertical) maxPixelLength else source.height
-        val sliceWidth = if (!isVertical) maxPixelLength else source.width
-
         var currentY = 0
         var currentX = 0
         var pageCount = 0
@@ -143,9 +161,9 @@ object SplitEngine {
             val currentSliceLength = min(remaining, maxPixelLength)
 
             val slice = if (isVertical) {
-                Bitmap.createBitmap(source, 0, currentY, source.width, currentSliceLength)
+                createIndependentSlice(source, 0, currentY, source.width, currentSliceLength)
             } else {
-                Bitmap.createBitmap(source, currentX, 0, currentSliceLength, source.height)
+                createIndependentSlice(source, currentX, 0, currentSliceLength, source.height)
             }
 
             slices.add(SlicedPiece(slice, needsManualReview = false))
@@ -157,8 +175,6 @@ object SplitEngine {
                 currentX += currentSliceLength
             }
 
-            // Reset page count if we've reached maxPagesPerFile
-            // (This would create a new "file" in the actual export)
             if (pageCount >= maxPagesPerFile) {
                 pageCount = 0
             }
