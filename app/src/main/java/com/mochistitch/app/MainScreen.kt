@@ -2,6 +2,7 @@ package com.mochistitch.app
 
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -140,10 +141,10 @@ fun MainScreen(
     }
 
     val selectImagesLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.OpenMultipleDocuments()
+        contract = ActivityResultContracts.PickMultipleVisualMedia()
     ) { uris ->
         if (uris.isNotEmpty()) {
-            viewModel.addImages(uris, context)
+            viewModel.addImages(uris.distinctBy { it.toString() }, context)
         }
     }
 
@@ -238,7 +239,7 @@ fun MainScreen(
             // ── Image list or empty state ───────────────────────────────
             if (uiState.selectedImages.isEmpty()) {
                 EmptyStateBox(
-                    onSelectClicked = { selectImagesLauncher.launch(arrayOf("image/*")) }
+                    onSelectClicked = { selectImagesLauncher.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }
                 )
             } else {
                 ImageReorderList(
