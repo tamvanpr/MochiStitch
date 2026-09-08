@@ -25,7 +25,7 @@ import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.Divider
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
@@ -495,7 +495,7 @@ private fun AdvancedSettingsCard(
                     }
                 }
 
-                Divider(color = MaterialTheme.colorScheme.outlineVariant)
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
 
                 // ── Packaging ───────────────────────────────────────────
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -523,7 +523,7 @@ private fun AdvancedSettingsCard(
                     }
                 }
 
-                Divider(color = MaterialTheme.colorScheme.outlineVariant)
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
 
                 // ── Naming ──────────────────────────────────────────────
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
