@@ -28,7 +28,10 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.layout.size
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -108,12 +111,15 @@ fun SettingsScreenContent(
         ) {
             // ── 1. Format Hasil ──────────────────────────────────────────
             SectionCard(title = "Format Gambar Output") {
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
                     OutputFormat.entries.forEach { format ->
-                        FilterChip(
+                        MochiChoiceChip(
                             selected = settings.outputFormat == format,
                             onClick = { onSettingsChanged(settings.copy(outputFormat = format)) },
-                            label = { Text(format.name) }
+                            label = format.name
                         )
                     }
                 }
@@ -193,10 +199,10 @@ fun SettingsScreenContent(
                             SplitMode.MAX_PIXELS -> "Maksimal Piksel"
                             SplitMode.PAGES_PER_FILE -> "Halaman / Berkas"
                         }
-                        FilterChip(
+                        MochiChoiceChip(
                             selected = settings.splitMode == mode,
                             onClick = { onSettingsChanged(settings.copy(splitMode = mode)) },
-                            label = { Text(label) }
+                            label = label
                         )
                     }
                 }
@@ -274,17 +280,20 @@ fun SettingsScreenContent(
             SectionCard(title = "Tata Letak & Arah Baca") {
                 SettingSectionLabel("Arah Baca / Penggabungan")
                 Spacer(modifier = Modifier.height(8.dp))
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
                     ReadingDirection.entries.forEach { dir ->
                         val label = when (dir) {
                             ReadingDirection.VERTICAL -> "Vertikal (Webtoon)"
                             ReadingDirection.LTR -> "Kiri ke Kanan (LTR)"
                             ReadingDirection.RTL -> "Kanan ke Kiri (RTL)"
                         }
-                        FilterChip(
+                        MochiChoiceChip(
                             selected = settings.readingDirection == dir,
                             onClick = { onSettingsChanged(settings.copy(readingDirection = dir)) },
-                            label = { Text(label) }
+                            label = label
                         )
                     }
                 }
@@ -292,17 +301,20 @@ fun SettingsScreenContent(
                 Spacer(modifier = Modifier.height(16.dp))
                 SettingSectionLabel("Mode Penyesuaian Dimensi")
                 Spacer(modifier = Modifier.height(8.dp))
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
                     AlignmentModeSetting.entries.forEach { mode ->
                         val label = when (mode) {
                             AlignmentModeSetting.RESIZE_PROPORTIONAL -> "Sesuaikan Proporsi"
                             AlignmentModeSetting.CENTER_CROP -> "Potong Tengah"
                             AlignmentModeSetting.PADDING -> "Tambah Warna Latar"
                         }
-                        FilterChip(
+                        MochiChoiceChip(
                             selected = settings.alignmentMode == mode,
                             onClick = { onSettingsChanged(settings.copy(alignmentMode = mode)) },
-                            label = { Text(label) }
+                            label = label
                         )
                     }
                 }
@@ -311,17 +323,20 @@ fun SettingsScreenContent(
                     Spacer(modifier = Modifier.height(12.dp))
                     SettingSectionLabel("Warna Latar Margin")
                     Spacer(modifier = Modifier.height(8.dp))
-                    FlowRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
                         PaddingColorSetting.entries.forEach { color ->
                             val label = when (color) {
                                 PaddingColorSetting.WHITE -> "Putih"
                                 PaddingColorSetting.BLACK -> "Hitam"
                                 PaddingColorSetting.TRANSPARENT -> "Transparan"
                             }
-                            FilterChip(
+                            MochiChoiceChip(
                                 selected = settings.paddingColor == color,
                                 onClick = { onSettingsChanged(settings.copy(paddingColor = color)) },
-                                label = { Text(label) }
+                                label = label
                             )
                         }
                     }
@@ -356,6 +371,48 @@ private fun SectionCard(title: String, content: @Composable () -> Unit) {
                 color = MaterialTheme.colorScheme.primary
             )
             content()
+        }
+    }
+}
+
+
+// ── Reusable choice chip component ─────────────────────────────────────────────
+@Composable
+private fun MochiChoiceChip(
+    selected: Boolean,
+    onClick: () -> Unit,
+    label: String,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        selected = selected,
+        onClick = onClick,
+        shape = RoundedCornerShape(10.dp),
+        color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceContainerHigh,
+        contentColor = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
+        border = if (selected) null else BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+        shadowElevation = if (selected) 2.dp else 0.dp,
+        modifier = modifier
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 9.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.Center
+        ) {
+            if (selected) {
+                Icon(
+                    imageVector = Icons.Default.Check,
+                    contentDescription = null,
+                    modifier = Modifier.size(16.dp),
+                    tint = MaterialTheme.colorScheme.onPrimary
+                )
+                Spacer(modifier = Modifier.width(6.dp))
+            }
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium
+            )
         }
     }
 }
@@ -456,17 +513,20 @@ private fun AdvancedSettingsCard(
                         Spacer(modifier = Modifier.height(4.dp))
                         Text("Sensitivitas Deteksi Teks", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Medium)
                         Spacer(modifier = Modifier.height(6.dp))
-                        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        FlowRow(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
                             DetectionSensitivity.entries.forEach { sens ->
                                 val label = when (sens) {
                                     DetectionSensitivity.LOW -> "Rendah"
                                     DetectionSensitivity.MEDIUM -> "Seimbang"
                                     DetectionSensitivity.HIGH -> "Tinggi"
                                 }
-                                FilterChip(
+                                MochiChoiceChip(
                                     selected = settings.mochiSmartSensitivity == sens,
                                     onClick = { onSettingsChanged(settings.copy(mochiSmartSensitivity = sens)) },
-                                    label = { Text(label) }
+                                    label = label
                                 )
                             }
                         }
@@ -505,10 +565,10 @@ private fun AdvancedSettingsCard(
                                 OutputWrapperFormat.CBZ -> "Arsip CBZ"
                                 OutputWrapperFormat.ZIP -> "Arsip ZIP"
                             }
-                            FilterChip(
+                            MochiChoiceChip(
                                 selected = settings.wrapperFormat == wrapper,
                                 onClick = { onSettingsChanged(settings.copy(wrapperFormat = wrapper)) },
-                                label = { Text(label) }
+                                label = label
                             )
                         }
                     }

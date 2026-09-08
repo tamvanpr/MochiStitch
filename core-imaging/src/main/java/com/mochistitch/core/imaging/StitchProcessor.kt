@@ -285,8 +285,9 @@ class StitchProcessor(
 
             if (settings.mochiSmartEnabled) {
                 val tolerance = settings.mochiSmartTolerance
-                val bandStart = max(0, candidate - tolerance)
-                val bandEnd = min(totalLength, candidate + tolerance)
+                val searchMargin = max(tolerance * 3, 600)
+                val bandStart = max(0, candidate - searchMargin)
+                val bandEnd = min(totalLength, candidate + searchMargin)
                 val bandLen = bandEnd - bandStart
 
                 if (bandLen > 0) {

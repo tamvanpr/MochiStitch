@@ -7,15 +7,27 @@ import org.opencv.android.Utils
 import org.opencv.core.Core
 import org.opencv.core.Mat
 import org.opencv.core.MatOfPoint
+import org.opencv.core.MatOfPoint2f
 import org.opencv.core.Size
 import org.opencv.imgproc.Imgproc
+import kotlin.math.abs
+import kotlin.math.max
+
+enum class BoundingBoxType {
+    PROTECTED_BALLOON,  // Speech balloons, dialogue boxes, system windows, monologue boxes, skill text, monologue lines
+    SFX                 // Background sound effect graphics
+}
 
 data class BoundingBox(
     val left: Int,
     val top: Int,
     val right: Int,
-    val bottom: Int
-)
+    val bottom: Int,
+    val type: BoundingBoxType = BoundingBoxType.PROTECTED_BALLOON
+) {
+    val isProtected: Boolean
+        get() = type == BoundingBoxType.PROTECTED_BALLOON
+}
 
 data class SmartSplitResult(
     val splitPosition: Int,
@@ -54,12 +66,12 @@ object ContourDetector {
             val blurMat = Mat()
             Imgproc.GaussianBlur(grayMat, blurMat, Size(3.0, 3.0), 0.0)
 
-            // Method 1: Adaptive Thresholding (catches speech bubbles with low contrast / soft outlines)
+            // Method 1: Adaptive Thresholding (catches speech bubbles, system dialog boxes, monologue boxes)
             val adaptiveMat = Mat()
             val (blockSize, cVal) = when (sensitivity) {
-                DetectionSensitivity.LOW -> Pair(15, 5.0)
-                DetectionSensitivity.MEDIUM -> Pair(11, 3.0)
-                DetectionSensitivity.HIGH -> Pair(7, 2.0)
+                DetectionSensitivity.LOW -> Pair(17, 6.0)
+                DetectionSensitivity.MEDIUM -> Pair(13, 4.0)
+                DetectionSensitivity.HIGH -> Pair(9, 2.0)
             }
             Imgproc.adaptiveThreshold(
                 blurMat,
@@ -71,7 +83,7 @@ object ContourDetector {
                 cVal
             )
 
-            // Method 2: Canny Edge Detection with adjusted thresholds based on sensitivity
+            // Method 2: Canny Edge Detection
             val edgesMat = Mat()
             val (lowThresh, highThresh) = when (sensitivity) {
                 DetectionSensitivity.LOW -> Pair(40.0, 120.0)
@@ -80,15 +92,15 @@ object ContourDetector {
             }
             Imgproc.Canny(blurMat, edgesMat, lowThresh, highThresh)
 
-            // Combine Adaptive Thresholding and Canny edge maps via bitwise OR
+            // Combine adaptive thresholding and edge maps
             val combinedMat = Mat()
             Core.bitwise_or(edgesMat, adaptiveMat, combinedMat)
 
-            // Morphological Closing to connect nearby edges and seal speech bubble outlines
+            // Morphological Closing to seal speech bubble outlines and box boundaries
             val closeKernelSize = when (sensitivity) {
-                DetectionSensitivity.LOW -> 3
-                DetectionSensitivity.MEDIUM -> 5
-                DetectionSensitivity.HIGH -> 3
+                DetectionSensitivity.LOW -> 5
+                DetectionSensitivity.MEDIUM -> 7
+                DetectionSensitivity.HIGH -> 5
             }
             val closeKernel = Imgproc.getStructuringElement(
                 Imgproc.MORPH_ELLIPSE,
@@ -98,13 +110,22 @@ object ContourDetector {
             Imgproc.morphologyEx(combinedMat, closedMat, Imgproc.MORPH_CLOSE, closeKernel)
             closeKernel.release()
 
-            // Morphological Opening after Closing to eliminate small isolated noise pixels
+            // Horizontal morphological dilation to group horizontal text rows (monologues, skill names, narration) into text block boxes
+            val textKernel = Imgproc.getStructuringElement(
+                Imgproc.MORPH_RECT,
+                Size(15.0, 3.0)
+            )
+            val textGroupedMat = Mat()
+            Imgproc.morphologyEx(closedMat, textGroupedMat, Imgproc.MORPH_DILATE, textKernel)
+            textKernel.release()
+
+            // Morphological Opening to eliminate small isolated noise
             val openKernel = Imgproc.getStructuringElement(
                 Imgproc.MORPH_ELLIPSE,
                 Size(3.0, 3.0)
             )
             val processedMat = Mat()
-            Imgproc.morphologyEx(closedMat, processedMat, Imgproc.MORPH_OPEN, openKernel)
+            Imgproc.morphologyEx(textGroupedMat, processedMat, Imgproc.MORPH_OPEN, openKernel)
             openKernel.release()
 
             val contours = ArrayList<MatOfPoint>()
@@ -121,19 +142,13 @@ object ContourDetector {
             val imageHeight = bitmap.height
             val totalArea = imageWidth.toDouble() * imageHeight.toDouble()
 
-            // Lower minimum area ratios to catch smaller speech bubbles
             val minAreaRatio = when (sensitivity) {
                 DetectionSensitivity.LOW -> 0.0001
-                DetectionSensitivity.MEDIUM -> 0.00005
-                DetectionSensitivity.HIGH -> 0.00002
+                DetectionSensitivity.MEDIUM -> 0.00003
+                DetectionSensitivity.HIGH -> 0.00001
             }
             val minArea = totalArea * minAreaRatio
             val maxArea = totalArea * 0.95
-
-            // Tighter aspect ratio filter (max 5.0) and min dimension constraints
-            // to drastically reduce false positives from text lines/strokes
-            val maxAspectRatio = 5.0
-            val minDimension = 8
 
             val boundingBoxes = mutableListOf<BoundingBox>()
 
@@ -141,20 +156,39 @@ object ContourDetector {
                 val openCVRect = Imgproc.boundingRect(contour)
                 val w = openCVRect.width.toDouble()
                 val h = openCVRect.height.toDouble()
-                val area = w * h
+                val area = Imgproc.contourArea(contour)
+                val rectArea = w * h
 
-                if (area in minArea..maxArea && openCVRect.width >= minDimension && openCVRect.height >= minDimension) {
+                if (rectArea in minArea..maxArea && openCVRect.width >= 8 && openCVRect.height >= 8) {
                     val aspectRatio = maxOf(w / h, h / w)
-                    if (aspectRatio <= maxAspectRatio) {
-                        boundingBoxes.add(
-                            BoundingBox(
-                                left = openCVRect.x,
-                                top = openCVRect.y,
-                                right = openCVRect.x + openCVRect.width,
-                                bottom = openCVRect.y + openCVRect.height
-                            )
+                    val solidity = if (rectArea > 0) area / rectArea else 0.0
+
+                    // Approximate polygon to detect structured rectangular boxes (system windows, monologue boxes, skill boxes)
+                    val contour2f = MatOfPoint2f(*contour.toArray())
+                    val approx2f = MatOfPoint2f()
+                    val epsilon = 0.02 * Imgproc.arcLength(contour2f, true)
+                    Imgproc.approxPolyDP(contour2f, approx2f, epsilon, true)
+                    val verticesCount = approx2f.total()
+                    contour2f.release()
+                    approx2f.release()
+
+                    // Classify BoundingBoxType:
+                    // Protected balloons, system boxes, monologue boxes, skill text boxes, and monologue lines:
+                    // - Smooth closed shapes or rectangular boxes (vertices <= 8 or high solidity > 0.45 or aspect ratio <= 6.0)
+                    // SFX:
+                    // - High aspect ratio (> 6.0) or low solidity (< 0.25) with irregular multi-point contours without box structure.
+                    val isSfx = aspectRatio > 6.0 || (solidity < 0.20 && verticesCount > 10)
+                    val boxType = if (isSfx) BoundingBoxType.SFX else BoundingBoxType.PROTECTED_BALLOON
+
+                    boundingBoxes.add(
+                        BoundingBox(
+                            left = openCVRect.x,
+                            top = openCVRect.y,
+                            right = openCVRect.x + openCVRect.width,
+                            bottom = openCVRect.y + openCVRect.height,
+                            type = boxType
                         )
-                    }
+                    )
                 }
                 contour.release()
             }
@@ -166,6 +200,7 @@ object ContourDetector {
             edgesMat.release()
             combinedMat.release()
             closedMat.release()
+            textGroupedMat.release()
             processedMat.release()
             hierarchy.release()
 
@@ -176,13 +211,14 @@ object ContourDetector {
     }
 
     /**
-     * Determines the optimal split coordinate within [candidate - tolerance, candidate + tolerance].
+     * Determines the optimal split coordinate that STRICTLY preserves protected regions
+     * (speech balloons, dialogue boxes, system windows, monologue text, skill text).
      *
-     * @param totalLength total length along primary axis (height for vertical, width for horizontal)
+     * @param totalLength total length along primary axis
      * @param candidate initial candidate split coordinate
-     * @param tolerance allowed deviation range in pixels (e.g. 150)
-     * @param isVertical true if splitting along Y axis (height), false if X axis (width)
-     * @param boundingBoxes detected speech bubble / text region bounding boxes
+     * @param tolerance preferred allowed deviation range in pixels (e.g. 150)
+     * @param isVertical true if splitting along Y axis, false if X axis
+     * @param boundingBoxes detected bounding boxes
      * @param bitmap optional source bitmap to evaluate pixel edge density for tie-breaking
      */
     fun findSafeSplitPoint(
@@ -197,11 +233,11 @@ object ContourDetector {
             return SmartSplitResult(candidate.coerceIn(0, totalLength), needsManualReview = false)
         }
 
-        val minPos = (candidate - tolerance).coerceAtLeast(1)
-        val maxPos = (candidate + tolerance).coerceAtMost(totalLength - 1)
+        val protectedBoxes = boundingBoxes.filter { it.isProtected }
+        val sfxBoxes = boundingBoxes.filter { !it.isProtected }
 
-        fun collides(pos: Int): Boolean {
-            return boundingBoxes.any { rect ->
+        fun collidesWithProtected(pos: Int): Boolean {
+            return protectedBoxes.any { rect ->
                 if (isVertical) {
                     pos in rect.top..rect.bottom
                 } else {
@@ -210,28 +246,70 @@ object ContourDetector {
             }
         }
 
-        if (!collides(candidate)) {
-            return SmartSplitResult(candidate, needsManualReview = false)
-        }
-
-        val safePositions = mutableListOf<Int>()
-        for (pos in minPos..maxPos) {
-            if (!collides(pos)) {
-                safePositions.add(pos)
+        fun collidesWithSfx(pos: Int): Boolean {
+            return sfxBoxes.any { rect ->
+                if (isVertical) {
+                    pos in rect.top..rect.bottom
+                } else {
+                    pos in rect.left..rect.right
+                }
             }
         }
 
-        if (safePositions.isEmpty()) {
-            return SmartSplitResult(candidate, needsManualReview = true)
+        // 1. If initial candidate does NOT collide with any box (protected or SFX), use candidate
+        if (!collidesWithProtected(candidate) && !collidesWithSfx(candidate)) {
+            return SmartSplitResult(candidate, needsManualReview = false)
         }
 
-        val bestPos = safePositions.minByOrNull { pos ->
-            val dist = kotlin.math.abs(pos - candidate)
-            val density = calculatePixelEdgeDensity(bitmap, pos, isVertical)
-            dist * 1000 + density
-        } ?: candidate
+        // 2. Search within maxSearch (expanding beyond tolerance if necessary) for a position outside ALL protected boxes
+        val maxSearch = max(tolerance, 600)
+        var bestPos: Int? = null
+        var minCost = Double.MAX_VALUE
 
-        return SmartSplitResult(bestPos, needsManualReview = false)
+        val searchMin = (candidate - maxSearch).coerceAtLeast(1)
+        val searchMax = (candidate + maxSearch).coerceAtMost(totalLength - 1)
+
+        for (pos in searchMin..searchMax) {
+            if (!collidesWithProtected(pos)) {
+                val dist = abs(pos - candidate)
+                val sfxCollision = collidesWithSfx(pos)
+                val density = calculatePixelEdgeDensity(bitmap, pos, isVertical)
+
+                // Cost function: strongly penalize distance from candidate, slightly penalize SFX collision and edge density
+                val cost = dist * 10.0 + (if (sfxCollision) 100.0 else 0.0) + density
+                if (cost < minCost) {
+                    minCost = cost
+                    bestPos = pos
+                }
+            }
+        }
+
+        if (bestPos != null) {
+            return SmartSplitResult(bestPos, needsManualReview = false)
+        }
+
+        // 3. Extended Search: search up to half total length to find a clean gap outside protected boxes
+        val extendedMin = (candidate - totalLength / 2).coerceAtLeast(1)
+        val extendedMax = (candidate + totalLength / 2).coerceAtMost(totalLength - 1)
+
+        for (pos in extendedMin..extendedMax) {
+            if (!collidesWithProtected(pos)) {
+                val dist = abs(pos - candidate)
+                val density = calculatePixelEdgeDensity(bitmap, pos, isVertical)
+                val cost = dist * 100.0 + density
+                if (cost < minCost) {
+                    minCost = cost
+                    bestPos = pos
+                }
+            }
+        }
+
+        if (bestPos != null) {
+            return SmartSplitResult(bestPos, needsManualReview = false)
+        }
+
+        // Fallback: if no non-colliding position exists across the entire search space, return candidate
+        return SmartSplitResult(candidate, needsManualReview = true)
     }
 
     private fun calculatePixelEdgeDensity(bitmap: Bitmap?, pos: Int, isVertical: Boolean): Int {

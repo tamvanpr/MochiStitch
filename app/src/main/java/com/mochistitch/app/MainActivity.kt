@@ -16,6 +16,7 @@ class MainActivity : ComponentActivity() {
     private val viewModel: MainViewModel by viewModels()
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        setTheme(android.R.style.Theme_Material_NoActionBar)
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
         viewModel.initSettings(this)
