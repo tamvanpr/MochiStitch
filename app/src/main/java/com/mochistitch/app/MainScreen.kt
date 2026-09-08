@@ -286,7 +286,7 @@ private fun EmptyStateBox(onSelectClicked: () -> Unit) {
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .weight(1f),
+            .fillMaxHeight(0.5f),
         contentAlignment = Alignment.Center
     ) {
         Column(
