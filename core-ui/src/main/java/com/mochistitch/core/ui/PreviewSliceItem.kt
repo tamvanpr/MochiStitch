@@ -10,5 +10,6 @@ data class PreviewSliceItem(
     val width: Int,
     val height: Int,
     val needsManualReview: Boolean = false,
+    val reviewReason: String? = null,
     val bytesWritten: Long = 0L
 )

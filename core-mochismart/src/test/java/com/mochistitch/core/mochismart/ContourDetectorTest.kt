@@ -2,6 +2,7 @@ package com.mochistitch.core.mochismart
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -48,7 +49,6 @@ class ContourDetectorTest {
             boundingBoxes = boundingBoxes
         )
 
-        // Safe gaps exist at <= 449 or >= 551. Nearest to 500 is 449 or 551.
         assertTrue(result.splitPosition <= 449 || result.splitPosition >= 551)
         assertFalse(result.needsManualReview)
     }
@@ -58,7 +58,6 @@ class ContourDetectorTest {
         val totalLength = 2000
         val candidate = 1000
         val tolerance = 100
-        // Large speech balloon / system dialog box covers Y=800 to Y=1200 (spans 400px, larger than default tolerance)
         val boundingBoxes = listOf(BoundingBox(0, 800, 300, 1200, BoundingBoxType.PROTECTED_BALLOON))
 
         val result = ContourDetector.findSafeSplitPoint(
@@ -69,7 +68,6 @@ class ContourDetectorTest {
             boundingBoxes = boundingBoxes
         )
 
-        // Algorithm MUST shift split position outside balloon (e.g. <= 799 or >= 1201)
         assertTrue("Split position ${result.splitPosition} must be outside balloon [800..1200]",
             result.splitPosition <= 799 || result.splitPosition >= 1201)
         assertFalse(result.needsManualReview)
@@ -80,7 +78,6 @@ class ContourDetectorTest {
         val totalLength = 1000
         val candidate = 500
         val tolerance = 150
-        // SFX box covers Y=400 to Y=600
         val boundingBoxes = listOf(BoundingBox(0, 400, 200, 600, BoundingBoxType.SFX))
 
         val result = ContourDetector.findSafeSplitPoint(
@@ -99,7 +96,6 @@ class ContourDetectorTest {
         val totalLength = 2000
         val candidate = 1000
         val tolerance = 50
-        // Speech balloon covers candidate region 950 to 1050
         val boundingBoxes = listOf(BoundingBox(0, 950, 400, 1050, BoundingBoxType.PROTECTED_BALLOON))
 
         val result = ContourDetector.findSafeSplitPoint(
@@ -111,8 +107,88 @@ class ContourDetectorTest {
             maxSearchDeviationFactor = 0.2f
         )
 
-        // Must actively shift cut point outside [950..1050] to safe gutter
         assertTrue(result.splitPosition <= 949 || result.splitPosition >= 1051)
+        assertFalse(result.needsManualReview)
+    }
+
+    @Test
+    fun testTwoAdjacentBalloonsExceedingTolerance() {
+        val totalLength = 2000
+        val currentPos = 0
+        val targetPos = 1000
+        val tolerance = 100 // Tolerance window [900..1100]
+        // Balloon 1 covers 850..980, Balloon 2 covers 990..1150
+        val boundingBoxes = listOf(
+            BoundingBox(0, 850, 300, 980, BoundingBoxType.PROTECTED_BALLOON),
+            BoundingBox(0, 990, 300, 1150, BoundingBoxType.PROTECTED_BALLOON)
+        )
+        val safeGaps = ContourDetector.calculateSafeGaps(totalLength, boundingBoxes, isVertical = true)
+
+        val result = ContourDetector.findSafeSplitPointDetailed(
+            totalLength = totalLength,
+            currentPos = currentPos,
+            targetPos = targetPos,
+            tolerance = tolerance,
+            safeGaps = safeGaps,
+            allowExceedOnNoSafeGap = true,
+            preferShorterOverLonger = true
+        )
+
+        assertTrue("Split position ${result.splitPosition} must fall in gap [981..989] or before 850",
+            (result.splitPosition in 981..989) || result.splitPosition <= 849)
+        assertFalse(result.needsManualReview)
+    }
+
+    @Test
+    fun testGiantBalloonLongerThanMaxPixelLength() {
+        val totalLength = 3000
+        val currentPos = 0
+        val targetPos = 1000
+        val tolerance = 100
+        // Giant balloon spans Y=0 to Y=2500 (longer than targetPos 1000 and covers start!)
+        val boundingBoxes = listOf(
+            BoundingBox(0, 0, 300, 2500, BoundingBoxType.PROTECTED_BALLOON)
+        )
+        val safeGaps = ContourDetector.calculateSafeGaps(totalLength, boundingBoxes, isVertical = true)
+
+        val result = ContourDetector.findSafeSplitPointDetailed(
+            totalLength = totalLength,
+            currentPos = currentPos,
+            targetPos = targetPos,
+            tolerance = tolerance,
+            safeGaps = safeGaps,
+            allowExceedOnNoSafeGap = true,
+            preferShorterOverLonger = true
+        )
+
+        assertTrue(result.needsManualReview)
+        assertNotNull(result.reviewReason)
+        assertTrue(result.splitPosition in 2500..2501)
+    }
+
+    @Test
+    fun testFallbackShorterWhenExceedDisabled() {
+        val totalLength = 2000
+        val currentPos = 0
+        val targetPos = 1000
+        val tolerance = 100
+        // Protected balloon covers Y=800..1200
+        val boundingBoxes = listOf(
+            BoundingBox(0, 800, 300, 1200, BoundingBoxType.PROTECTED_BALLOON)
+        )
+        val safeGaps = ContourDetector.calculateSafeGaps(totalLength, boundingBoxes, isVertical = true)
+
+        val result = ContourDetector.findSafeSplitPointDetailed(
+            totalLength = totalLength,
+            currentPos = currentPos,
+            targetPos = targetPos,
+            tolerance = tolerance,
+            safeGaps = safeGaps,
+            allowExceedOnNoSafeGap = false,
+            preferShorterOverLonger = true
+        )
+
+        assertTrue(result.splitPosition <= 799)
         assertFalse(result.needsManualReview)
     }
 }

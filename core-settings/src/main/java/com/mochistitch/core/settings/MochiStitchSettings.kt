@@ -52,5 +52,7 @@ data class MochiStitchSettings(
     val pixelComparisonSensitivity: Float = 0.5f,
     val pixelComparisonMargins: Int = 0,
     val pixelComparisonStep: Int = 5,
-    val pixelComparisonMaxDeviationFactor: Float = 0.2f
+    val pixelComparisonMaxDeviationFactor: Float = 0.2f,
+    val allowExceedOnNoSafeGap: Boolean = true,
+    val preferShorterOverLonger: Boolean = true
 )

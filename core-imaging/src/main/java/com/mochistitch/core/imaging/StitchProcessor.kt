@@ -33,7 +33,15 @@ data class StitchResultItem(
     val width: Int,
     val height: Int,
     val needsManualReview: Boolean = false,
+    val reviewReason: String? = null,
     val estimatedBytes: Long = 0L
+)
+
+data class SliceIntervalSpec(
+    val start: Int,
+    val end: Int,
+    val needsReview: Boolean = false,
+    val reviewReason: String? = null
 )
 
 enum class ProcessingStage(val stepName: String) {
@@ -107,7 +115,7 @@ class StitchProcessor(
 
             for ((indexZeroBased, interval) in sliceIntervals.withIndex()) {
                 val sliceIndex = indexZeroBased + 1 // 1-based index (1, 2, 3...)
-                val (startPos, endPos, needsReview) = interval
+                val (startPos, endPos, needsReview, reviewReason) = interval
                 val sliceLen = endPos - startPos
 
                 val sliceWidth = if (isVertical) totalCanvasWidth else sliceLen
@@ -204,6 +212,7 @@ class StitchProcessor(
                         width = sliceWidth,
                         height = sliceHeight,
                         needsManualReview = needsReview,
+                        reviewReason = reviewReason,
                         estimatedBytes = estimatedBytes
                     )
                 )
@@ -254,12 +263,12 @@ class StitchProcessor(
         placements: List<MergeEngine.ItemPlacement>,
         settings: MochiStitchSettings,
         mergeConfig: MergeConfig
-    ): List<Triple<Int, Int, Boolean>> {
-        val intervals = mutableListOf<Triple<Int, Int, Boolean>>()
+    ): List<SliceIntervalSpec> {
+        val intervals = mutableListOf<SliceIntervalSpec>()
         val maxLen = settings.maxPixelLength
 
         if (settings.splitMode == SplitMode.NO_LIMIT || totalLength <= maxLen || maxLen <= 0) {
-            intervals.add(Triple(0, totalLength, false))
+            intervals.add(SliceIntervalSpec(0, totalLength, false, null))
             return intervals
         }
 
@@ -269,19 +278,20 @@ class StitchProcessor(
         while (currentPos < totalLength) {
             val remaining = totalLength - currentPos
             if (remaining <= maxLen) {
-                intervals.add(Triple(currentPos, totalLength, false))
+                intervals.add(SliceIntervalSpec(currentPos, totalLength, false, null))
                 break
             }
 
             // Jika sisa setelah candidate sangat kecil, gabungkan langsung ke potongan terakhir
             if (remaining - maxLen < minTailLength) {
-                intervals.add(Triple(currentPos, totalLength, false))
+                intervals.add(SliceIntervalSpec(currentPos, totalLength, false, null))
                 break
             }
 
             val candidate = currentPos + maxLen
             var safeSplit = candidate
             var needsReview = false
+            var reviewReason: String? = null
 
             if (settings.mochiSmartEnabled) {
                 val tolerance = settings.mochiSmartTolerance
@@ -347,6 +357,7 @@ class StitchProcessor(
 
                     safeSplit = bandStart + smartRes.splitPosition
                     needsReview = smartRes.needsManualReview
+                    reviewReason = smartRes.reviewReason
                     bandBitmap.recycle()
                 }
             }
@@ -357,7 +368,7 @@ class StitchProcessor(
                 effectiveSplit = totalLength
             }
 
-            intervals.add(Triple(currentPos, effectiveSplit, needsReview))
+            intervals.add(SliceIntervalSpec(currentPos, effectiveSplit, needsReview, reviewReason))
             currentPos = effectiveSplit
         }
 
