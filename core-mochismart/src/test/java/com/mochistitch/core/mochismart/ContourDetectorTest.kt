@@ -93,4 +93,26 @@ class ContourDetectorTest {
 
         assertFalse(result.needsManualReview)
     }
+
+    @Test
+    fun testFindSafeSplitPointAutoAdjustsWithMaxSearchDeviationFactor() {
+        val totalLength = 2000
+        val candidate = 1000
+        val tolerance = 50
+        // Speech balloon covers candidate region 950 to 1050
+        val boundingBoxes = listOf(BoundingBox(0, 950, 400, 1050, BoundingBoxType.PROTECTED_BALLOON))
+
+        val result = ContourDetector.findSafeSplitPoint(
+            totalLength = totalLength,
+            candidate = candidate,
+            tolerance = tolerance,
+            isVertical = true,
+            boundingBoxes = boundingBoxes,
+            maxSearchDeviationFactor = 0.2f
+        )
+
+        // Must actively shift cut point outside [950..1050] to safe gutter
+        assertTrue(result.splitPosition <= 949 || result.splitPosition >= 1051)
+        assertFalse(result.needsManualReview)
+    }
 }
