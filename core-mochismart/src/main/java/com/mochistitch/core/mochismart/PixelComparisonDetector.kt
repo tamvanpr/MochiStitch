@@ -5,14 +5,6 @@ import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.min
 
-data class BoundingBox(
-    val left: Int,
-    val top: Int,
-    val right: Int,
-    val bottom: Int,
-    val isProtected: Boolean = true
-)
-
 object PixelComparisonDetector {
 
     /**
@@ -188,6 +180,7 @@ object PixelComparisonDetector {
         }
 
         val protectedBoxes = protectedBoundingBoxes.filter { it.isProtected }
+        val rowBuffer = IntArray(bitmap.width)
 
         fun isRowProtected(y: Int): Boolean {
             return protectedBoxes.any { box ->
@@ -197,10 +190,8 @@ object PixelComparisonDetector {
 
         fun isRowClean(y: Int): Boolean {
             if (isRowProtected(y)) return false
-            return canSliceRow(bitmap, y, sensitivity, margins, rowBuffer = rowBuffer)
+            return canSliceRow(bitmap, y, sensitivity, margins, rowPixels = rowBuffer)
         }
-
-        val rowBuffer = IntArray(bitmap.width)
         val maxOffsetSteps = max((idealTargetY - minY) / effectiveStep, (maxY - idealTargetY) / effectiveStep) + 1
 
         // 1. Bi-directional search radiating outwards from idealTargetY
