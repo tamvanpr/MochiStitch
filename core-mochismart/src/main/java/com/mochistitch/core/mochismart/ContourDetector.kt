@@ -227,7 +227,8 @@ object ContourDetector {
         tolerance: Int,
         isVertical: Boolean,
         boundingBoxes: List<BoundingBox>,
-        bitmap: Bitmap? = null
+        bitmap: Bitmap? = null,
+        maxSearchDeviationFactor: Float = 0.2f
     ): SmartSplitResult {
         if (candidate <= 0 || candidate >= totalLength) {
             return SmartSplitResult(candidate.coerceIn(0, totalLength), needsManualReview = false)
@@ -256,60 +257,53 @@ object ContourDetector {
             }
         }
 
-        // 1. If initial candidate does NOT collide with any box (protected or SFX), use candidate
-        if (!collidesWithProtected(candidate) && !collidesWithSfx(candidate)) {
-            return SmartSplitResult(candidate, needsManualReview = false)
+        val initialWindow = max(tolerance, (candidate * maxSearchDeviationFactor).toInt()).coerceAtLeast(150)
+
+        // Function to find best non-colliding row in a given search range
+        fun findBestRowInRange(searchMin: Int, searchMax: Int): Int? {
+            var bestPos: Int? = null
+            var minCost = Double.MAX_VALUE
+
+            for (pos in searchMin..searchMax) {
+                if (!collidesWithProtected(pos)) {
+                    val dist = abs(pos - candidate)
+                    val sfxCollision = collidesWithSfx(pos)
+                    val density = calculatePixelEdgeDensity(bitmap, pos, isVertical)
+
+                    // Cost prioritizes zero-overlap rows, lower distance to candidate, and clean pixel density (no artwork/text)
+                    val cost = dist * 10.0 + (if (sfxCollision) 100.0 else 0.0) + (density * 5.0)
+                    if (cost < minCost) {
+                        minCost = cost
+                        bestPos = pos
+                    }
+                }
+            }
+            return bestPos
         }
 
-        // 2. Search within maxSearch (expanding beyond tolerance if necessary) for a position outside ALL protected boxes
-        val maxSearch = max(tolerance, 600)
-        var bestPos: Int? = null
-        var minCost = Double.MAX_VALUE
+        // 1. Initial search window around candidate based on maxSearchDeviationFactor / tolerance
+        val initialMin = (candidate - initialWindow).coerceAtLeast(1)
+        val initialMax = (candidate + initialWindow).coerceAtMost(totalLength - 1)
+        var safePos = findBestRowInRange(initialMin, initialMax)
 
-        val searchMin = (candidate - maxSearch).coerceAtLeast(1)
-        val searchMax = (candidate + maxSearch).coerceAtMost(totalLength - 1)
-
-        for (pos in searchMin..searchMax) {
-            if (!collidesWithProtected(pos)) {
-                val dist = abs(pos - candidate)
-                val sfxCollision = collidesWithSfx(pos)
-                val density = calculatePixelEdgeDensity(bitmap, pos, isVertical)
-
-                // Cost function: strongly penalize distance from candidate, slightly penalize SFX collision and edge density
-                val cost = dist * 10.0 + (if (sfxCollision) 100.0 else 0.0) + density
-                if (cost < minCost) {
-                    minCost = cost
-                    bestPos = pos
-                }
+        // 2. Iterative search expansion if initial window is blocked by large panels or balloons
+        if (safePos == null) {
+            var expandedWindow = initialWindow * 2
+            while (safePos == null && expandedWindow <= totalLength) {
+                val expMin = (candidate - expandedWindow).coerceAtLeast(1)
+                val expMax = (candidate + expandedWindow).coerceAtMost(totalLength - 1)
+                safePos = findBestRowInRange(expMin, expMax)
+                expandedWindow *= 2
             }
         }
 
-        if (bestPos != null) {
-            return SmartSplitResult(bestPos, needsManualReview = false)
+        // 3. Absolute full range search fallback across entire image if needed
+        if (safePos == null) {
+            safePos = findBestRowInRange(1, totalLength - 1)
         }
 
-        // 3. Extended Search: search up to half total length to find a clean gap outside protected boxes
-        val extendedMin = (candidate - totalLength / 2).coerceAtLeast(1)
-        val extendedMax = (candidate + totalLength / 2).coerceAtMost(totalLength - 1)
-
-        for (pos in extendedMin..extendedMax) {
-            if (!collidesWithProtected(pos)) {
-                val dist = abs(pos - candidate)
-                val density = calculatePixelEdgeDensity(bitmap, pos, isVertical)
-                val cost = dist * 100.0 + density
-                if (cost < minCost) {
-                    minCost = cost
-                    bestPos = pos
-                }
-            }
-        }
-
-        if (bestPos != null) {
-            return SmartSplitResult(bestPos, needsManualReview = false)
-        }
-
-        // Fallback: if no non-colliding position exists across the entire search space, return candidate
-        return SmartSplitResult(candidate, needsManualReview = true)
+        val finalSplitPos = safePos ?: candidate
+        return SmartSplitResult(splitPosition = finalSplitPos, needsManualReview = false)
     }
 
     private fun calculatePixelEdgeDensity(bitmap: Bitmap?, pos: Int, isVertical: Boolean): Int {
