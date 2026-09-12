@@ -76,6 +76,16 @@ fun MainScreen(
 
     var backPressedTime by remember { mutableStateOf(0L) }
 
+    if (uiState.currentScreen == Screen.SETTINGS) {
+        SettingsScreenContent(
+            settings = uiState.settings,
+            onSettingsChanged = { viewModel.saveSettings(it) },
+            onBackClicked = { viewModel.navigateTo(Screen.MAIN) },
+            modifier = modifier
+        )
+        return
+    }
+
     if (uiState.currentScreen == Screen.PREVIEW) {
         PreviewScreenContent(
             slices = uiState.previewSlices,
