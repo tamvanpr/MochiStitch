@@ -66,6 +66,60 @@ object PixelComparisonDetector {
     }
 
     /**
+     * Calculates the pixel luminance variance / noise score for a horizontal row.
+     * Lower scores indicate cleaner gutter areas with fewer details or edges.
+     */
+    fun calculateRowPixelVariance(
+        bitmap: Bitmap,
+        rowIndex: Int,
+        margins: Int = 0,
+        rowPixels: IntArray? = null
+    ): Float {
+        val width = bitmap.width
+        val height = bitmap.height
+
+        if (rowIndex < 0 || rowIndex >= height || width <= 0) {
+            return Float.MAX_VALUE
+        }
+
+        val leftMargin = margins.coerceIn(0, max(0, (width - 2) / 2))
+        val rightMargin = margins.coerceIn(0, max(0, (width - 2) / 2))
+        val startX = leftMargin
+        val endX = width - rightMargin
+
+        if (endX - startX < 2) {
+            return 0.0f
+        }
+
+        val pixels = if (rowPixels != null && rowPixels.size >= width) {
+            rowPixels
+        } else {
+            IntArray(width)
+        }
+
+        bitmap.getPixels(pixels, 0, width, 0, rowIndex, width, 1)
+
+        var totalDiff = 0.0f
+        var maxDiff = 0.0f
+        var prevGray = calculateLuminance(pixels[startX])
+
+        for (x in (startX + 1) until endX) {
+            val currGray = calculateLuminance(pixels[x])
+            val diff = abs(currGray - prevGray)
+            totalDiff += diff
+            if (diff > maxDiff) {
+                maxDiff = diff
+            }
+            prevGray = currGray
+        }
+
+        val count = endX - startX - 1
+        val avgDiff = if (count > 0) totalDiff / count else 0.0f
+
+        return maxDiff * 10.0f + avgDiff
+    }
+
+    /**
      * Calculates luminance using standard ITU-R BT.601 formula:
      * Gray = 0.299 * R + 0.587 * G + 0.114 * B
      */
@@ -85,15 +139,18 @@ object PixelComparisonDetector {
     }
 
     /**
-     * Finds the nearest safe Y coordinate to cut, searching upwards within a search window from the target distance.
+     * Finds the nearest safe Y coordinate to cut, searching bi-directionally (both upwards and downwards)
+     * radiating outwards from idealTargetY within a search window ±(maxDistance * maxSearchDeviationFactor).
+     *
+     * If no 100% clean row is found within the window, selects the candidate row with minimal pixel variance.
      *
      * @param bitmap Source bitmap
      * @param startY Starting Y position of the current slice
      * @param maxDistance Maximum target slice height
      * @param sensitivity Sensitivity factor between 0.0f and 1.0f
      * @param margins Number of pixels from left/right edges to ignore
-     * @param step Step size in pixels for checking rows and fallback alignment
-     * @param maxSearchDeviationFactor Search window factor (e.g. 0.2f means search up to 20% of maxDistance upwards)
+     * @param step Step size in pixels for checking rows
+     * @param maxSearchDeviationFactor Search window factor (e.g. 0.2f means search ±20% of maxDistance)
      * @return Ideal safe Y coordinate for cutting
      */
     fun findSafeCutPoint(
@@ -114,20 +171,67 @@ object PixelComparisonDetector {
 
         val effectiveStep = max(1, step)
         val searchWindow = (maxDistance * maxSearchDeviationFactor.coerceIn(0.0f, 1.0f)).toInt()
-        val minSearchY = max(startY + 1, idealTargetY - searchWindow)
+        val minY = max(startY + 1, idealTargetY - searchWindow)
+        val maxY = min(totalHeight - 1, idealTargetY + searchWindow)
 
-        val rowBuffer = IntArray(bitmap.width)
-
-        var candidateY = idealTargetY
-        while (candidateY >= minSearchY) {
-            if (canSliceRow(bitmap, candidateY, sensitivity, margins, rowBuffer)) {
-                return candidateY
-            }
-            candidateY -= effectiveStep
+        if (minY > maxY) {
+            return idealTargetY.coerceIn(startY + 1, totalHeight)
         }
 
-        // Fallback: If no safe row was found within the window, align idealTargetY to divisor step
-        val aligned = alignToDivisor(idealTargetY, effectiveStep)
-        return aligned.coerceIn(startY + 1, totalHeight)
+        val rowBuffer = IntArray(bitmap.width)
+        val maxOffsetSteps = max((idealTargetY - minY) / effectiveStep, (maxY - idealTargetY) / effectiveStep) + 1
+
+        // 1. Bi-directional search radiating outwards from idealTargetY
+        for (k in 0..maxOffsetSteps) {
+            val delta = k * effectiveStep
+
+            // Prefer shorter slice (upwards) first when distances tie
+            val upY = idealTargetY - delta
+            if (upY in minY..maxY) {
+                if (canSliceRow(bitmap, upY, sensitivity, margins, rowBuffer)) {
+                    return upY
+                }
+            }
+
+            if (delta > 0) {
+                val downY = idealTargetY + delta
+                if (downY in minY..maxY) {
+                    if (canSliceRow(bitmap, downY, sensitivity, margins, rowBuffer)) {
+                        return downY
+                    }
+                }
+            }
+        }
+
+        // 2. Fallback: Select candidate row within [minY..maxY] with minimal pixel variance/density
+        var bestY = idealTargetY
+        var minVariance = Float.MAX_VALUE
+        var minDistance = Int.MAX_VALUE
+
+        var y = minY
+        while (y <= maxY) {
+            val variance = calculateRowPixelVariance(bitmap, y, margins, rowBuffer)
+            val dist = abs(y - idealTargetY)
+
+            val isBetter = when {
+                variance < minVariance - 0.001f -> true
+                abs(variance - minVariance) <= 0.001f -> {
+                    if (dist < minDistance) true
+                    else if (dist == minDistance && y < bestY) true
+                    else false
+                }
+                else -> false
+            }
+
+            if (isBetter) {
+                minVariance = variance
+                minDistance = dist
+                bestY = y
+            }
+
+            y += effectiveStep
+        }
+
+        return bestY.coerceIn(startY + 1, totalHeight)
     }
 }
