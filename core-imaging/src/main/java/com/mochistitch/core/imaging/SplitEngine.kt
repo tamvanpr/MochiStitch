@@ -5,6 +5,7 @@ import android.graphics.Canvas
 import android.graphics.Paint
 import android.graphics.Rect
 import com.mochistitch.core.mochismart.ContourDetector
+import com.mochistitch.core.mochismart.PixelComparisonDetector
 import com.mochistitch.core.mochismart.SmartSplitResult
 import com.mochistitch.core.settings.DetectionSensitivity
 import com.mochistitch.core.settings.MochiStitchSettings
@@ -49,7 +50,12 @@ object SplitEngine {
         mochiSmartEnabled: Boolean = false,
         tolerance: Int = 150,
         sensitivity: DetectionSensitivity = DetectionSensitivity.MEDIUM,
-        maxPagesPerFile: Int = 1
+        maxPagesPerFile: Int = 1,
+        autoGutterDetectionEnabled: Boolean = true,
+        pixelComparisonSensitivity: Float = 0.5f,
+        pixelComparisonMargins: Int = 0,
+        pixelComparisonStep: Int = 5,
+        pixelComparisonMaxDeviationFactor: Float = 0.2f
     ): List<SlicedPiece> {
         if (splitMode == SplitMode.NO_LIMIT || (splitMode != SplitMode.MAX_PIXELS && splitMode != SplitMode.PAGES_PER_FILE) || maxPixelLength <= 0) {
             return listOf(SlicedPiece(copyBitmap(source), needsManualReview = false))
@@ -85,8 +91,21 @@ object SplitEngine {
                     break
                 }
 
-                val candidate = currentY + maxPixelLength
-                val clampedCandidate = min(candidate, totalLength - 1)
+                var candidateCutY = currentY + maxPixelLength
+
+                if (autoGutterDetectionEnabled) {
+                    candidateCutY = PixelComparisonDetector.findSafeCutPoint(
+                        bitmap = source,
+                        startY = currentY,
+                        maxDistance = maxPixelLength,
+                        sensitivity = pixelComparisonSensitivity,
+                        margins = pixelComparisonMargins,
+                        step = pixelComparisonStep,
+                        maxSearchDeviationFactor = pixelComparisonMaxDeviationFactor
+                    )
+                }
+
+                val clampedCandidate = min(candidateCutY, totalLength - 1)
                 val (splitPos, needsReview) = if (mochiSmartEnabled) {
                     ContourDetector.findSafeSplitPoint(
                         totalLength = totalLength,
@@ -195,7 +214,12 @@ object SplitEngine {
             mochiSmartEnabled = settings.mochiSmartEnabled,
             tolerance = settings.mochiSmartTolerance,
             sensitivity = settings.mochiSmartSensitivity,
-            maxPagesPerFile = settings.maxPagesPerFile
+            maxPagesPerFile = settings.maxPagesPerFile,
+            autoGutterDetectionEnabled = settings.autoGutterDetectionEnabled,
+            pixelComparisonSensitivity = settings.pixelComparisonSensitivity,
+            pixelComparisonMargins = settings.pixelComparisonMargins,
+            pixelComparisonStep = settings.pixelComparisonStep,
+            pixelComparisonMaxDeviationFactor = settings.pixelComparisonMaxDeviationFactor
         )
     }
 
@@ -210,7 +234,8 @@ object SplitEngine {
             splitMode = splitMode,
             maxPixelLength = maxPixelLength,
             direction = direction,
-            mochiSmartEnabled = false
+            mochiSmartEnabled = false,
+            autoGutterDetectionEnabled = false
         ).map { it.bitmap }
     }
 }

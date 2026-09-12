@@ -5,6 +5,7 @@ import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.floatPreferencesKey
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
@@ -37,6 +38,11 @@ class MochiStitchSettingsRepository(private val dataStore: DataStore<Preferences
         val KEY_MOCHI_SMART_TOLERANCE = intPreferencesKey("mochi_smart_tolerance")
         val KEY_MOCHI_SMART_SENSITIVITY = stringPreferencesKey("mochi_smart_sensitivity")
         val KEY_SHOW_MANUAL_REVIEW_MARKERS = booleanPreferencesKey("show_manual_review_markers")
+        val KEY_AUTO_GUTTER_DETECTION_ENABLED = booleanPreferencesKey("auto_gutter_detection_enabled")
+        val KEY_PIXEL_COMPARISON_SENSITIVITY = floatPreferencesKey("pixel_comparison_sensitivity")
+        val KEY_PIXEL_COMPARISON_MARGINS = intPreferencesKey("pixel_comparison_margins")
+        val KEY_PIXEL_COMPARISON_STEP = intPreferencesKey("pixel_comparison_step")
+        val KEY_PIXEL_COMPARISON_MAX_DEVIATION_FACTOR = floatPreferencesKey("pixel_comparison_max_deviation_factor")
     }
 
     val settingsFlow: Flow<MochiStitchSettings> = dataStore.data.map { prefs ->
@@ -59,7 +65,12 @@ class MochiStitchSettingsRepository(private val dataStore: DataStore<Preferences
             mochiSmartEnabled = prefs[KEY_MOCHI_SMART_ENABLED] ?: true,
             mochiSmartTolerance = prefs[KEY_MOCHI_SMART_TOLERANCE] ?: 150,
             mochiSmartSensitivity = prefs[KEY_MOCHI_SMART_SENSITIVITY]?.let { runCatching { DetectionSensitivity.valueOf(it) }.getOrNull() } ?: DetectionSensitivity.MEDIUM,
-            showManualReviewMarkers = prefs[KEY_SHOW_MANUAL_REVIEW_MARKERS] ?: true
+            showManualReviewMarkers = prefs[KEY_SHOW_MANUAL_REVIEW_MARKERS] ?: true,
+            autoGutterDetectionEnabled = prefs[KEY_AUTO_GUTTER_DETECTION_ENABLED] ?: true,
+            pixelComparisonSensitivity = prefs[KEY_PIXEL_COMPARISON_SENSITIVITY] ?: 0.5f,
+            pixelComparisonMargins = prefs[KEY_PIXEL_COMPARISON_MARGINS] ?: 0,
+            pixelComparisonStep = prefs[KEY_PIXEL_COMPARISON_STEP] ?: 5,
+            pixelComparisonMaxDeviationFactor = prefs[KEY_PIXEL_COMPARISON_MAX_DEVIATION_FACTOR] ?: 0.2f
         )
     }
 
@@ -84,6 +95,11 @@ class MochiStitchSettingsRepository(private val dataStore: DataStore<Preferences
             prefs[KEY_MOCHI_SMART_TOLERANCE] = settings.mochiSmartTolerance
             prefs[KEY_MOCHI_SMART_SENSITIVITY] = settings.mochiSmartSensitivity.name
             prefs[KEY_SHOW_MANUAL_REVIEW_MARKERS] = settings.showManualReviewMarkers
+            prefs[KEY_AUTO_GUTTER_DETECTION_ENABLED] = settings.autoGutterDetectionEnabled
+            prefs[KEY_PIXEL_COMPARISON_SENSITIVITY] = settings.pixelComparisonSensitivity
+            prefs[KEY_PIXEL_COMPARISON_MARGINS] = settings.pixelComparisonMargins
+            prefs[KEY_PIXEL_COMPARISON_STEP] = settings.pixelComparisonStep
+            prefs[KEY_PIXEL_COMPARISON_MAX_DEVIATION_FACTOR] = settings.pixelComparisonMaxDeviationFactor
         }
     }
 }
