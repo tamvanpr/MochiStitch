@@ -337,7 +337,7 @@ class MainViewModel : ViewModel() {
         }
     }
 
-    fun exportResult(outputUri: Uri, context: Context) {
+    fun exportResult(context: Context) {
         val previewSlices = _uiState.value.previewSlices
         if (previewSlices.isEmpty()) {
             _uiState.update { it.copy(errorMessage = "Tidak ada pratinjau yang tersedia untuk diekspor.") }
@@ -362,12 +362,24 @@ class MainViewModel : ViewModel() {
                 val totalH = previewSlices.sumOf { it.height }
                 val manualReviewCount = previewSlices.count { it.needsManualReview }
 
+                val picturesDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES)
+                val mochistitchDir = File(picturesDir, "MochiStitch")
+                if (!mochistitchDir.exists()) mochistitchDir.mkdirs()
+
+                val dateFormat = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault())
+                val timestamp = dateFormat.format(Date())
+
                 if (settings.wrapperFormat == OutputWrapperFormat.CBZ || settings.wrapperFormat == OutputWrapperFormat.ZIP) {
-                    val outputStream = context.contentResolver.openOutputStream(outputUri)
-                    if (outputStream == null) {
-                        _uiState.update { it.copy(isProcessing = false, errorMessage = "Tidak dapat membuka lokasi penyimpanan output.") }
-                        return@launch
+                    val archiveName = getExportDefaultFilename().let { name ->
+                        val extension = when (settings.wrapperFormat) {
+                            OutputWrapperFormat.CBZ -> ".cbz"
+                            OutputWrapperFormat.ZIP -> ".zip"
+                            else -> ".zip"
+                        }
+                        val baseName = name.substringBeforeLast(".")
+                        "$baseName_$timestamp$extension"
                     }
+                    val outputArchiveFile = File(mochistitchDir, archiveName)
 
                     val archiveEntries = previewSlices.mapIndexed { index, slice ->
                         _uiState.update { it.copy(progress = (index + 1).toFloat() / previewSlices.size.toFloat()) }
@@ -380,8 +392,7 @@ class MainViewModel : ViewModel() {
                             }
                         }
                     }
-                    bytesWritten = ArchiveHandler.createArchive(archiveEntries, outputStream)
-                    outputStream.close()
+                    bytesWritten = ArchiveHandler.createArchive(archiveEntries, outputArchiveFile.outputStream())
 
                     _uiState.update {
                         it.copy(
@@ -389,18 +400,13 @@ class MainViewModel : ViewModel() {
                             exportResult = ExportResultInfo(
                                 width = maxW, height = totalH, bytesWritten = bytesWritten,
                                 outputCount = previewSlices.size,
-                                itemsNeedingManualReview = manualReviewCount
+                                itemsNeedingManualReview = manualReviewCount,
+                                exportFolderPath = outputArchiveFile.absolutePath
                             ),
-                            resultOutputUri = outputUri
+                            resultOutputUri = null
                         )
                     }
                 } else {
-                    val downloadsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES)
-                    val mochistitchDir = File(downloadsDir, "MochiStitch")
-                    if (!mochistitchDir.exists()) mochistitchDir.mkdirs()
-
-                    val dateFormat = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault())
-                    val timestamp = dateFormat.format(Date())
                     val outputFolder = File(mochistitchDir, "export_$timestamp")
                     if (!outputFolder.exists()) outputFolder.mkdirs()
 
@@ -441,70 +447,7 @@ class MainViewModel : ViewModel() {
     }
 
     fun exportLooseFiles(context: Context) {
-        val previewSlices = _uiState.value.previewSlices
-        if (previewSlices.isEmpty()) {
-            _uiState.update { it.copy(errorMessage = "Tidak ada pratinjau yang tersedia untuk diekspor.") }
-            return
-        }
-
-        _uiState.update {
-            it.copy(
-                isProcessing = true,
-                processingStep = ProcessingStage.EXPORTING.stepName,
-                progress = 0f,
-                errorMessage = null
-            )
-        }
-
-        viewModelScope.launch {
-            try {
-                var bytesWritten = 0L
-                val maxW = previewSlices.maxOfOrNull { it.width } ?: 0
-                val totalH = previewSlices.sumOf { it.height }
-                val manualReviewCount = previewSlices.count { it.needsManualReview }
-
-                val downloadsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES)
-                val mochistitchDir = File(downloadsDir, "MochiStitch")
-                if (!mochistitchDir.exists()) mochistitchDir.mkdirs()
-
-                val dateFormat = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault())
-                val timestamp = dateFormat.format(Date())
-                val outputFolder = File(mochistitchDir, "export_$timestamp")
-                if (!outputFolder.exists()) outputFolder.mkdirs()
-
-                previewSlices.forEachIndexed { index, slice ->
-                    _uiState.update { it.copy(progress = (index + 1).toFloat() / previewSlices.size.toFloat()) }
-                    val destFile = File(outputFolder, slice.filename)
-                    val srcFile = slice.cacheFilePath?.let { File(it) }
-                    if (srcFile != null && srcFile.exists()) {
-                        srcFile.copyTo(destFile, overwrite = true)
-                        bytesWritten += destFile.length()
-                    }
-                }
-
-                _uiState.update {
-                    it.copy(
-                        isProcessing = false,
-                        exportResult = ExportResultInfo(
-                            width = maxW, height = totalH, bytesWritten = bytesWritten,
-                            outputCount = previewSlices.size,
-                            itemsNeedingManualReview = manualReviewCount,
-                            exportFolderPath = outputFolder.absolutePath
-                        )
-                    )
-                }
-            } catch (e: Throwable) {
-                _uiState.update {
-                    it.copy(
-                        isProcessing = false,
-                        errorMessage = run {
-                            val isOom = e is OutOfMemoryError || (e.message?.contains("OutOfMemory", ignoreCase = true) == true)
-                            if (isOom) "Gagal menyimpan: Memori tidak cukup untuk memproses gambar." else e.message ?: "Gagal melakukan proses ekspor."
-                        }
-                    )
-                }
-            }
-        }
+        exportResult(context)
     }
 
     fun dismissResult() {

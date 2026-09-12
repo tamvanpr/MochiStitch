@@ -4,6 +4,7 @@ import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Paint
 import android.graphics.Rect
+import com.mochistitch.core.mochismart.BoundingBox
 import com.mochistitch.core.mochismart.ContourDetector
 import com.mochistitch.core.mochismart.PixelComparisonDetector
 import com.mochistitch.core.mochismart.SmartSplitResult
@@ -79,6 +80,8 @@ object SplitEngine {
             emptyList()
         }
 
+        val protectedBoundingBoxes = boundingBoxes.filter { it.isProtected }
+
         val slices = mutableListOf<SlicedPiece>()
 
         if (isVertical) {
@@ -101,7 +104,8 @@ object SplitEngine {
                         sensitivity = pixelComparisonSensitivity,
                         margins = pixelComparisonMargins,
                         step = pixelComparisonStep,
-                        maxSearchDeviationFactor = pixelComparisonMaxDeviationFactor
+                        maxSearchDeviationFactor = pixelComparisonMaxDeviationFactor,
+                        protectedBoundingBoxes = protectedBoundingBoxes
                     )
                 }
 

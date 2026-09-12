@@ -76,34 +76,11 @@ fun MainScreen(
 
     var backPressedTime by remember { mutableStateOf(0L) }
 
-    val createDocumentLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.CreateDocument(viewModel.getExportMimeType())
-    ) { uri ->
-        if (uri != null) {
-            viewModel.exportResult(uri, context)
-        }
-    }
-
-    if (uiState.currentScreen == Screen.SETTINGS) {
-        SettingsScreenContent(
-            settings = uiState.settings,
-            onSettingsChanged = { viewModel.saveSettings(it) },
-            onBackClicked = { viewModel.navigateTo(Screen.MAIN) },
-            modifier = modifier
-        )
-        return
-    }
-
     if (uiState.currentScreen == Screen.PREVIEW) {
         PreviewScreenContent(
             slices = uiState.previewSlices,
             onExportClicked = {
-                if (uiState.settings.wrapperFormat == OutputWrapperFormat.LOOSE_FILES) {
-                    viewModel.exportLooseFiles(context)
-                } else {
-                    val filename = viewModel.getExportDefaultFilename()
-                    createDocumentLauncher.launch(filename)
-                }
+                viewModel.exportResult(context)
             },
             onBackClicked = {
                 viewModel.clearPreviewSlices()

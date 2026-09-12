@@ -5,6 +5,14 @@ import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.min
 
+data class BoundingBox(
+    val left: Int,
+    val top: Int,
+    val right: Int,
+    val bottom: Int,
+    val isProtected: Boolean = true
+)
+
 object PixelComparisonDetector {
 
     /**
@@ -160,7 +168,8 @@ object PixelComparisonDetector {
         sensitivity: Float = 0.5f,
         margins: Int = 0,
         step: Int = 5,
-        maxSearchDeviationFactor: Float = 0.2f
+        maxSearchDeviationFactor: Float = 0.2f,
+        protectedBoundingBoxes: List<BoundingBox> = emptyList()
     ): Int {
         val totalHeight = bitmap.height
         val idealTargetY = min(startY + maxDistance, totalHeight)
@@ -178,6 +187,19 @@ object PixelComparisonDetector {
             return idealTargetY.coerceIn(startY + 1, totalHeight)
         }
 
+        val protectedBoxes = protectedBoundingBoxes.filter { it.isProtected }
+
+        fun isRowProtected(y: Int): Boolean {
+            return protectedBoxes.any { box ->
+                y in box.top..box.bottom
+            }
+        }
+
+        fun isRowClean(y: Int): Boolean {
+            if (isRowProtected(y)) return false
+            return canSliceRow(bitmap, y, sensitivity, margins, rowBuffer = rowBuffer)
+        }
+
         val rowBuffer = IntArray(bitmap.width)
         val maxOffsetSteps = max((idealTargetY - minY) / effectiveStep, (maxY - idealTargetY) / effectiveStep) + 1
 
@@ -188,7 +210,7 @@ object PixelComparisonDetector {
             // Prefer shorter slice (upwards) first when distances tie
             val upY = idealTargetY - delta
             if (upY in minY..maxY) {
-                if (canSliceRow(bitmap, upY, sensitivity, margins, rowBuffer)) {
+                if (isRowClean(upY)) {
                     return upY
                 }
             }
@@ -196,21 +218,28 @@ object PixelComparisonDetector {
             if (delta > 0) {
                 val downY = idealTargetY + delta
                 if (downY in minY..maxY) {
-                    if (canSliceRow(bitmap, downY, sensitivity, margins, rowBuffer)) {
+                    if (isRowClean(downY)) {
                         return downY
                     }
                 }
             }
         }
 
-        // 2. Fallback: Select candidate row within [minY..maxY] with minimal pixel variance/density
+        // 2. Fallback: Select candidate row within [minY..maxY] with minimal pixel variance/density,
+        //    strictly avoiding protected rows.
         var bestY = idealTargetY
         var minVariance = Float.MAX_VALUE
         var minDistance = Int.MAX_VALUE
+        var bestIsProtected = true
 
         var y = minY
         while (y <= maxY) {
-            val variance = calculateRowPixelVariance(bitmap, y, margins, rowBuffer)
+            val isProtected = isRowProtected(y)
+            val variance = if (isProtected) {
+                Float.MAX_VALUE
+            } else {
+                calculateRowPixelVariance(bitmap, y, margins, rowBuffer)
+            }
             val dist = abs(y - idealTargetY)
 
             val isBetter = when {
@@ -227,9 +256,14 @@ object PixelComparisonDetector {
                 minVariance = variance
                 minDistance = dist
                 bestY = y
+                bestIsProtected = isProtected
             }
 
             y += effectiveStep
+        }
+
+        if (bestIsProtected) {
+            return idealTargetY.coerceIn(startY + 1, totalHeight)
         }
 
         return bestY.coerceIn(startY + 1, totalHeight)
