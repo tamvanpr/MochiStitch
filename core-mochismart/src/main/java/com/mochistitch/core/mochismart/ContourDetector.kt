@@ -15,8 +15,21 @@ import kotlin.math.max
 import kotlin.math.min
 
 enum class BoundingBoxType {
-    PROTECTED_BALLOON,  // Speech balloons, dialogue boxes, system windows, monologue boxes, skill text, monologue lines
-    SFX                 // Background sound effect graphics
+    /**
+     * Readable text and dialogue elements that MUST be protected from splitting.
+     * Includes:
+     * 1. Speech balloons (round/oval, with or without tails).
+     * 2. Sharp-cornered dialogue boxes & system windows (system notifications, status boxes, skill windows).
+     * 3. Monologue & caption boxes (usually at top/bottom/corner with solid background and border).
+     * 4. Uncontained readable text (standalone thoughts, styled narration lines without a container box).
+     */
+    PROTECTED_BALLOON,
+
+    /**
+     * Decorative sound effect graphics (SFX) embedded in artwork.
+     * Allowed to be split during image slicing.
+     */
+    SFX
 }
 
 data class BoundingBox(
@@ -173,7 +186,9 @@ object ContourDetector {
                         contour2f.release()
                         approx2f.release()
 
-                        val isSfx = aspectRatio > 6.0 || (solidity < 0.20 && verticesCount > 10)
+                        // Square system boxes and monologue frames have high aspect ratio but high solidity (>= 0.70).
+                        // SFX graphics typically have low solidity (< 0.70) with high aspect ratio or irregular outlines.
+                        val isSfx = (aspectRatio > 6.0 && solidity < 0.70) || (solidity < 0.20 && verticesCount > 10)
                         val boxType = if (isSfx) BoundingBoxType.SFX else BoundingBoxType.PROTECTED_BALLOON
 
                         boundingBoxes.add(
@@ -269,7 +284,7 @@ object ContourDetector {
             }
         }
 
-        return boundingBoxes
+        return mergeUncontainedTextLines(boundingBoxes)
     }
 
     /**
@@ -493,5 +508,64 @@ object ContourDetector {
             needsManualReview = true,
             reviewReason = "Dipotong paksa di tepi balon / balon raksasa"
         )
+    }
+
+    /**
+     * Groups vertically adjacent uncontained text lines into consolidated protected bounding boxes.
+     * Uses an adaptive vertical distance threshold relative to detected line height (1.8x line height)
+     * while preserving distinct solid container boxes and speech balloons.
+     */
+    fun mergeUncontainedTextLines(boxes: List<BoundingBox>): List<BoundingBox> {
+        if (boxes.isEmpty()) return emptyList()
+
+        val protectedBoxes = boxes.filter { it.isProtected }.sortedBy { it.top }
+        val sfxBoxes = boxes.filter { !it.isProtected }
+
+        if (protectedBoxes.isEmpty()) return boxes
+
+        val mergedProtected = mutableListOf<BoundingBox>()
+        val visited = BooleanArray(protectedBoxes.size)
+
+        for (i in protectedBoxes.indices) {
+            if (visited[i]) continue
+            visited[i] = true
+
+            var current = protectedBoxes[i]
+            var mergedInPass: Boolean
+
+            do {
+                mergedInPass = false
+                for (j in protectedBoxes.indices) {
+                    if (visited[j]) continue
+                    val next = protectedBoxes[j]
+
+                    val xOverlap = maxOf(0, minOf(current.right, next.right) - maxOf(current.left, next.left))
+                    val minWidth = minOf(current.right - current.left, next.right - next.left)
+                    val hasHorizontalOverlap = xOverlap >= (0.25 * minWidth).toInt() || xOverlap >= 12
+
+                    if (hasHorizontalOverlap) {
+                        val verticalGap = maxOf(0, maxOf(current.top, next.top) - minOf(current.bottom, next.bottom))
+                        val lineH = minOf(current.bottom - current.top, next.bottom - next.top)
+                        val maxAllowedGap = (1.8 * lineH).toInt().coerceAtLeast(10)
+
+                        if (verticalGap <= maxAllowedGap) {
+                            current = BoundingBox(
+                                left = minOf(current.left, next.left),
+                                top = minOf(current.top, next.top),
+                                right = maxOf(current.right, next.right),
+                                bottom = maxOf(current.bottom, next.bottom),
+                                type = BoundingBoxType.PROTECTED_BALLOON
+                            )
+                            visited[j] = true
+                            mergedInPass = true
+                        }
+                    }
+                }
+            } while (mergedInPass)
+
+            mergedProtected.add(current)
+        }
+
+        return mergedProtected + sfxBoxes
     }
 }
