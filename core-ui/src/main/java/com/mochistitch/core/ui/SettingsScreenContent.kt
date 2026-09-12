@@ -645,7 +645,7 @@ private fun AdvancedSettingsCard(
                     Text("Jumlah Digit Indeks", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Spacer(modifier = Modifier.height(6.dp))
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        (1..5).forEach { digits ->
+                        for (digits in 1..5) {
                             FilterChip(
                                 selected = settings.indexPaddingDigits == digits,
                                 onClick = { onSettingsChanged(settings.copy(indexPaddingDigits = digits)) },
