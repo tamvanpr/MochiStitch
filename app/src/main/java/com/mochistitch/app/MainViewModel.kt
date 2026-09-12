@@ -377,7 +377,7 @@ class MainViewModel : ViewModel() {
                             else -> ".zip"
                         }
                         val baseName = name.substringBeforeLast(".")
-                        "$baseName_$timestamp$extension"
+                        "${baseName}_$timestamp$extension"
                     }
                     val outputArchiveFile = File(mochistitchDir, archiveName)
 
