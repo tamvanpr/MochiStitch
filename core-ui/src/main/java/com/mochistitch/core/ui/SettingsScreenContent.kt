@@ -2,7 +2,7 @@ package com.mochistitch.core.ui
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -21,24 +22,23 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.ElevatedCard
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.layout.size
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material3.Surface
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
@@ -111,8 +111,10 @@ fun SettingsScreenContent(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            // ── 1. Format Hasil ──────────────────────────────────────────
-            SectionCard(title = "Format Gambar Output") {
+            // ── 1. Output ──────────────────────────────────────────────
+            SectionCard(title = "Output / Ekspor") {
+                SettingSectionLabel("Format Berkas Gambar")
+                Spacer(modifier = Modifier.height(4.dp))
                 FlowRow(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
@@ -189,8 +191,10 @@ fun SettingsScreenContent(
                 }
             }
 
-            // ── 2. Mode Pemotongan ────────────────────────────────────────
-            SectionCard(title = "Pengaturan Pemotongan") {
+            // ── 2. Pemotongan (Split) ──────────────────────────────────
+            SectionCard(title = "Pemotongan (Split)") {
+                SettingSectionLabel("Mode Pemotongan")
+                Spacer(modifier = Modifier.height(4.dp))
                 FlowRow(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
@@ -228,13 +232,12 @@ fun SettingsScreenContent(
                             }
                         },
                         label = { Text("Tinggi Maksimal Piksel per Potongan") },
-                        supportingText = { Text("Rentang: 1.000 – 20.000 px") },
+                        supportingText = { Text("Mencegah potongan terlalu panjang. Rentang: 1.000 – 20.000 px") },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true,
                         shape = RoundedCornerShape(10.dp)
                     )
-
                 }
 
                 if (settings.splitMode == SplitMode.PAGES_PER_FILE) {
@@ -261,83 +264,137 @@ fun SettingsScreenContent(
                         singleLine = true,
                         shape = RoundedCornerShape(10.dp)
                     )
-                    Spacer(modifier = Modifier.height(10.dp))
-                    Text(
-                        text = "Saat Ini: ${settings.maxPagesPerFile} halaman",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
                 }
             }
 
-            // ── 3. Tata Letak Utama ────────────────────────────────────────
-            SectionCard(title = "Tata Letak & Arah Baca") {
-                SettingSectionLabel("Arah Baca / Penggabungan")
-                Spacer(modifier = Modifier.height(8.dp))
-                FlowRow(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
+            // ── 3. Mochi Smart (Deteksi Otomatis) ─────────────────────
+            SectionCard(title = "Mochi Smart (Deteksi Otomatis)") {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    ReadingDirection.entries.forEach { dir ->
-                        val label = when (dir) {
-                            ReadingDirection.VERTICAL -> "Vertikal (Webtoon)"
-                            ReadingDirection.LTR -> "Kiri ke Kanan (LTR)"
-                            ReadingDirection.RTL -> "Kanan ke Kiri (RTL)"
-                        }
-                        MochiChoiceChip(
-                            selected = settings.readingDirection == dir,
-                            onClick = { onSettingsChanged(settings.copy(readingDirection = dir)) },
-                            label = label
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "Aktifkan Mochi Smart AI",
+                            style = MaterialTheme.typography.bodyLarge,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        Text(
+                            text = "Deteksi otomatis balon ucapan, teks monolog, dan SFX agar tidak terpotong di tengah.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
+                    Switch(
+                        checked = settings.mochiSmartEnabled,
+                        onCheckedChange = { onSettingsChanged(settings.copy(mochiSmartEnabled = it)) }
+                    )
                 }
 
-                Spacer(modifier = Modifier.height(16.dp))
-                SettingSectionLabel("Mode Penyesuaian Dimensi")
-                Spacer(modifier = Modifier.height(8.dp))
-                FlowRow(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    AlignmentModeSetting.entries.forEach { mode ->
-                        val label = when (mode) {
-                            AlignmentModeSetting.RESIZE_PROPORTIONAL -> "Sesuaikan Proporsi"
-                            AlignmentModeSetting.CENTER_CROP -> "Potong Tengah"
-                            AlignmentModeSetting.PADDING -> "Tambah Warna Latar"
-                        }
-                        MochiChoiceChip(
-                            selected = settings.alignmentMode == mode,
-                            onClick = { onSettingsChanged(settings.copy(alignmentMode = mode)) },
-                            label = label
-                        )
-                    }
-                }
+                if (settings.mochiSmartEnabled) {
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
 
-                if (settings.alignmentMode == AlignmentModeSetting.PADDING) {
-                    Spacer(modifier = Modifier.height(12.dp))
-                    SettingSectionLabel("Warna Latar Margin")
-                    Spacer(modifier = Modifier.height(8.dp))
+                    SettingSectionLabel("Sensitivitas Deteksi Contour/Balon")
                     FlowRow(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        PaddingColorSetting.entries.forEach { color ->
-                            val label = when (color) {
-                                PaddingColorSetting.WHITE -> "Putih"
-                                PaddingColorSetting.BLACK -> "Hitam"
-                                PaddingColorSetting.TRANSPARENT -> "Transparan"
+                        DetectionSensitivity.entries.forEach { sens ->
+                            val label = when (sens) {
+                                DetectionSensitivity.LOW -> "Rendah"
+                                DetectionSensitivity.MEDIUM -> "Seimbang"
+                                DetectionSensitivity.HIGH -> "Tinggi"
                             }
                             MochiChoiceChip(
-                                selected = settings.paddingColor == color,
-                                onClick = { onSettingsChanged(settings.copy(paddingColor = color)) },
+                                selected = settings.mochiSmartSensitivity == sens,
+                                onClick = { onSettingsChanged(settings.copy(mochiSmartSensitivity = sens)) },
                                 label = label
                             )
                         }
                     }
+
+                    // Tolerance slider + tooltip explanation
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "Toleransi Pergeseran Potongan",
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+                            Text(
+                                text = "${settings.mochiSmartTolerance} px",
+                                style = MaterialTheme.typography.labelLarge,
+                                color = MaterialTheme.colorScheme.primary,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                        Slider(
+                            value = settings.mochiSmartTolerance.toFloat(),
+                            onValueChange = { onSettingsChanged(settings.copy(mochiSmartTolerance = it.roundToInt())) },
+                            valueRange = 50f..500f
+                        )
+                        TooltipBox(
+                            text = "Rentang piksel maksimum di mana pemotong boleh menggeser titik potong dari target demi menemukan celah aman bebas balon kata."
+                        )
+                    }
+
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+
+                    // Allow exceed toggle
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Izinkan Melebihi Batas Potong",
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            Text(
+                                text = "Jika tidak ada celah aman dalam toleransi, perpanjang potongan melewati batas demi menghindari memotong balon kata.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        Switch(
+                            checked = settings.allowExceedOnNoSafeGap,
+                            onCheckedChange = { onSettingsChanged(settings.copy(allowExceedOnNoSafeGap = it)) }
+                        )
+                    }
+
+                    // Prefer shorter toggle
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Utamakan Potongan Lebih Pendek",
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            Text(
+                                text = "Jika ada dua celah aman berjarak sama, pilih yang menghasilkan potongan lebih pendek.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        Switch(
+                            checked = settings.preferShorterOverLonger,
+                            onCheckedChange = { onSettingsChanged(settings.copy(preferShorterOverLonger = it)) }
+                        )
+                    }
                 }
             }
 
-            // ── 4. Pengaturan Lanjutan (collapsible) ────────────────────────
+            // ── 4. Lanjutan ───────────────────────────────────────────
             AdvancedSettingsCard(
                 isExpanded = isAdvancedExpanded,
                 onToggle = { isAdvancedExpanded = !isAdvancedExpanded },
@@ -348,7 +405,33 @@ fun SettingsScreenContent(
     }
 }
 
-// ── Reusable section card ─────────────────────────────────────────────────────
+@Composable
+private fun TooltipBox(text: String) {
+    Surface(
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+        shape = RoundedCornerShape(8.dp),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Row(
+            modifier = Modifier.padding(10.dp),
+            verticalAlignment = Alignment.Top,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Icon(
+                imageVector = Icons.Default.Info,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(16.dp)
+            )
+            Text(
+                text = text,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
+}
+
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun SectionCard(title: String, content: @Composable () -> Unit) {
@@ -361,7 +444,7 @@ private fun SectionCard(title: String, content: @Composable () -> Unit) {
         Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Text(
                 text = title,
-                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
+                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
                 color = MaterialTheme.colorScheme.primary
             )
             content()
@@ -369,8 +452,6 @@ private fun SectionCard(title: String, content: @Composable () -> Unit) {
     }
 }
 
-
-// ── Reusable choice chip component ─────────────────────────────────────────────
 @Composable
 private fun MochiChoiceChip(
     selected: Boolean,
@@ -411,7 +492,6 @@ private fun MochiChoiceChip(
     }
 }
 
-// ── Small section label inside cards ──────────────────────────────────────────
 @Composable
 private fun SettingSectionLabel(text: String) {
     Text(
@@ -422,7 +502,6 @@ private fun SettingSectionLabel(text: String) {
     )
 }
 
-// ── Advanced settings collapsible card ────────────────────────────────────────
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun AdvancedSettingsCard(
@@ -455,7 +534,7 @@ private fun AdvancedSettingsCard(
                 )
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
-                    text = "Pengaturan Tingkat Lanjut",
+                    text = "Pengaturan Lanjutan & Gutter",
                     style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
                     color = MaterialTheme.colorScheme.onSurface
                 )
@@ -474,106 +553,65 @@ private fun AdvancedSettingsCard(
                     .padding(horizontal = 16.dp, vertical = 4.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                // ── MochiSmart ──────────────────────────────────────────
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = "Deteksi Pintar MochiSmart",
-                            style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold),
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                        Switch(
-                            checked = settings.mochiSmartEnabled,
-                            onCheckedChange = { onSettingsChanged(settings.copy(mochiSmartEnabled = it)) }
-                        )
+                // Auto Gutter Detection
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Deteksi Gutter Pixel-Whitespace", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+                        Text("Cari baris pixel paling bersih (variansi rendah) di area celah aman.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
+                    Switch(
+                        checked = settings.autoGutterDetectionEnabled,
+                        onCheckedChange = { onSettingsChanged(settings.copy(autoGutterDetectionEnabled = it)) }
+                    )
+                }
 
-                    if (settings.mochiSmartEnabled) {
-                        var tolTfv by remember { mutableStateOf(TextFieldValue(text = settings.mochiSmartTolerance.toString())) }
-                        LaunchedEffect(settings.mochiSmartTolerance) {
-                            if (tolTfv.text != settings.mochiSmartTolerance.toString()) {
-                                tolTfv = TextFieldValue(text = settings.mochiSmartTolerance.toString(), selection = tolTfv.selection)
-                            }
-                        }
-                        OutlinedTextField(
-                            value = tolTfv,
-                            onValueChange = {
-                                tolTfv = it
-                                val num = it.text.replace("[^0-9]".toRegex(), "").toIntOrNull()
-                                if (num != null) {
-                                    onSettingsChanged(settings.copy(mochiSmartTolerance = num.coerceIn(50, 400)))
-                                }
-                            },
-                            label = { Text("Toleransi Jarak Potong (px)") },
-                            supportingText = { Text("Min 50 · Max 400 px") },
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                            modifier = Modifier.fillMaxWidth(),
-                            singleLine = true,
-                            shape = RoundedCornerShape(10.dp)
+                if (settings.autoGutterDetectionEnabled) {
+                    Column {
+                        Text("Sensitivitas Deteksi Pixel: ${(settings.pixelComparisonSensitivity * 100).toInt()}%", style = MaterialTheme.typography.bodySmall)
+                        Slider(
+                            value = settings.pixelComparisonSensitivity,
+                            onValueChange = { onSettingsChanged(settings.copy(pixelComparisonSensitivity = it)) },
+                            valueRange = 0.1f..1.0f
                         )
-
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text("Sensitivitas Deteksi Teks", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Medium)
-                        Spacer(modifier = Modifier.height(6.dp))
-                        FlowRow(
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            DetectionSensitivity.entries.forEach { sens ->
-                                val label = when (sens) {
-                                    DetectionSensitivity.LOW -> "Rendah"
-                                    DetectionSensitivity.MEDIUM -> "Seimbang"
-                                    DetectionSensitivity.HIGH -> "Tinggi"
-                                }
-                                MochiChoiceChip(
-                                    selected = settings.mochiSmartSensitivity == sens,
-                                    onClick = { onSettingsChanged(settings.copy(mochiSmartSensitivity = sens)) },
-                                    label = label
-                                )
-                            }
-                        }
-
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text("Tampilkan penanda peninjauan", style = MaterialTheme.typography.bodyMedium)
-                            Switch(
-                                checked = settings.showManualReviewMarkers,
-                                onCheckedChange = { onSettingsChanged(settings.copy(showManualReviewMarkers = it)) }
-                            )
-                        }
                     }
                 }
 
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
 
-                // ── Pengemasan ───────────────────────────────────────────
+                // Layout & Reading
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text(
-                        text = "Format Pengemasan Ekspor",
-                        style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold),
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                    FlowRow(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        OutputWrapperFormat.entries.forEach { wrapper ->
-                            val label = when (wrapper) {
-                                OutputWrapperFormat.LOOSE_FILES -> "Berkas Gambar Terpisah"
-                                OutputWrapperFormat.CBZ -> "Arsip CBZ"
-                                OutputWrapperFormat.ZIP -> "Arsip ZIP"
+                    SettingSectionLabel("Arah Baca / Penggabungan")
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        ReadingDirection.entries.forEach { dir ->
+                            val label = when (dir) {
+                                ReadingDirection.VERTICAL -> "Vertikal (Webtoon)"
+                                ReadingDirection.LTR -> "Kiri ke Kanan"
+                                ReadingDirection.RTL -> "Kanan ke Kiri"
                             }
                             MochiChoiceChip(
-                                selected = settings.wrapperFormat == wrapper,
-                                onClick = { onSettingsChanged(settings.copy(wrapperFormat = wrapper)) },
+                                selected = settings.readingDirection == dir,
+                                onClick = { onSettingsChanged(settings.copy(readingDirection = dir)) },
+                                label = label
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(4.dp))
+                    SettingSectionLabel("Mode Penyesuaian Lebar")
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        AlignmentModeSetting.entries.forEach { mode ->
+                            val label = when (mode) {
+                                AlignmentModeSetting.RESIZE_PROPORTIONAL -> "Sesuaikan Proporsi"
+                                AlignmentModeSetting.CENTER_CROP -> "Potong Tengah"
+                                AlignmentModeSetting.PADDING -> "Tambah Margin"
+                            }
+                            MochiChoiceChip(
+                                selected = settings.alignmentMode == mode,
+                                onClick = { onSettingsChanged(settings.copy(alignmentMode = mode)) },
                                 label = label
                             )
                         }
@@ -582,75 +620,20 @@ private fun AdvancedSettingsCard(
 
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
 
-                // ── Penamaan ──────────────────────────────────────────────
+                // Export packaging
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text(
-                        text = "Penamaan Berkas Hasil",
-                        style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold),
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-
-                    var projectTfv by remember { mutableStateOf(TextFieldValue(text = settings.projectName)) }
-                    LaunchedEffect(settings.projectName) {
-                        if (projectTfv.text != settings.projectName) {
-                            projectTfv = TextFieldValue(text = settings.projectName, selection = projectTfv.selection)
-                        }
-                    }
-                    OutlinedTextField(
-                        value = projectTfv,
-                        onValueChange = {
-                            projectTfv = it
-                            onSettingsChanged(settings.copy(projectName = it.text))
-                        },
-                        label = { Text("Nama Proyek / Judul Komik") },
-                        modifier = Modifier.fillMaxWidth(),
-                        singleLine = true,
-                        shape = RoundedCornerShape(10.dp)
-                    )
-
-                    var chapterTfv by remember { mutableStateOf(TextFieldValue(text = settings.chapterName)) }
-                    LaunchedEffect(settings.chapterName) {
-                        if (chapterTfv.text != settings.chapterName) {
-                            chapterTfv = TextFieldValue(text = settings.chapterName, selection = chapterTfv.selection)
-                        }
-                    }
-                    OutlinedTextField(
-                        value = chapterTfv,
-                        onValueChange = {
-                            chapterTfv = it
-                            onSettingsChanged(settings.copy(chapterName = it.text))
-                        },
-                        label = { Text("Bab / Volume") },
-                        modifier = Modifier.fillMaxWidth(),
-                        singleLine = true,
-                        shape = RoundedCornerShape(10.dp)
-                    )
-
-                    var templateTfv by remember { mutableStateOf(TextFieldValue(text = settings.filenameTemplate)) }
-                    LaunchedEffect(settings.filenameTemplate) {
-                        if (templateTfv.text != settings.filenameTemplate) {
-                            templateTfv = TextFieldValue(text = settings.filenameTemplate, selection = templateTfv.selection)
-                        }
-                    }
-                    OutlinedTextField(
-                        value = templateTfv,
-                        onValueChange = {
-                            templateTfv = it
-                            onSettingsChanged(settings.copy(filenameTemplate = it.text))
-                        },
-                        label = { Text("Template Nama Berkas ({project} {chapter} {index})") },
-                        modifier = Modifier.fillMaxWidth(),
-                        singleLine = true,
-                        shape = RoundedCornerShape(10.dp)
-                    )
-                    Text("Jumlah Digit Indeks", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Spacer(modifier = Modifier.height(6.dp))
+                    SettingSectionLabel("Format Pengemasan Ekspor")
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        for (digits in 1..5) {
-                            FilterChip(
-                                selected = settings.indexPaddingDigits == digits,
-                                onClick = { onSettingsChanged(settings.copy(indexPaddingDigits = digits)) },
-                                label = { Text("$digits digit (contoh: ${"1".padStart(digits, '0')})") }
+                        OutputWrapperFormat.entries.forEach { wrapper ->
+                            val label = when (wrapper) {
+                                OutputWrapperFormat.LOOSE_FILES -> "Berkas Terpisah"
+                                OutputWrapperFormat.CBZ -> "Arsip CBZ"
+                                OutputWrapperFormat.ZIP -> "Arsip ZIP"
+                            }
+                            MochiChoiceChip(
+                                selected = settings.wrapperFormat == wrapper,
+                                onClick = { onSettingsChanged(settings.copy(wrapperFormat = wrapper)) },
+                                label = label
                             )
                         }
                     }

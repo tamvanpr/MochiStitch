@@ -43,6 +43,8 @@ class MochiStitchSettingsRepository(private val dataStore: DataStore<Preferences
         val KEY_PIXEL_COMPARISON_MARGINS = intPreferencesKey("pixel_comparison_margins")
         val KEY_PIXEL_COMPARISON_STEP = intPreferencesKey("pixel_comparison_step")
         val KEY_PIXEL_COMPARISON_MAX_DEVIATION_FACTOR = floatPreferencesKey("pixel_comparison_max_deviation_factor")
+        val KEY_ALLOW_EXCEED_ON_NO_SAFE_GAP = booleanPreferencesKey("allow_exceed_on_no_safe_gap")
+        val KEY_PREFER_SHORTER_OVER_LONGER = booleanPreferencesKey("prefer_shorter_over_longer")
     }
 
     val settingsFlow: Flow<MochiStitchSettings> = dataStore.data.map { prefs ->
@@ -70,7 +72,9 @@ class MochiStitchSettingsRepository(private val dataStore: DataStore<Preferences
             pixelComparisonSensitivity = prefs[KEY_PIXEL_COMPARISON_SENSITIVITY] ?: 0.5f,
             pixelComparisonMargins = prefs[KEY_PIXEL_COMPARISON_MARGINS] ?: 0,
             pixelComparisonStep = prefs[KEY_PIXEL_COMPARISON_STEP] ?: 5,
-            pixelComparisonMaxDeviationFactor = prefs[KEY_PIXEL_COMPARISON_MAX_DEVIATION_FACTOR] ?: 0.2f
+            pixelComparisonMaxDeviationFactor = prefs[KEY_PIXEL_COMPARISON_MAX_DEVIATION_FACTOR] ?: 0.2f,
+            allowExceedOnNoSafeGap = prefs[KEY_ALLOW_EXCEED_ON_NO_SAFE_GAP] ?: true,
+            preferShorterOverLonger = prefs[KEY_PREFER_SHORTER_OVER_LONGER] ?: true
         )
     }
 
@@ -100,6 +104,8 @@ class MochiStitchSettingsRepository(private val dataStore: DataStore<Preferences
             prefs[KEY_PIXEL_COMPARISON_MARGINS] = settings.pixelComparisonMargins
             prefs[KEY_PIXEL_COMPARISON_STEP] = settings.pixelComparisonStep
             prefs[KEY_PIXEL_COMPARISON_MAX_DEVIATION_FACTOR] = settings.pixelComparisonMaxDeviationFactor
+            prefs[KEY_ALLOW_EXCEED_ON_NO_SAFE_GAP] = settings.allowExceedOnNoSafeGap
+            prefs[KEY_PREFER_SHORTER_OVER_LONGER] = settings.preferShorterOverLonger
         }
     }
 }

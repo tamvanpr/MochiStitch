@@ -312,6 +312,7 @@ class MainViewModel : ViewModel() {
                         width = item.width,
                         height = item.height,
                         needsManualReview = item.needsManualReview,
+                        reviewReason = item.reviewReason,
                         bytesWritten = item.estimatedBytes
                     )
                 }
