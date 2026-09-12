@@ -191,4 +191,51 @@ class ContourDetectorTest {
         assertTrue(result.splitPosition <= 799)
         assertFalse(result.needsManualReview)
     }
+
+    @Test
+    fun testMergeUncontainedTextLinesGroupsCloseVerticalLines() {
+        // Line 1: top=100, bottom=120 (height=20)
+        // Line 2: top=135, bottom=155 (height=20, vertical gap=15 <= 1.8 * 20 = 36)
+        // Line 3: top=170, bottom=190 (height=20, vertical gap=15 <= 36)
+        val boxes = listOf(
+            BoundingBox(left = 50, top = 100, right = 300, bottom = 120, type = BoundingBoxType.PROTECTED_BALLOON),
+            BoundingBox(left = 45, top = 135, right = 310, bottom = 155, type = BoundingBoxType.PROTECTED_BALLOON),
+            BoundingBox(left = 50, top = 170, right = 295, bottom = 190, type = BoundingBoxType.PROTECTED_BALLOON)
+        )
+
+        val merged = ContourDetector.mergeUncontainedTextLines(boxes)
+
+        assertEquals(1, merged.size)
+        val consolidated = merged.first()
+        assertEquals(45, consolidated.left)
+        assertEquals(100, consolidated.top)
+        assertEquals(310, consolidated.right)
+        assertEquals(190, consolidated.bottom)
+        assertEquals(BoundingBoxType.PROTECTED_BALLOON, consolidated.type)
+    }
+
+    @Test
+    fun testMergeUncontainedTextLinesPreservesDistantDialogBoxes() {
+        // Dialogue box 1: top=100, bottom=250 (height=150)
+        // Dialogue box 2: top=500, bottom=650 (height=150, gap=250 > 1.8 * 150 = 270... actually gap=250 <= 270)
+        // Dialogue box 2 at top=600, bottom=750 (height=150, vertical gap=350 > 1.8 * 150 = 270)
+        val box1 = BoundingBox(left = 50, top = 100, right = 300, bottom = 250, type = BoundingBoxType.PROTECTED_BALLOON)
+        val box2 = BoundingBox(left = 50, top = 600, right = 300, bottom = 750, type = BoundingBoxType.PROTECTED_BALLOON)
+
+        val merged = ContourDetector.mergeUncontainedTextLines(listOf(box1, box2))
+
+        assertEquals(2, merged.size)
+    }
+
+    @Test
+    fun testMergeUncontainedTextLinesPreservesSfxUnmerged() {
+        val textLine = BoundingBox(left = 50, top = 100, right = 300, bottom = 120, type = BoundingBoxType.PROTECTED_BALLOON)
+        val sfxBox = BoundingBox(left = 60, top = 125, right = 280, bottom = 180, type = BoundingBoxType.SFX)
+
+        val merged = ContourDetector.mergeUncontainedTextLines(listOf(textLine, sfxBox))
+
+        assertEquals(2, merged.size)
+        assertTrue(merged.any { it.type == BoundingBoxType.SFX })
+        assertTrue(merged.any { it.type == BoundingBoxType.PROTECTED_BALLOON })
+    }
 }
