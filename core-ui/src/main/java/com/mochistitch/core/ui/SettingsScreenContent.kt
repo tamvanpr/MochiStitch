@@ -53,6 +53,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import com.mochistitch.core.settings.AlignmentModeSetting
 import com.mochistitch.core.settings.DetectionSensitivity
@@ -209,15 +210,17 @@ fun SettingsScreenContent(
 
                 if (settings.splitMode == SplitMode.MAX_PIXELS) {
                     Spacer(modifier = Modifier.height(14.dp))
-                    var pixelText by remember { mutableStateOf(settings.maxPixelLength.toString()) }
+                    var pixelTfv by remember { mutableStateOf(TextFieldValue(text = settings.maxPixelLength.toString())) }
                     LaunchedEffect(settings.maxPixelLength) {
-                        pixelText = settings.maxPixelLength.toString()
+                        if (pixelTfv.text != settings.maxPixelLength.toString()) {
+                            pixelTfv = TextFieldValue(text = settings.maxPixelLength.toString(), selection = pixelTfv.selection)
+                        }
                     }
                     OutlinedTextField(
-                        value = pixelText,
+                        value = pixelTfv,
                         onValueChange = {
-                            pixelText = it
-                            val cleaned = it.replace("[^0-9]".toRegex(), "")
+                            pixelTfv = it
+                            val cleaned = it.text.replace("[^0-9]".toRegex(), "")
                             val value = cleaned.toIntOrNull()
                             if (value != null && value >= 1000) {
                                 onSettingsChanged(settings.copy(maxPixelLength = value.coerceIn(1000, 20000)))
@@ -247,15 +250,17 @@ fun SettingsScreenContent(
 
                 if (settings.splitMode == SplitMode.PAGES_PER_FILE) {
                     Spacer(modifier = Modifier.height(14.dp))
-                    var pagesText by remember { mutableStateOf(settings.maxPagesPerFile.toString()) }
+                    var pagesTfv by remember { mutableStateOf(TextFieldValue(text = settings.maxPagesPerFile.toString())) }
                     LaunchedEffect(settings.maxPagesPerFile) {
-                        pagesText = settings.maxPagesPerFile.toString()
+                        if (pagesTfv.text != settings.maxPagesPerFile.toString()) {
+                            pagesTfv = TextFieldValue(text = settings.maxPagesPerFile.toString(), selection = pagesTfv.selection)
+                        }
                     }
                     OutlinedTextField(
-                        value = pagesText,
+                        value = pagesTfv,
                         onValueChange = {
-                            pagesText = it
-                            val cleaned = it.replace("[^0-9]".toRegex(), "")
+                            pagesTfv = it
+                            val cleaned = it.text.replace("[^0-9]".toRegex(), "")
                             val value = cleaned.toIntOrNull() ?: 0
                             val clamped = value.coerceIn(1, 100)
                             onSettingsChanged(settings.copy(maxPagesPerFile = clamped))
@@ -583,25 +588,55 @@ private fun AdvancedSettingsCard(
                         style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold),
                         color = MaterialTheme.colorScheme.onSurface
                     )
+
+                    var projectTfv by remember { mutableStateOf(TextFieldValue(text = settings.projectName)) }
+                    LaunchedEffect(settings.projectName) {
+                        if (projectTfv.text != settings.projectName) {
+                            projectTfv = TextFieldValue(text = settings.projectName, selection = projectTfv.selection)
+                        }
+                    }
                     OutlinedTextField(
-                        value = settings.projectName,
-                        onValueChange = { onSettingsChanged(settings.copy(projectName = it)) },
+                        value = projectTfv,
+                        onValueChange = {
+                            projectTfv = it
+                            onSettingsChanged(settings.copy(projectName = it.text))
+                        },
                         label = { Text("Nama Proyek / Judul Komik") },
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true,
                         shape = RoundedCornerShape(10.dp)
                     )
+
+                    var chapterTfv by remember { mutableStateOf(TextFieldValue(text = settings.chapterName)) }
+                    LaunchedEffect(settings.chapterName) {
+                        if (chapterTfv.text != settings.chapterName) {
+                            chapterTfv = TextFieldValue(text = settings.chapterName, selection = chapterTfv.selection)
+                        }
+                    }
                     OutlinedTextField(
-                        value = settings.chapterName,
-                        onValueChange = { onSettingsChanged(settings.copy(chapterName = it)) },
+                        value = chapterTfv,
+                        onValueChange = {
+                            chapterTfv = it
+                            onSettingsChanged(settings.copy(chapterName = it.text))
+                        },
                         label = { Text("Bab / Volume") },
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true,
                         shape = RoundedCornerShape(10.dp)
                     )
+
+                    var templateTfv by remember { mutableStateOf(TextFieldValue(text = settings.filenameTemplate)) }
+                    LaunchedEffect(settings.filenameTemplate) {
+                        if (templateTfv.text != settings.filenameTemplate) {
+                            templateTfv = TextFieldValue(text = settings.filenameTemplate, selection = templateTfv.selection)
+                        }
+                    }
                     OutlinedTextField(
-                        value = settings.filenameTemplate,
-                        onValueChange = { onSettingsChanged(settings.copy(filenameTemplate = it)) },
+                        value = templateTfv,
+                        onValueChange = {
+                            templateTfv = it
+                            onSettingsChanged(settings.copy(filenameTemplate = it.text))
+                        },
                         label = { Text("Template Nama Berkas ({project} {chapter} {index})") },
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true,
