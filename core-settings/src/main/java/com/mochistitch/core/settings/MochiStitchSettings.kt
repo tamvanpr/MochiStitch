@@ -47,5 +47,10 @@ data class MochiStitchSettings(
     val mochiSmartEnabled: Boolean = true,
     val mochiSmartTolerance: Int = 150,
     val mochiSmartSensitivity: DetectionSensitivity = DetectionSensitivity.MEDIUM,
-    val showManualReviewMarkers: Boolean = true
+    val showManualReviewMarkers: Boolean = true,
+    val autoGutterDetectionEnabled: Boolean = true,
+    val pixelComparisonSensitivity: Float = 0.5f,
+    val pixelComparisonMargins: Int = 0,
+    val pixelComparisonStep: Int = 5,
+    val pixelComparisonMaxDeviationFactor: Float = 0.2f
 )

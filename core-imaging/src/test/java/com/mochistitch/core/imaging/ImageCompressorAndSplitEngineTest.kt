@@ -3,10 +3,8 @@ package com.mochistitch.core.imaging
 import com.mochistitch.core.settings.DetectionSensitivity
 import com.mochistitch.core.settings.MochiStitchSettings
 import com.mochistitch.core.settings.OutputFormat
-import com.mochistitch.core.settings.ReadingDirection
-import com.mochistitch.core.settings.SplitMode
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class ImageCompressorAndSplitEngineTest {
@@ -52,5 +50,10 @@ class ImageCompressorAndSplitEngineTest {
         assertEquals(150, settings.mochiSmartTolerance)
         assertEquals(DetectionSensitivity.MEDIUM, settings.mochiSmartSensitivity)
         assertEquals(true, settings.showManualReviewMarkers)
+        assertTrue(settings.autoGutterDetectionEnabled)
+        assertEquals(0.5f, settings.pixelComparisonSensitivity, 0.001f)
+        assertEquals(0, settings.pixelComparisonMargins)
+        assertEquals(5, settings.pixelComparisonStep)
+        assertEquals(0.2f, settings.pixelComparisonMaxDeviationFactor, 0.001f)
     }
 }
