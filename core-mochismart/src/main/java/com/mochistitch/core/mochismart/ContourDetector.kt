@@ -270,8 +270,11 @@ object ContourDetector {
                     val sfxCollision = collidesWithSfx(pos)
                     val density = calculatePixelEdgeDensity(bitmap, pos, isVertical)
 
-                    // Cost prioritizes zero-overlap rows, lower distance to candidate, and clean pixel density (no artwork/text)
-                    val cost = dist * 10.0 + (if (sfxCollision) 100.0 else 0.0) + (density * 5.0)
+                    // Cost prioritizes zero-overlap rows, lower distance to candidate, favoring shorter slices (pos <= candidate), and clean pixel density
+                    val cost = dist * 10.0 + 
+                               (if (pos > candidate) 30.0 else 0.0) + 
+                               (if (sfxCollision) 100.0 else 0.0) + 
+                               (density * 5.0)
                     if (cost < minCost) {
                         minCost = cost
                         bestPos = pos

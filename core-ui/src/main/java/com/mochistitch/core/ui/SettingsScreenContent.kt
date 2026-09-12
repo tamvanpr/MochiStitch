@@ -233,19 +233,7 @@ fun SettingsScreenContent(
                         singleLine = true,
                         shape = RoundedCornerShape(10.dp)
                     )
-                    Spacer(modifier = Modifier.height(10.dp))
-                    Text(
-                        text = "Saat Ini: ${settings.maxPixelLength} px",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Slider(
-                        value = settings.maxPixelLength.toFloat(),
-                        onValueChange = { onSettingsChanged(settings.copy(maxPixelLength = it.roundToInt())) },
-                        valueRange = 1000f..20000f,
-                        steps = 19,
-                        modifier = Modifier.fillMaxWidth()
-                    )
+
                 }
 
                 if (settings.splitMode == SplitMode.PAGES_PER_FILE) {
@@ -504,15 +492,27 @@ private fun AdvancedSettingsCard(
                     }
 
                     if (settings.mochiSmartEnabled) {
-                        Text(
-                            text = "Toleransi Jarak Potong: ${settings.mochiSmartTolerance} px",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        Slider(
-                            value = settings.mochiSmartTolerance.toFloat(),
-                            onValueChange = { onSettingsChanged(settings.copy(mochiSmartTolerance = it.roundToInt())) },
-                            valueRange = 50f..400f
+                        var tolTfv by remember { mutableStateOf(TextFieldValue(text = settings.mochiSmartTolerance.toString())) }
+                        LaunchedEffect(settings.mochiSmartTolerance) {
+                            if (tolTfv.text != settings.mochiSmartTolerance.toString()) {
+                                tolTfv = TextFieldValue(text = settings.mochiSmartTolerance.toString(), selection = tolTfv.selection)
+                            }
+                        }
+                        OutlinedTextField(
+                            value = tolTfv,
+                            onValueChange = {
+                                tolTfv = it
+                                val num = it.text.replace("[^0-9]".toRegex(), "").toIntOrNull()
+                                if (num != null) {
+                                    onSettingsChanged(settings.copy(mochiSmartTolerance = num.coerceIn(50, 400)))
+                                }
+                            },
+                            label = { Text("Toleransi Jarak Potong (px)") },
+                            supportingText = { Text("Min 50 · Max 400 px") },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            modifier = Modifier.fillMaxWidth(),
+                            singleLine = true,
+                            shape = RoundedCornerShape(10.dp)
                         )
 
                         Spacer(modifier = Modifier.height(4.dp))
@@ -642,17 +642,17 @@ private fun AdvancedSettingsCard(
                         singleLine = true,
                         shape = RoundedCornerShape(10.dp)
                     )
-                    Text(
-                        text = "Jumlah digit indeks: ${settings.indexPaddingDigits} digit (contoh: ${"1".padStart(settings.indexPaddingDigits, '0')})",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Slider(
-                        value = settings.indexPaddingDigits.toFloat(),
-                        onValueChange = { onSettingsChanged(settings.copy(indexPaddingDigits = it.roundToInt())) },
-                        valueRange = 1f..5f,
-                        steps = 3
-                    )
+                    Text("Jumlah Digit Indeks", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Spacer(modifier = Modifier.height(6.dp))
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        (1..5).forEach { digits ->
+                            FilterChip(
+                                selected = settings.indexPaddingDigits == digits,
+                                onClick = { onSettingsChanged(settings.copy(indexPaddingDigits = digits)) },
+                                label = { Text("$digits digit (contoh: ${"1".padStart(digits, '0')})") }
+                            )
+                        }
+                    }
                 }
             }
         }
