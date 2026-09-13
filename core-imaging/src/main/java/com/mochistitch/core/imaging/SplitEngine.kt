@@ -144,9 +144,18 @@ object SplitEngine {
                     }
                 } else null
 
+                val adaptiveToleranceY = ContourDetector.calculateAdaptiveTolerance(
+                    baseTolerance = tolerance,
+                    canvasWidth = source.width,
+                    canvasLength = totalLength,
+                    protectedBoxes = boundingBoxes.filter { it.isProtected },
+                    isVertical = true,
+                    targetPos = targetCutY
+                )
+
                 val snappedBoundaryY = PageBoundarySnapping.findSnapBoundary(
                     targetPos = targetCutY,
-                    tolerance = tolerance,
+                    tolerance = adaptiveToleranceY,
                     pageBoundaries = pageBoundaries,
                     protectedBoxes = boundingBoxes.filter { it.isProtected },
                     isVertical = true
@@ -159,11 +168,12 @@ object SplitEngine {
                         totalLength = totalLength,
                         currentPos = currentY,
                         targetPos = targetCutY,
-                        tolerance = tolerance,
+                        tolerance = adaptiveToleranceY,
                         safeGaps = safeGaps,
                         allowExceedOnNoSafeGap = allowExceedOnNoSafeGap,
                         preferShorterOverLonger = preferShorterOverLonger,
                         sfxBoxes = boundingBoxes.filter { !it.isProtected },
+                        protectedBoxes = boundingBoxes.filter { it.isProtected },
                         isVertical = true,
                         selectBestInGap = selectBestInGap
                     )
@@ -189,9 +199,18 @@ object SplitEngine {
 
                 val targetCutX = currentX + maxPixelLength
 
+                val adaptiveToleranceX = ContourDetector.calculateAdaptiveTolerance(
+                    baseTolerance = tolerance,
+                    canvasWidth = source.height,
+                    canvasLength = totalLength,
+                    protectedBoxes = boundingBoxes.filter { it.isProtected },
+                    isVertical = false,
+                    targetPos = targetCutX
+                )
+
                 val snappedBoundaryX = PageBoundarySnapping.findSnapBoundary(
                     targetPos = targetCutX,
-                    tolerance = tolerance,
+                    tolerance = adaptiveToleranceX,
                     pageBoundaries = pageBoundaries,
                     protectedBoxes = boundingBoxes.filter { it.isProtected },
                     isVertical = false
@@ -204,11 +223,12 @@ object SplitEngine {
                         totalLength = totalLength,
                         currentPos = currentX,
                         targetPos = targetCutX,
-                        tolerance = tolerance,
+                        tolerance = adaptiveToleranceX,
                         safeGaps = safeGaps,
                         allowExceedOnNoSafeGap = allowExceedOnNoSafeGap,
                         preferShorterOverLonger = preferShorterOverLonger,
                         sfxBoxes = boundingBoxes.filter { !it.isProtected },
+                        protectedBoxes = boundingBoxes.filter { it.isProtected },
                         isVertical = false,
                         selectBestInGap = null
                     )

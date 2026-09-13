@@ -56,6 +56,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
+import com.mochistitch.core.imaging.FilenameFormatter
 import com.mochistitch.core.settings.AlignmentModeSetting
 import com.mochistitch.core.settings.DetectionSensitivity
 import com.mochistitch.core.settings.MochiStitchSettings

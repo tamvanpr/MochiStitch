@@ -367,6 +367,27 @@ object ContourDetector {
         return safeGaps
     }
 
+
+    fun calculateAdaptiveTolerance(
+        baseTolerance: Int,
+        canvasWidth: Int,
+        canvasLength: Int,
+        protectedBoxes: List<BoundingBox>,
+        isVertical: Boolean,
+        targetPos: Int,
+        marginFactor: Float = 0.5f
+    ): Int {
+        val effectiveBaseTolerance = baseTolerance * (canvasWidth / 1000f)
+        val nearestProtectedBox = protectedBoxes.filter { it.isProtected }.minByOrNull { box ->
+            val center = if (isVertical) (box.top + box.bottom) / 2 else (box.left + box.right) / 2
+            abs(center - targetPos)
+        }
+        val nearestHeight = nearestProtectedBox?.let { it.bottom - it.top }?.toFloat() ?: 0f
+        val expandedTolerance = max(effectiveBaseTolerance, nearestHeight * marginFactor)
+        val maxExpandedTolerance = min(effectiveBaseTolerance * 3f, canvasLength * 0.20f)
+        return min(expandedTolerance, maxExpandedTolerance).toInt().coerceAtLeast(1)
+    }
+
     fun findSafeSplitPoint(
         totalLength: Int,
         candidate: Int,
@@ -376,7 +397,15 @@ object ContourDetector {
         bitmap: Bitmap? = null,
         maxSearchDeviationFactor: Float = 0.2f
     ): SmartSplitResult {
-        val effectiveTolerance = max(tolerance, (candidate * maxSearchDeviationFactor).toInt()).coerceAtLeast(150)
+        val canvasWidth = bitmap?.width ?: 1000
+        val effectiveTolerance = calculateAdaptiveTolerance(
+            baseTolerance = tolerance,
+            canvasWidth = canvasWidth,
+            canvasLength = totalLength,
+            protectedBoxes = boundingBoxes.filter { it.isProtected },
+            isVertical = isVertical,
+            targetPos = candidate
+        )
         return findSafeSplitPointDetailed(
             totalLength = totalLength,
             currentPos = 0,
@@ -386,6 +415,7 @@ object ContourDetector {
             allowExceedOnNoSafeGap = true,
             preferShorterOverLonger = true,
             sfxBoxes = boundingBoxes.filter { !it.isProtected },
+            protectedBoxes = boundingBoxes.filter { it.isProtected },
             isVertical = isVertical
         )
     }
@@ -399,6 +429,7 @@ object ContourDetector {
         allowExceedOnNoSafeGap: Boolean = true,
         preferShorterOverLonger: Boolean = true,
         sfxBoxes: List<BoundingBox> = emptyList(),
+        protectedBoxes: List<BoundingBox> = emptyList(),
         isVertical: Boolean = true,
         selectBestInGap: ((minPos: Int, maxPos: Int) -> Int)? = null
     ): SmartSplitResult {
@@ -440,7 +471,30 @@ object ContourDetector {
             return bestPos
         }
 
-        // 1. Check for safe gaps overlapping search window [searchMin..searchMax]
+        fun findDistanceToNearestProtectedBoundary(pos: Int): Pair<Int, Int> {
+            val relevantBoxes = protectedBoxes.filter { it.isProtected }
+            if (relevantBoxes.isEmpty()) return Pair(Int.MAX_VALUE, 0)
+
+            val nearestBox = relevantBoxes.minByOrNull { box ->
+                val topOrLeft = if (isVertical) box.top else box.left
+                val bottomOrRight = if (isVertical) box.bottom else box.right
+                if (pos < topOrLeft) topOrLeft - pos
+                else if (pos > bottomOrRight) pos - bottomOrRight
+                else 0
+            } ?: return Pair(Int.MAX_VALUE, 0)
+
+            val topOrLeft = if (isVertical) nearestBox.top else nearestBox.left
+            val bottomOrRight = if (isVertical) nearestBox.bottom else nearestBox.right
+
+            val dist = if (pos < topOrLeft) topOrLeft - pos
+            else if (pos > bottomOrRight) pos - bottomOrRight
+            else 0
+
+            val boxHeight = (nearestBox.bottom - nearestBox.top)
+            return Pair(dist, boxHeight)
+        }
+
+        // 1. Prioritas 1 & Prioritas 2: Check for safe gaps overlapping search window [searchMin..searchMax]
         val gapsInTolerance = safeGaps.mapNotNull { gap ->
             val overlapStart = maxOf(gap.start, searchMin)
             val overlapEnd = minOf(gap.end, searchMax)
@@ -450,42 +504,70 @@ object ContourDetector {
         }
 
         if (gapsInTolerance.isNotEmpty()) {
-            var bestPos = -1
-            var minDistance = Int.MAX_VALUE
+            // Evaluasi Prioritas 1 terlebih dahulu (jarak ke tepi protected box >= minSafeMargin)
+            var p1BestPos = -1
+            var p1MinDist = Int.MAX_VALUE
 
             for (gap in gapsInTolerance) {
-                val pos = getBestPointInRange(gap.start, gap.end)
-                val dist = abs(pos - clampedTarget)
-
-                val isBetter = when {
-                    bestPos == -1 -> true
-                    dist < minDistance -> true
-                    dist == minDistance -> {
-                        if (preferShorterOverLonger && pos <= clampedTarget && bestPos > clampedTarget) true
-                        else false
+                for (pos in gap.start..gap.end) {
+                    val (distToBox, boxHeight) = findDistanceToNearestProtectedBoundary(pos)
+                    val minSafeMargin = boxHeight * 0.1f
+                    if (distToBox >= minSafeMargin) {
+                        val distToTarget = abs(pos - clampedTarget)
+                        if (distToTarget < p1MinDist || (distToTarget == p1MinDist && preferShorterOverLonger && pos <= clampedTarget)) {
+                            p1BestPos = pos
+                            p1MinDist = distToTarget
+                        }
                     }
-                    else -> false
-                }
-
-                if (isBetter) {
-                    bestPos = pos
-                    minDistance = dist
                 }
             }
 
-            return SmartSplitResult(
-                splitPosition = bestPos.coerceIn(currentPos + 1, totalLength - 1),
-                needsManualReview = false,
-                reviewReason = null
-            )
+            if (p1BestPos != -1) {
+                val finalPos = if (selectBestInGap != null) {
+                    // Filter gap that contains p1BestPos
+                    val containingGap = gapsInTolerance.firstOrNull { p1BestPos in it.start..it.end }
+                    if (containingGap != null) {
+                        selectBestInGap(containingGap.start, containingGap.end).coerceIn(containingGap.start, containingGap.end)
+                    } else p1BestPos
+                } else p1BestPos
+
+                val (finalDistToBox, finalBoxHeight) = findDistanceToNearestProtectedBoundary(finalPos)
+                val finalMinMargin = finalBoxHeight * 0.1f
+                val isP1 = finalDistToBox >= finalMinMargin
+
+                return SmartSplitResult(
+                    splitPosition = finalPos.coerceIn(currentPos + 1, totalLength - 1),
+                    needsManualReview = !isP1,
+                    reviewReason = if (!isP1) "Celah aman dekat tepi balon (margin tipis)" else null
+                )
+            }
+
+            // Prioritas 2: Safe gap ada, tapi jarak ke tepi protected box < minSafeMargin (margin tipis)
+            var p2BestPos = -1
+            var p2MinDist = Int.MAX_VALUE
+
+            for (gap in gapsInTolerance) {
+                val pos = getBestPointInRange(gap.start, gap.end)
+                val distToTarget = abs(pos - clampedTarget)
+                if (distToTarget < p2MinDist || (distToTarget == p2MinDist && preferShorterOverLonger && pos <= clampedTarget)) {
+                    p2BestPos = pos
+                    p2MinDist = distToTarget
+                }
+            }
+
+            if (p2BestPos != -1) {
+                return SmartSplitResult(
+                    splitPosition = p2BestPos.coerceIn(currentPos + 1, totalLength - 1),
+                    needsManualReview = true,
+                    reviewReason = "Celah aman dekat tepi balon (margin tipis)"
+                )
+            }
         }
 
-        // 2. Check for safe gaps ANYWHERE before searchMin or after searchMax
-        // a. Find nearest safe gap BEFORE searchMin
+        // 3. Prioritas 3 (fallback TERAKHIR): safe gaps di luar search window (exceed tolerance / potong paksa)
         val gapBefore = safeGaps.lastOrNull { it.start <= searchMin - 1 && it.end >= currentPos + 1 }
         val distBefore = gapBefore?.let { abs(searchMin - minOf(it.end, searchMin - 1)) } ?: Int.MAX_VALUE
 
-        // b. Find nearest safe gap AFTER searchMax
         val gapAfter = if (allowExceedOnNoSafeGap) safeGaps.firstOrNull { it.end >= searchMax + 1 } else null
         val distAfter = gapAfter?.let { abs(maxOf(it.start, searchMax + 1) - searchMax) } ?: Int.MAX_VALUE
 
@@ -503,11 +585,10 @@ object ContourDetector {
                 val gapEnd = minOf(gapBefore.end, searchMin - 1)
                 if (gapStart <= gapEnd) {
                     val pos = getBestPointInRange(gapStart, gapEnd)
-                    val isExceeded = pos > clampedTarget
                     return SmartSplitResult(
                         splitPosition = pos.coerceIn(currentPos + 1, totalLength - 1),
-                        needsManualReview = isExceeded,
-                        reviewReason = if (isExceeded) "Melebihi batas potong demi menghindari balon" else null
+                        needsManualReview = true,
+                        reviewReason = "Melebihi batas potong demi menghindari balon"
                     )
                 }
             } else if (!chooseBefore && gapAfter != null) {
@@ -524,7 +605,7 @@ object ContourDetector {
             }
         }
 
-        // 3. Forced split at box edge if giant balloon spans whole remaining range
+        // Forced split at box edge or clampedTarget
         val edgePos = safeGaps.lastOrNull { it.start <= clampedTarget }?.end ?: clampedTarget
         val forcedPos = if (edgePos > currentPos) edgePos else clampedTarget
         return SmartSplitResult(
@@ -534,11 +615,6 @@ object ContourDetector {
         )
     }
 
-    /**
-     * Groups vertically adjacent uncontained text lines into consolidated protected bounding boxes.
-     * Uses an adaptive vertical distance threshold relative to detected line height (1.8x line height)
-     * while preserving distinct solid container boxes and speech balloons.
-     */
     fun mergeUncontainedTextLines(boxes: List<BoundingBox>): List<BoundingBox> {
         if (boxes.isEmpty()) return emptyList()
 
