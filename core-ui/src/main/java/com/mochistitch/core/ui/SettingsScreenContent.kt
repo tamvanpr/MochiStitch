@@ -192,6 +192,12 @@ fun SettingsScreenContent(
                 }
             }
 
+            // ── Penamaan File ──────────────────────────────────────────
+            NamingSettingsCard(
+                settings = settings,
+                onSettingsChanged = onSettingsChanged
+            )
+
             // ── 2. Pemotongan (Split) ──────────────────────────────────
             SectionCard(title = "Pemotongan (Split)") {
                 SettingSectionLabel("Mode Pemotongan")
@@ -641,5 +647,57 @@ private fun AdvancedSettingsCard(
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun NamingSettingsCard(
+    settings: MochiStitchSettings,
+    onSettingsChanged: (MochiStitchSettings) -> Unit
+) {
+    SectionCard(title = "Penamaan File") {
+        OutlinedTextField(
+            value = settings.projectName,
+            onValueChange = { onSettingsChanged(settings.copy(projectName = it)) },
+            label = { Text("Nama Proyek") },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(10.dp)
+        )
+
+        OutlinedTextField(
+            value = settings.chapterName,
+            onValueChange = { onSettingsChanged(settings.copy(chapterName = it)) },
+            label = { Text("Nama/Nomor Chapter") },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(10.dp)
+        )
+
+        OutlinedTextField(
+            value = settings.filenameTemplate,
+            onValueChange = { onSettingsChanged(settings.copy(filenameTemplate = it)) },
+            label = { Text("Template Nama Berkas") },
+            supportingText = { Text("Gunakan {project}, {chapter}, {index}") },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(10.dp)
+        )
+
+        val previewName = FilenameFormatter.formatFilename(
+            template = settings.filenameTemplate,
+            project = settings.projectName,
+            chapter = settings.chapterName,
+            index = 1,
+            indexPaddingDigits = settings.indexPaddingDigits,
+            format = settings.outputFormat
+        ) + ".${settings.outputFormat.name.lowercase()}"
+
+        Text(
+            text = "Pratinjau: $previewName",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.primary,
+            fontWeight = FontWeight.Medium
+        )
     }
 }

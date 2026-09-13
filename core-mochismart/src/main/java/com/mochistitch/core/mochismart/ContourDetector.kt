@@ -368,6 +368,19 @@ object ContourDetector {
     }
 
 
+        fun calculateEffectiveTolerance(
+        baseTolerance: Int,
+        canvasWidth: Int,
+        canvasLength: Int,
+        nearestProtectedBoxHeight: Int,
+        marginFactor: Float = 1.0f
+    ): Int {
+        val effectiveBaseTolerance = (baseTolerance * (canvasWidth / 1000f)).toInt()
+        val expandedTolerance = maxOf(effectiveBaseTolerance, (nearestProtectedBoxHeight * marginFactor).toInt())
+        val maxExpandedTolerance = minOf(effectiveBaseTolerance * 3, (canvasLength * 0.20f).toInt())
+        return expandedTolerance.coerceAtMost(maxExpandedTolerance)
+    }
+
     fun calculateAdaptiveTolerance(
         baseTolerance: Int,
         canvasWidth: Int,
@@ -375,17 +388,20 @@ object ContourDetector {
         protectedBoxes: List<BoundingBox>,
         isVertical: Boolean,
         targetPos: Int,
-        marginFactor: Float = 0.5f
+        marginFactor: Float = 1.0f
     ): Int {
-        val effectiveBaseTolerance = baseTolerance * (canvasWidth / 1000f)
         val nearestProtectedBox = protectedBoxes.filter { it.isProtected }.minByOrNull { box ->
             val center = if (isVertical) (box.top + box.bottom) / 2 else (box.left + box.right) / 2
             abs(center - targetPos)
         }
-        val nearestHeight = nearestProtectedBox?.let { it.bottom - it.top }?.toFloat() ?: 0f
-        val expandedTolerance = max(effectiveBaseTolerance, nearestHeight * marginFactor)
-        val maxExpandedTolerance = min(effectiveBaseTolerance * 3f, canvasLength * 0.20f)
-        return min(expandedTolerance, maxExpandedTolerance).toInt().coerceAtLeast(1)
+        val nearestHeight = nearestProtectedBox?.let { if (isVertical) it.bottom - it.top else it.right - it.left } ?: 0
+        return calculateEffectiveTolerance(
+            baseTolerance = baseTolerance,
+            canvasWidth = canvasWidth,
+            canvasLength = canvasLength,
+            nearestProtectedBoxHeight = nearestHeight,
+            marginFactor = marginFactor
+        )
     }
 
     fun findSafeSplitPoint(

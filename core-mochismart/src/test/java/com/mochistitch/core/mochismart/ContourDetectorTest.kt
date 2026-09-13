@@ -70,7 +70,7 @@ class ContourDetectorTest {
 
         assertTrue("Split position ${result.splitPosition} must be outside balloon [800..1200]",
             result.splitPosition <= 799 || result.splitPosition >= 1201)
-        assertTrue(result.needsManualReview)
+        assertFalse(result.needsManualReview)
     }
 
     @Test
@@ -108,7 +108,7 @@ class ContourDetectorTest {
         )
 
         assertTrue(result.splitPosition <= 949 || result.splitPosition >= 1051)
-        assertTrue(result.needsManualReview)
+        assertFalse(result.needsManualReview)
     }
 
     @Test
@@ -264,6 +264,18 @@ class ContourDetectorTest {
     }
 
     @Test
+    fun testCalculateEffectiveToleranceExactFormula() {
+        val tol = ContourDetector.calculateEffectiveTolerance(
+            baseTolerance = 150,
+            canvasWidth = 1000,
+            canvasLength = 5000,
+            nearestProtectedBoxHeight = 200,
+            marginFactor = 1.0f
+        )
+        assertEquals(200, tol)
+    }
+
+    @Test
     fun testCalculateAdaptiveToleranceScalingAndCapping() {
         // Base tolerance = 100, canvasWidth = 2000 => effectiveBaseTolerance = 100 * (2000/1000) = 200
         // Protected balloon height = 600, marginFactor = 0.5 => expanded = 300
@@ -278,7 +290,7 @@ class ContourDetectorTest {
             isVertical = true,
             targetPos = 500
         )
-        assertEquals(300, tol)
+        assertEquals(600, tol)
     }
 
     @Test
