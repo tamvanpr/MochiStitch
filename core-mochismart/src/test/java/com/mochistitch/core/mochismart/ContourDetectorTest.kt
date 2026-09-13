@@ -70,7 +70,7 @@ class ContourDetectorTest {
 
         assertTrue("Split position ${result.splitPosition} must be outside balloon [800..1200]",
             result.splitPosition <= 799 || result.splitPosition >= 1201)
-        assertFalse(result.needsManualReview)
+        assertTrue(result.needsManualReview)
     }
 
     @Test
@@ -108,7 +108,7 @@ class ContourDetectorTest {
         )
 
         assertTrue(result.splitPosition <= 949 || result.splitPosition >= 1051)
-        assertFalse(result.needsManualReview)
+        assertTrue(result.needsManualReview)
     }
 
     @Test
@@ -189,7 +189,7 @@ class ContourDetectorTest {
         )
 
         assertTrue(result.splitPosition <= 799)
-        assertFalse(result.needsManualReview)
+        assertTrue(result.needsManualReview)
     }
 
     @Test
@@ -261,5 +261,115 @@ class ContourDetectorTest {
             useOtsuThreshold = true
         )
         assertNotNull(boxes)
+    }
+
+    @Test
+    fun testCalculateAdaptiveToleranceScalingAndCapping() {
+        // Base tolerance = 100, canvasWidth = 2000 => effectiveBaseTolerance = 100 * (2000/1000) = 200
+        // Protected balloon height = 600, marginFactor = 0.5 => expanded = 300
+        // maxExpandedTolerance = min(200 * 3, 5000 * 0.20) = min(600, 1000) = 600
+        // Result should be 300
+        val box = BoundingBox(left = 0, top = 400, right = 200, bottom = 1000, type = BoundingBoxType.PROTECTED_BALLOON)
+        val tol = ContourDetector.calculateAdaptiveTolerance(
+            baseTolerance = 100,
+            canvasWidth = 2000,
+            canvasLength = 5000,
+            protectedBoxes = listOf(box),
+            isVertical = true,
+            targetPos = 500
+        )
+        assertEquals(300, tol)
+    }
+
+    @Test
+    fun testCalculateAdaptiveToleranceMaxCap() {
+        // Base tolerance = 100, canvasWidth = 1000 => effectiveBase = 100
+        // Giant balloon height = 1000 => expanded = 500
+        // Cap = min(100 * 3, 1000 * 0.20) = min(300, 200) = 200
+        // Result should be capped at 200
+        val box = BoundingBox(left = 0, top = 0, right = 200, bottom = 1000, type = BoundingBoxType.PROTECTED_BALLOON)
+        val tol = ContourDetector.calculateAdaptiveTolerance(
+            baseTolerance = 100,
+            canvasWidth = 1000,
+            canvasLength = 1000,
+            protectedBoxes = listOf(box),
+            isVertical = true,
+            targetPos = 500
+        )
+        assertEquals(200, tol)
+    }
+
+    @Test
+    fun testPriority1MarginEvaluationIdeal() {
+        val totalLength = 2000
+        val targetPos = 1000
+        val tolerance = 200
+        // Protected box height = 200 (top=400, bottom=600), minSafeMargin = 20.
+        // Gap range [600..2000], targetPos=1000 is inside gap and far from box edge (dist = 400 >= 20).
+        val box = BoundingBox(left = 0, top = 400, right = 200, bottom = 600, type = BoundingBoxType.PROTECTED_BALLOON)
+        val safeGaps = ContourDetector.calculateSafeGaps(totalLength, listOf(box), isVertical = true)
+
+        val result = ContourDetector.findSafeSplitPointDetailed(
+            totalLength = totalLength,
+            currentPos = 0,
+            targetPos = targetPos,
+            tolerance = tolerance,
+            safeGaps = safeGaps,
+            protectedBoxes = listOf(box),
+            isVertical = true
+        )
+
+        assertEquals(1000, result.splitPosition)
+        assertFalse(result.needsManualReview)
+    }
+
+    @Test
+    fun testPriority2MarginEvaluationThinMargin() {
+        val totalLength = 2000
+        val targetPos = 605
+        val tolerance = 200
+        // Protected box height = 200 (top=400, bottom=600), minSafeMargin = 20.
+        // Only gap available is [600..610], pos=605 has dist to box edge = 5 < 20.
+        val box1 = BoundingBox(left = 0, top = 400, right = 200, bottom = 600, type = BoundingBoxType.PROTECTED_BALLOON)
+        val box2 = BoundingBox(left = 0, top = 611, right = 200, bottom = 1000, type = BoundingBoxType.PROTECTED_BALLOON)
+        val boxes = listOf(box1, box2)
+        val safeGaps = ContourDetector.calculateSafeGaps(totalLength, boxes, isVertical = true)
+
+        val result = ContourDetector.findSafeSplitPointDetailed(
+            totalLength = totalLength,
+            currentPos = 0,
+            targetPos = targetPos,
+            tolerance = tolerance,
+            safeGaps = safeGaps,
+            protectedBoxes = boxes,
+            isVertical = true
+        )
+
+        assertEquals(605, result.splitPosition)
+        assertTrue(result.needsManualReview)
+        assertEquals("Celah aman dekat tepi balon (margin tipis)", result.reviewReason)
+    }
+
+    @Test
+    fun testPriority3FallbackExceedTolerance() {
+        val totalLength = 3000
+        val targetPos = 1000
+        val tolerance = 100
+        // Balloon covers Y=800..1200 (covers whole search window [900..1100])
+        val box = BoundingBox(left = 0, top = 800, right = 200, bottom = 1200, type = BoundingBoxType.PROTECTED_BALLOON)
+        val safeGaps = ContourDetector.calculateSafeGaps(totalLength, listOf(box), isVertical = true)
+
+        val result = ContourDetector.findSafeSplitPointDetailed(
+            totalLength = totalLength,
+            currentPos = 0,
+            targetPos = targetPos,
+            tolerance = tolerance,
+            safeGaps = safeGaps,
+            protectedBoxes = listOf(box),
+            isVertical = true
+        )
+
+        assertTrue(result.needsManualReview)
+        assertTrue(result.splitPosition <= 799 || result.splitPosition >= 1200)
     }
 }

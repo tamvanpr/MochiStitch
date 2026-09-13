@@ -56,4 +56,27 @@ class ImageCompressorAndSplitEngineTest {
         assertEquals(5, settings.pixelComparisonStep)
         assertEquals(0.2f, settings.pixelComparisonMaxDeviationFactor, 0.001f)
     }
+
+    @Test
+    fun testFilenameFormatterWithVariousCombinations() {
+        val f1 = FilenameFormatter.formatFilename(
+            template = "{project}_{chapter}_{index}",
+            project = "Mochi",
+            chapter = "10",
+            index = 1,
+            indexPaddingDigits = 4,
+            format = OutputFormat.WEBP
+        )
+        assertEquals("Mochi_10_0001", f1)
+
+        val f2 = FilenameFormatter.formatFilename(
+            template = "{project}_c{chapter}_p{index}",
+            project = "",
+            chapter = "",
+            index = 42,
+            indexPaddingDigits = 3,
+            format = OutputFormat.JPG
+        )
+        assertEquals("MochiStitch_c1_p042", f2)
+    }
 }
