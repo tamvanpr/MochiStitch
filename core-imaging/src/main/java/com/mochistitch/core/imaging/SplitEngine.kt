@@ -60,7 +60,8 @@ object SplitEngine {
         pixelComparisonStep: Int = 5,
         pixelComparisonMaxDeviationFactor: Float = 0.2f,
         allowExceedOnNoSafeGap: Boolean = true,
-        preferShorterOverLonger: Boolean = true
+        preferShorterOverLonger: Boolean = true,
+        pageBoundaries: List<Int> = emptyList()
     ): List<SlicedPiece> {
         if (splitMode == SplitMode.NO_LIMIT || (splitMode != SplitMode.MAX_PIXELS && splitMode != SplitMode.PAGES_PER_FILE) || maxPixelLength <= 0) {
             return listOf(SlicedPiece(copyBitmap(source), needsManualReview = false))
@@ -143,7 +144,17 @@ object SplitEngine {
                     }
                 } else null
 
-                val splitResult = if (mochiSmartEnabled || autoGutterDetectionEnabled) {
+                val snappedBoundaryY = PageBoundarySnapping.findSnapBoundary(
+                    targetPos = targetCutY,
+                    tolerance = tolerance,
+                    pageBoundaries = pageBoundaries,
+                    protectedBoxes = boundingBoxes.filter { it.isProtected },
+                    isVertical = true
+                )
+
+                val splitResult = if (snappedBoundaryY != null) {
+                    SmartSplitResult(snappedBoundaryY, needsManualReview = false)
+                } else if (mochiSmartEnabled || autoGutterDetectionEnabled) {
                     ContourDetector.findSafeSplitPointDetailed(
                         totalLength = totalLength,
                         currentPos = currentY,
@@ -178,7 +189,17 @@ object SplitEngine {
 
                 val targetCutX = currentX + maxPixelLength
 
-                val splitResult = if (mochiSmartEnabled || autoGutterDetectionEnabled) {
+                val snappedBoundaryX = PageBoundarySnapping.findSnapBoundary(
+                    targetPos = targetCutX,
+                    tolerance = tolerance,
+                    pageBoundaries = pageBoundaries,
+                    protectedBoxes = boundingBoxes.filter { it.isProtected },
+                    isVertical = false
+                )
+
+                val splitResult = if (snappedBoundaryX != null) {
+                    SmartSplitResult(snappedBoundaryX, needsManualReview = false)
+                } else if (mochiSmartEnabled || autoGutterDetectionEnabled) {
                     ContourDetector.findSafeSplitPointDetailed(
                         totalLength = totalLength,
                         currentPos = currentX,

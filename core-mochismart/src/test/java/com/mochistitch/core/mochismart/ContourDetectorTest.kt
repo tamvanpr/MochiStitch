@@ -238,4 +238,28 @@ class ContourDetectorTest {
         assertTrue(merged.any { it.type == BoundingBoxType.SFX })
         assertTrue(merged.any { it.type == BoundingBoxType.PROTECTED_BALLOON })
     }
+
+    @Test
+    fun testDetectBoundingBoxesWithOtsuThresholdDoesNotCrash() {
+        val constructor = android.graphics.Bitmap::class.java.declaredConstructors.first()
+        constructor.isAccessible = true
+        val params = constructor.parameterTypes
+        val args = Array(params.size) { i ->
+            when (params[i]) {
+                Int::class.javaPrimitiveType -> 100
+                Long::class.javaPrimitiveType -> 100L
+                Boolean::class.javaPrimitiveType -> false
+                ByteArray::class.java -> ByteArray(0)
+                IntArray::class.java -> IntArray(0)
+                else -> null
+            }
+        }
+        val bitmap = constructor.newInstance(*args) as android.graphics.Bitmap
+        val boxes = ContourDetector.detectBoundingBoxes(
+            bitmap = bitmap,
+            sensitivity = com.mochistitch.core.settings.DetectionSensitivity.MEDIUM,
+            useOtsuThreshold = true
+        )
+        assertNotNull(boxes)
+    }
 }

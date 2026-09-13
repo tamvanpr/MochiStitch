@@ -73,7 +73,8 @@ object ContourDetector {
 
     fun detectBoundingBoxes(
         bitmap: Bitmap,
-        sensitivity: DetectionSensitivity = DetectionSensitivity.MEDIUM
+        sensitivity: DetectionSensitivity = DetectionSensitivity.MEDIUM,
+        useOtsuThreshold: Boolean = false
     ): List<BoundingBox> {
         val boundingBoxes = mutableListOf<BoundingBox>()
         val opencvSuccess = initOpenCV()
@@ -106,10 +107,24 @@ object ContourDetector {
                 )
 
                 val edgesMat = Mat()
-                val (lowThresh, highThresh) = when (sensitivity) {
-                    DetectionSensitivity.LOW -> Pair(40.0, 120.0)
-                    DetectionSensitivity.MEDIUM -> Pair(20.0, 80.0)
-                    DetectionSensitivity.HIGH -> Pair(10.0, 50.0)
+                val (lowThresh, highThresh) = if (useOtsuThreshold) {
+                    val dummyMat = Mat()
+                    val otsuVal = Imgproc.threshold(blurMat, dummyMat, 0.0, 255.0, Imgproc.THRESH_OTSU)
+                    dummyMat.release()
+
+                    val sensitivityMultiplier = when (sensitivity) {
+                        DetectionSensitivity.LOW -> 1.2
+                        DetectionSensitivity.MEDIUM -> 1.0
+                        DetectionSensitivity.HIGH -> 0.8
+                    }
+                    val calculatedHigh = otsuVal * sensitivityMultiplier
+                    Pair(calculatedHigh * 0.5, calculatedHigh)
+                } else {
+                    when (sensitivity) {
+                        DetectionSensitivity.LOW -> Pair(40.0, 120.0)
+                        DetectionSensitivity.MEDIUM -> Pair(20.0, 80.0)
+                        DetectionSensitivity.HIGH -> Pair(10.0, 50.0)
+                    }
                 }
                 Imgproc.Canny(blurMat, edgesMat, lowThresh, highThresh)
 
@@ -174,9 +189,16 @@ object ContourDetector {
                     val area = Imgproc.contourArea(contour)
                     val rectArea = w * h
 
+                    val aspectRatio = if (h > 0.0 && w > 0.0) maxOf(w / h, h / w) else 0.0
+                    val solidity = if (rectArea > 0.0) area / rectArea else 0.0
+
+                    // Early noise filter: skip pure noise contours early (not SFX, not protected)
+                    if (area < minArea * 0.3 || (solidity < 0.15 && aspectRatio > 3.0)) {
+                        contour.release()
+                        continue
+                    }
+
                     if (rectArea in minArea..maxArea && openCVRect.width >= 8 && openCVRect.height >= 8) {
-                        val aspectRatio = maxOf(w / h, h / w)
-                        val solidity = if (rectArea > 0) area / rectArea else 0.0
 
                         val contour2f = MatOfPoint2f(*contour.toArray())
                         val approx2f = MatOfPoint2f()
@@ -232,11 +254,13 @@ object ContourDetector {
 
                 var inContentBlock = false
                 var blockTop = 0
+                val rowPixels = IntArray(width)
 
                 for (y in 0 until height step rowStep) {
+                    bitmap.getPixels(rowPixels, 0, width, 0, y, width, 1)
                     var nonWhiteCount = 0
                     for (x in 0 until width step 8) {
-                        val pixel = bitmap.getPixel(x, y)
+                        val pixel = rowPixels[x]
                         val r = (pixel shr 16) and 0xFF
                         val g = (pixel shr 8) and 0xFF
                         val b = pixel and 0xFF
