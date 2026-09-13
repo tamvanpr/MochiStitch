@@ -321,7 +321,7 @@ fun SettingsScreenContent(
                         }
                     }
 
-                    // Tolerance slider + tooltip explanation
+                    // Auto tolerance status & explanation
                     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         Row(
                             modifier = Modifier.fillMaxWidth(),
@@ -333,19 +333,14 @@ fun SettingsScreenContent(
                                 style = MaterialTheme.typography.bodyMedium
                             )
                             Text(
-                                text = "${settings.mochiSmartTolerance} px",
+                                text = "Otomatis (Auto)",
                                 style = MaterialTheme.typography.labelLarge,
                                 color = MaterialTheme.colorScheme.primary,
                                 fontWeight = FontWeight.Bold
                             )
                         }
-                        Slider(
-                            value = settings.mochiSmartTolerance.toFloat(),
-                            onValueChange = { onSettingsChanged(settings.copy(mochiSmartTolerance = it.roundToInt())) },
-                            valueRange = 50f..500f
-                        )
                         TooltipBox(
-                            text = "Rentang piksel maksimum di mana pemotong boleh menggeser titik potong dari target demi menemukan celah aman bebas balon kata."
+                            text = "Toleransi dihitung secara fleksibel dan otomatis oleh sistem berdasarkan dimensi gambar, batas halaman, serta celah aman di antara balon kata."
                         )
                     }
 
