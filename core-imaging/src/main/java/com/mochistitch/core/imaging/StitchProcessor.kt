@@ -277,12 +277,12 @@ class StitchProcessor(
 
         while (currentPos < totalLength) {
             val remaining = totalLength - currentPos
+
             if (remaining <= maxLen) {
                 intervals.add(SliceIntervalSpec(currentPos, totalLength, false, null))
                 break
             }
 
-            // Jika sisa setelah candidate sangat kecil, gabungkan langsung ke potongan terakhir
             if (remaining - maxLen < minTailLength) {
                 intervals.add(SliceIntervalSpec(currentPos, totalLength, false, null))
                 break
@@ -293,9 +293,25 @@ class StitchProcessor(
             var needsReview = false
             var reviewReason: String? = null
 
+            val crossAxisDim = if (isVertical) totalCanvasWidth else totalCanvasHeight
+
+            val effectiveBaseTolerance = if (settings.mochiSmartEnabled) {
+                max(
+                    settings.mochiSmartTolerance,
+                    (settings.mochiSmartTolerance * (crossAxisDim / 1000f)).toInt()
+                )
+            } else {
+                settings.mochiSmartTolerance
+            }
+
             if (settings.mochiSmartEnabled) {
-                val tolerance = settings.mochiSmartTolerance
-                val searchMargin = max(tolerance * 3, 600)
+                val baseTolerance = settings.mochiSmartTolerance
+
+                val searchMargin = max(
+                    effectiveBaseTolerance * 3,
+                    (crossAxisDim * 0.2f).toInt()
+                )
+
                 val bandStart = max(0, candidate - searchMargin)
                 val bandEnd = min(totalLength, candidate + searchMargin)
                 val bandLen = bandEnd - bandStart
@@ -315,14 +331,19 @@ class StitchProcessor(
 
                         if (itemEnd > bandStart && itemStart < bandEnd) {
                             val stream = openInputStream(item.uri) ?: continue
+
                             val sampleSize = calculateInSampleSize(
-                                item.srcRect.width(), item.srcRect.height(),
-                                item.dstRect.width(), item.dstRect.height()
+                                item.srcRect.width(),
+                                item.srcRect.height(),
+                                item.dstRect.width(),
+                                item.dstRect.height()
                             )
+
                             val options = BitmapFactory.Options().apply {
                                 inPreferredConfig = Bitmap.Config.RGB_565
                                 inSampleSize = sampleSize
                             }
+
                             val srcBitmap = BitmapFactory.decodeStream(stream, null, options)
                             stream.close()
 
@@ -333,11 +354,23 @@ class StitchProcessor(
                                     min(item.srcRect.right / sampleSize, srcBitmap.width),
                                     min(item.srcRect.bottom / sampleSize, srcBitmap.height)
                                 )
+
                                 val dstRectInBand = if (isVertical) {
-                                    Rect(item.dstRect.left, item.dstRect.top - bandStart, item.dstRect.right, item.dstRect.bottom - bandStart)
+                                    Rect(
+                                        item.dstRect.left,
+                                        item.dstRect.top - bandStart,
+                                        item.dstRect.right,
+                                        item.dstRect.bottom - bandStart
+                                    )
                                 } else {
-                                    Rect(item.dstRect.left - bandStart, item.dstRect.top, item.dstRect.right - bandStart, item.dstRect.bottom)
+                                    Rect(
+                                        item.dstRect.left - bandStart,
+                                        item.dstRect.top,
+                                        item.dstRect.right - bandStart,
+                                        item.dstRect.bottom
+                                    )
                                 }
+
                                 canvas.drawBitmap(srcBitmap, scaledSrcRect, dstRectInBand, paint)
                                 srcBitmap.recycle()
                             }
@@ -348,18 +381,52 @@ class StitchProcessor(
                         if (isVertical) item.pageBox.bottom else item.pageBox.right
                     }.filter { it > 0 && it < totalLength }.distinct()
 
-                    val boxes = ContourDetector.detectBoundingBoxes(bandBitmap, settings.mochiSmartSensitivity)
+                    val boxes = ContourDetector.detectBoundingBoxes(
+                        bandBitmap,
+                        settings.mochiSmartSensitivity
+                    )
+
                     val protectedBoxesCanvas = boxes.filter { it.isProtected }.map { box ->
                         if (isVertical) {
-                            box.copy(top = bandStart + box.top, bottom = bandStart + box.bottom)
+                            box.copy(
+                                top = bandStart + box.top,
+                                bottom = bandStart + box.bottom
+                            )
                         } else {
-                            box.copy(left = bandStart + box.left, right = bandStart + box.right)
+                            box.copy(
+                                left = bandStart + box.left,
+                                right = bandStart + box.right
+                            )
                         }
                     }
 
+                    val nearestProtectedBox = protectedBoxesCanvas
+                        .filter { it.isProtected }
+                        .minByOrNull { box ->
+                            val center = if (isVertical) {
+                                (box.top + box.bottom) / 2
+                            } else {
+                                (box.left + box.right) / 2
+                            }
+
+                            kotlin.math.abs(center - candidate)
+                        }
+
+                    val nearestHeight = nearestProtectedBox?.let {
+                        if (isVertical) it.bottom - it.top else it.right - it.left
+                    } ?: 0
+
+                    val finalTolerance = ContourDetector.calculateEffectiveTolerance(
+                        baseTolerance = baseTolerance,
+                        canvasWidth = crossAxisDim,
+                        canvasLength = totalLength,
+                        nearestProtectedBoxHeight = nearestHeight,
+                        marginFactor = 1.0f
+                    )
+
                     val snappedBoundary = PageBoundarySnapping.findSnapBoundary(
                         targetPos = candidate,
-                        tolerance = tolerance,
+                        tolerance = finalTolerance,
                         pageBoundaries = pageBoundaries,
                         protectedBoxes = protectedBoxesCanvas,
                         isVertical = isVertical
@@ -371,30 +438,53 @@ class StitchProcessor(
                         reviewReason = null
                     } else {
                         val localCandidate = candidate - bandStart
-                        val smartRes = ContourDetector.findSafeSplitPoint(
+
+                        val smartRes = ContourDetector.findSafeSplitPointDetailed(
                             totalLength = bandLen,
-                            candidate = localCandidate,
-                            tolerance = tolerance,
-                            isVertical = isVertical,
-                            boundingBoxes = boxes,
-                            bitmap = bandBitmap
+                            currentPos = 0,
+                            targetPos = localCandidate,
+                            tolerance = finalTolerance,
+                            safeGaps = ContourDetector.calculateSafeGaps(
+                                bandLen,
+                                boxes,
+                                isVertical
+                            ),
+                            allowExceedOnNoSafeGap = settings.allowExceedOnNoSafeGap,
+                            preferShorterOverLonger = settings.preferShorterOverLonger,
+                            sfxBoxes = boxes.filter { !it.isProtected },
+                            protectedBoxes = boxes.filter { it.isProtected },
+                            isVertical = isVertical
                         )
 
                         safeSplit = bandStart + smartRes.splitPosition
                         needsReview = smartRes.needsManualReview
                         reviewReason = smartRes.reviewReason
                     }
+
                     bandBitmap.recycle()
                 }
             }
 
-            // Pastikan safeSplit tidak membuat potongan mini/mikro
-            var effectiveSplit = safeSplit.coerceIn(currentPos + min(1000, maxLen / 2), totalLength - 1)
+            val minSplitLength = max(effectiveBaseTolerance * 2, maxLen / 4)
+
+            var effectiveSplit = safeSplit.coerceIn(
+                currentPos + minSplitLength,
+                totalLength - 1
+            )
+
             if (totalLength - effectiveSplit < minTailLength) {
                 effectiveSplit = totalLength
             }
 
-            intervals.add(SliceIntervalSpec(currentPos, effectiveSplit, needsReview, reviewReason))
+            intervals.add(
+                SliceIntervalSpec(
+                    currentPos,
+                    effectiveSplit,
+                    needsReview,
+                    reviewReason
+                )
+            )
+
             currentPos = effectiveSplit
         }
 
