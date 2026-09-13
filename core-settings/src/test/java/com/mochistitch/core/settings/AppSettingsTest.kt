@@ -23,9 +23,9 @@ class AppSettingsTest {
         assertEquals("{project}_ch{chapter}_{index}", settings.filenameTemplate)
         assertEquals(3, settings.indexPaddingDigits)
         assertEquals(SplitMode.MAX_PIXELS, settings.splitMode)
-        assertEquals(5000, settings.maxPixelLength)
+        assertEquals(10000, settings.maxPixelLength)
         assertEquals(10, settings.maxPagesPerFile)
-        assertEquals(ReadingDirection.LTR, settings.readingDirection)
+        assertEquals(ReadingDirection.VERTICAL, settings.readingDirection)
         assertEquals(AlignmentModeSetting.RESIZE_PROPORTIONAL, settings.alignmentMode)
         assertEquals(PaddingColorSetting.WHITE, settings.paddingColor)
     }
