@@ -294,6 +294,19 @@ class ContourDetectorTest {
     }
 
     @Test
+    fun testCalculateAdaptiveToleranceAutoDefault() {
+        val box = BoundingBox(left = 0, top = 400, right = 200, bottom = 800, type = BoundingBoxType.PROTECTED_BALLOON)
+        val tol = ContourDetector.calculateAdaptiveTolerance(
+            canvasWidth = 1000,
+            canvasLength = 3000,
+            protectedBoxes = listOf(box),
+            isVertical = true,
+            targetPos = 500
+        )
+        assertEquals(400, tol)
+    }
+
+    @Test
     fun testCalculateAdaptiveToleranceMaxCap() {
         // Base tolerance = 100, canvasWidth = 1000 => effectiveBase = 100
         // Giant balloon height = 1000 => expanded = 500

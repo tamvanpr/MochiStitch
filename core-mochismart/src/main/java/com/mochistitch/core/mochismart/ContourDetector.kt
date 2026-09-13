@@ -369,7 +369,7 @@ object ContourDetector {
 
 
         fun calculateEffectiveTolerance(
-        baseTolerance: Int,
+        baseTolerance: Int = 150,
         canvasWidth: Int,
         canvasLength: Int,
         nearestProtectedBoxHeight: Int,
@@ -382,7 +382,7 @@ object ContourDetector {
     }
 
     fun calculateAdaptiveTolerance(
-        baseTolerance: Int,
+        baseTolerance: Int = 150,
         canvasWidth: Int,
         canvasLength: Int,
         protectedBoxes: List<BoundingBox>,
