@@ -344,20 +344,46 @@ class StitchProcessor(
                         }
                     }
 
+                    val pageBoundaries = placements.map { item ->
+                        if (isVertical) item.pageBox.bottom else item.pageBox.right
+                    }.filter { it > 0 && it < totalLength }.distinct()
+
                     val boxes = ContourDetector.detectBoundingBoxes(bandBitmap, settings.mochiSmartSensitivity)
-                    val localCandidate = candidate - bandStart
-                    val smartRes = ContourDetector.findSafeSplitPoint(
-                        totalLength = bandLen,
-                        candidate = localCandidate,
+                    val protectedBoxesCanvas = boxes.filter { it.isProtected }.map { box ->
+                        if (isVertical) {
+                            box.copy(top = bandStart + box.top, bottom = bandStart + box.bottom)
+                        } else {
+                            box.copy(left = bandStart + box.left, right = bandStart + box.right)
+                        }
+                    }
+
+                    val snappedBoundary = PageBoundarySnapping.findSnapBoundary(
+                        targetPos = candidate,
                         tolerance = tolerance,
-                        isVertical = isVertical,
-                        boundingBoxes = boxes,
-                        bitmap = bandBitmap
+                        pageBoundaries = pageBoundaries,
+                        protectedBoxes = protectedBoxesCanvas,
+                        isVertical = isVertical
                     )
 
-                    safeSplit = bandStart + smartRes.splitPosition
-                    needsReview = smartRes.needsManualReview
-                    reviewReason = smartRes.reviewReason
+                    if (snappedBoundary != null) {
+                        safeSplit = snappedBoundary
+                        needsReview = false
+                        reviewReason = null
+                    } else {
+                        val localCandidate = candidate - bandStart
+                        val smartRes = ContourDetector.findSafeSplitPoint(
+                            totalLength = bandLen,
+                            candidate = localCandidate,
+                            tolerance = tolerance,
+                            isVertical = isVertical,
+                            boundingBoxes = boxes,
+                            bitmap = bandBitmap
+                        )
+
+                        safeSplit = bandStart + smartRes.splitPosition
+                        needsReview = smartRes.needsManualReview
+                        reviewReason = smartRes.reviewReason
+                    }
                     bandBitmap.recycle()
                 }
             }
