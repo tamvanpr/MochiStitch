@@ -37,12 +37,13 @@ enum class StudioScreen { LIBRARY, STUDIO, RESULT, BATCH, SETTINGS }
 data class PublishedFile(
     val projectTitle: String,
     val path: String?,
+    val shareUri: Uri? = null,
     val packs: Int,
     val bytes: Long,
     val error: String? = null
 )
 
-data class OutInfo(val path: String?, val packs: Int, val bytes: Long)
+data class OutInfo(val path: String?, val packs: Int, val bytes: Long, val shareUri: Uri? = null)
 
 data class StudioState(
     val screen: StudioScreen = StudioScreen.LIBRARY,
@@ -263,6 +264,10 @@ class StudioViewModel : ViewModel() {
             _state.update { it.copy(failure = "Studio kosong — impor halaman dulu.") }
             return
         }
+        // Otomatis jadikan komik agar masuk Pustaka + Batch.
+        if (_state.value.activeComicId == null) {
+            shelve(_state.value.activeOrigin ?: "Rakitan", _state.value.pages)
+        }
         dropSlices()
         _state.update { it.copy(busy = true, phase = "Menata halaman", fraction = 0f, failure = null, published = null) }
         viewModelScope.launch {
@@ -324,19 +329,21 @@ class StudioViewModel : ViewModel() {
         viewModelScope.launch {
             try {
                 val info = writeOut(
+                    context = context,
                     files = slices.map { it.fileName to it.cachePath?.let { path -> File(path) } },
-                    origin = _state.value.activeOrigin,
+                    origin = _uiState.value.activeOrigin,
                     pack = settings.packFormat,
                     width = slices.maxOfOrNull { it.width } ?: 0,
                     height = slices.sumOf { it.height },
                     onProgress = { p -> _state.update { it.copy(fraction = p) } }
                 )
-                _state.update {
+                _uiState.update {
                     it.copy(
                         busy = false,
                         published = PublishedFile(
                             projectTitle = _state.value.activeOrigin ?: defaultFileName(),
                             path = info.path,
+                            shareUri = info.shareUri,
                             packs = info.packs,
                             bytes = info.bytes
                         )
@@ -371,6 +378,7 @@ class StudioViewModel : ViewModel() {
                         onProgress = { _, p -> _state.update { it.copy(fraction = (pi + p) / comics.size.toFloat()) } }
                     ).getOrThrow()
                     val info = writeOut(
+                        context = context,
                         files = done.map { it.fileName to it.file },
                         origin = comic.origin,
                         pack = pack,
@@ -380,7 +388,7 @@ class StudioViewModel : ViewModel() {
                     done.forEach { strip ->
                         try { strip.file.delete() } catch (t: Throwable) { }
                     }
-                    outcomes.add(PublishedFile(comic.origin, info.path, info.packs, info.bytes))
+                    outcomes.add(PublishedFile(comic.origin, info.path, info.shareUri, info.packs, info.bytes))
                 } catch (e: Throwable) {
                     outcomes.add(PublishedFile(comic.origin, null, 0, 0L, e.message ?: "Gagal."))
                 }
@@ -390,6 +398,7 @@ class StudioViewModel : ViewModel() {
     }
 
     private suspend fun writeOut(
+        context: Context,
         files: List<Pair<String, File?>>,
         origin: String?,
         pack: PackFormat,
@@ -397,9 +406,7 @@ class StudioViewModel : ViewModel() {
         height: Int = 0,
         onProgress: suspend (Float) -> Unit = {}
     ): OutInfo = withContext(Dispatchers.IO) {
-        var bytes = 0L
-        val pictures = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES)
-        val root = File(pictures, "MochiStitch").apply { mkdirs() }
+        val useMedia = android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q
         val stamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
 
         if (pack == PackFormat.CBZ || pack == PackFormat.ZIP) {
@@ -408,46 +415,95 @@ class StudioViewModel : ViewModel() {
             } else {
                 FileNamer.packName(defaultFileName(), pack, stamp)
             }
-            val dest = File(root, name)
-            val entries = files.mapIndexed { i, (entryName, src) ->
-                onProgress((i + 1).toFloat() / files.size.toFloat())
-                ArchiveItem(entryName) { out ->
-                    if (src != null && src.exists()) src.inputStream().use { it.copyTo(out) }
+            val mime = if (pack == PackFormat.CBZ) "application/x-cbz" else "application/zip"
+            // Rakit dulu ke cache, lalu terbitkan via MediaStore (wajib di Android 10+).
+            var bytes = 0L
+            files.forEachIndexed { i, _ -> onProgress((i + 1).toFloat() / files.size.toFloat()) }
+            val tmp = File.createTempFile("mochi_out", ".tmp", files.firstOrNull()?.second?.parentFile)
+            try {
+                tmp.outputStream().use { out ->
+                    val entries = files.map { (entryName, src) ->
+                        ArchiveItem(entryName) { o ->
+                            if (src != null && src.exists()) src.inputStream().use { it.copyTo(o) }
+                        }
+                    }
+                    bytes = ArchiveKit.pack(entries, out)
                 }
+                if (useMedia) {
+                    val uri = mediaPublish(context, tmp, name, mime, null)
+                    try { tmp.delete() } catch (t: Throwable) { }
+                    OutInfo("Pictures/MochiStitch/$name", files.size, bytes, uri)
+                } else {
+                    val pictures = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES)
+                    val root = File(pictures, "MochiStitch").apply { mkdirs() }
+                    val dest = File(root, name)
+                    if (dest.exists()) dest.delete()
+                    tmp.copyTo(dest, overwrite = true)
+                    tmp.delete()
+                    OutInfo(dest.absolutePath, files.size, bytes, null)
+                }
+            } catch (e: Throwable) {
+                try { tmp.delete() } catch (t: Throwable) { }
+                throw e
             }
-            bytes = ArchiveKit.pack(entries, dest.outputStream())
-            OutInfo(dest.absolutePath, files.size, bytes)
         } else {
-            val folder = File(root, "lepas_$stamp").apply { mkdirs() }
+            val folderName = "lepas_$stamp"
+            var bytes = 0L
+            var firstUri: Uri? = null
+            var firstPath: String? = null
             files.forEachIndexed { i, (entryName, src) ->
                 onProgress((i + 1).toFloat() / files.size.toFloat())
-                val dest = File(folder, entryName)
                 if (src != null && src.exists()) {
-                    src.copyTo(dest, overwrite = true)
-                    bytes += dest.length()
+                    if (useMedia) {
+                        val uri = mediaPublish(context, src, entryName, FileNamer.mimeOf(_state.value.settings.imageFormat), folderName)
+                        if (firstUri == null) {
+                            firstUri = uri
+                            firstPath = "Pictures/MochiStitch/$folderName/$entryName"
+                        }
+                        bytes += src.length()
+                    } else {
+                        val pictures = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES)
+                        val folder = File(File(pictures, "MochiStitch"), folderName).apply { mkdirs() }
+                        val dest = File(folder, entryName)
+                        src.copyTo(dest, overwrite = true)
+                        bytes += dest.length()
+                        if (firstPath == null) firstPath = dest.absolutePath
+                    }
                 }
             }
-            OutInfo(folder.absolutePath, files.size, bytes)
+            OutInfo(firstPath ?: "Pictures/MochiStitch/$folderName", files.size, bytes, firstUri)
         }
     }
 
-    fun shareFolder(context: Context, path: String) {
-        val folder = File(path)
-        if (!folder.exists() || !folder.isDirectory) {
-            _state.update { it.copy(failure = "Folder tidak ditemukan.") }
+    /** Terbitkan satu file ke galeri via MediaStore (Android 10+). */
+    private fun mediaPublish(context: Context, src: File, displayName: String, mime: String, subfolder: String?): Uri? {
+        val resolver = context.contentResolver
+        val values = android.content.ContentValues().apply {
+            put(android.provider.MediaStore.MediaColumns.DISPLAY_NAME, displayName)
+            put(android.provider.MediaStore.MediaColumns.MIME_TYPE, mime)
+            val rel = if (subfolder.isNullOrBlank()) "Pictures/MochiStitch" else "Pictures/MochiStitch/$subfolder"
+            put(android.provider.MediaStore.MediaColumns.RELATIVE_PATH, rel)
+        }
+        val collection = if (mime.startsWith("image/")) {
+            android.provider.MediaStore.Images.Media.getContentUri(android.provider.MediaStore.VOLUME_EXTERNAL_PRIMARY)
+        } else {
+            android.provider.MediaStore.Files.getContentUri("external")
+        }
+        val uri = resolver.insert(collection, values) ?: return null
+        resolver.openOutputStream(uri)?.use { out ->
+            src.inputStream().use { it.copyTo(out) }
+        }
+        return uri
+    }
+
+    fun sharePublished(context: Context) {
+        val uri = _state.value.published?.shareUri
+        if (uri == null) {
+            _state.update { it.copy(failure = "Tidak ada tautan berbagi untuk hasil ini.") }
             return
         }
-        val pics = folder.listFiles { _, name ->
-            val l = name.lowercase()
-            l.endsWith(".jpg") || l.endsWith(".jpeg") || l.endsWith(".png") || l.endsWith(".webp")
-        }?.toList() ?: emptyList()
-        if (pics.isEmpty()) {
-            _state.update { it.copy(failure = "Tidak ada gambar di folder.") }
-            return
-        }
-        val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", pics[0])
         val intent = Intent(Intent.ACTION_SEND).apply {
-            type = "image/*"
+            type = exportMime()
             putExtra(Intent.EXTRA_STREAM, uri)
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         }

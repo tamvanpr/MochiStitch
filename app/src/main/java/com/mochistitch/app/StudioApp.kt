@@ -175,9 +175,7 @@ private fun PublishedSheet(state: StudioState, viewModel: StudioViewModel, conte
         confirmButton = {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 TextButton(onClick = { viewModel.clearPublished() }) { Text("Tutup") }
-                published.path?.let { path ->
-                    Button(onClick = { viewModel.shareFolder(context, path) }) { Text("Bagikan") }
-                }
+                Button(onClick = { viewModel.sharePublished(context) }) { Text("Bagikan") }
             }
         }
     )
