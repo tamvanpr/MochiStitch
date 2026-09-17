@@ -31,6 +31,8 @@ data class StitchSettings(
     val splitRule: SplitRule = SplitRule.MAX_HEIGHT,
     val maxStripHeight: Int = 10000,
     val pagesPerPack: Int = 10,
+    // Mati v4: tidak ada pemotongan di dalam halaman. Disimpan hanya
+    // agar preferensi lama tetap terbaca; tidak dipakai perilaku apa pun.
     val smartCut: Boolean = true,
     val strictness: Strictness = Strictness.STRICT,
     val showReviewFlags: Boolean = true,

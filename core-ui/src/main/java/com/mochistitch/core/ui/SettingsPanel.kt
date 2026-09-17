@@ -50,7 +50,6 @@ import com.mochistitch.core.settings.MatteColor
 import com.mochistitch.core.settings.PackFormat
 import com.mochistitch.core.settings.SplitRule
 import com.mochistitch.core.settings.StitchSettings
-import com.mochistitch.core.settings.Strictness
 import com.mochistitch.core.settings.ThemeMode
 import kotlin.math.roundToInt
 
@@ -209,31 +208,13 @@ fun SettingsPanel(
                 }
             }
 
-            Group("Potong Pintar") {
+            Group("Halaman Raksasa") {
                 ToggleRow(
-                    title = "Potong pintar aktif",
-                    desc = "Halaman raksasa dibelah bertumpang tindih, konten tidak hilang.",
-                    checked = settings.smartCut,
-                    onFlip = { onChange(settings.copy(smartCut = it)) }
+                    title = "Penanda tinjau manual",
+                    desc = "Halaman yang melebihi batas dibiarkan utuh dan ditandai di pratinjau.",
+                    checked = settings.showReviewFlags,
+                    onFlip = { onChange(settings.copy(showReviewFlags = it)) }
                 )
-                if (settings.smartCut) {
-                    SubLabel("Ketegasan")
-                    ChipRow {
-                        Strictness.entries.forEach { level ->
-                            OptionChip(
-                                active = settings.strictness == level,
-                                onTap = { onChange(settings.copy(strictness = level)) },
-                                text = if (level == Strictness.STRICT) "Ketat" else "Longgar"
-                            )
-                        }
-                    }
-                    ToggleRow(
-                        title = "Penanda tinjau manual",
-                        desc = "Tandai potongan yang meragukan di pratinjau.",
-                        checked = settings.showReviewFlags,
-                        onFlip = { onChange(settings.copy(showReviewFlags = it)) }
-                    )
-                }
             }
 
             Group("Tampilan Strip") {

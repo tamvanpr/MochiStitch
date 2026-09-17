@@ -3,9 +3,7 @@ package com.mochistitch.core.imaging
 import android.content.Context
 import android.graphics.Bitmap
 import android.net.Uri
-import com.mochistitch.core.mochismart.PaperGutter
 import com.mochistitch.core.settings.StitchSettings
-import com.mochistitch.core.settings.Strictness
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -31,9 +29,9 @@ enum class BuildPhase(val label: String) {
 }
 
 /**
- * Orkestrasi v3: ukur -> kelompokkan di batas halaman -> render tiap
- * kelompok -> tulis cache. Halaman tidak pernah dibelah kecuali satu
- * halaman raksasa melebihi batas (dibelah di kertas oleh PaperGutter).
+ * Orkestrasi v4: ukur -> kelompokkan di batas halaman -> render tiap
+ * kelompok -> tulis cache. Potongan HANYA di batas halaman; satu halaman
+ * raksasa yang melebihi batas dibiarkan utuh dan ditandai.
  */
 class StripBuilder(
     private val openStream: (Uri) -> InputStream?,
@@ -81,55 +79,23 @@ class StripBuilder(
                 val bundleUris = bundle.sheets.map { measured[it.order].uri }
                 val whole = renderer.renderStrip(bundleUris, config).getOrThrow()
 
-                if (!bundle.tallSingle) {
+                if (bundle.tallSingle) {
+                    // Halaman raksasa: DIBIARKAN UTUH + ditandai. Tidak ada
+                    // algoritma apa pun yang boleh memotong di dalam halaman.
+                    strips.add(
+                        store(
+                            bitmap = whole, number = number++, series = series, chapter = chapter,
+                            settings = settings, flagged = true,
+                            flagReason = "Melebihi batas ${settings.maxStripHeight}px — dibiarkan utuh, tangani manual"
+                        )
+                    )
+                } else {
                     strips.add(
                         store(
                             bitmap = whole, number = number++, series = series, chapter = chapter,
                             settings = settings, flagged = false, flagReason = null
                         )
                     )
-                } else if (!settings.smartCut) {
-                    // Smart mati: belah buta + wajib flag.
-                    var y = 0
-                    val step = settings.maxStripHeight.coerceAtLeast(1)
-                    while (y < whole.height) {
-                        val h = minOf(step, whole.height - y)
-                        val piece = Bitmap.createBitmap(whole, 0, y, whole.width, h)
-                        strips.add(
-                            store(
-                                bitmap = piece, number = number++, series = series, chapter = chapter,
-                                settings = settings, flagged = true,
-                                flagReason = "Smart mati — belahan buta, periksa hasil"
-                            )
-                        )
-                        y += h
-                    }
-                    whole.recycle()
-                } else {
-                    val paperTol = if (settings.strictness == Strictness.STRICT) {
-                        settings.paperSensitivity
-                    } else {
-                        settings.paperSensitivity * 2f
-                    }
-                    val cuts = PaperGutter.sliceTallPage(
-                        PaperGutter.BitmapSource(whole), settings.maxStripHeight, paperTol
-                    )
-                    for (cut in cuts) {
-                        val h = (cut.to - cut.from).coerceAtLeast(1)
-                        val piece = Bitmap.createBitmap(
-                            whole, 0,
-                            cut.from.coerceIn(0, whole.height - 1),
-                            whole.width, h.coerceAtMost(whole.height - cut.from)
-                        )
-                        strips.add(
-                            store(
-                                bitmap = piece, number = number++, series = series, chapter = chapter,
-                                settings = settings, flagged = cut.flagged,
-                                flagReason = if (cut.flagged) "Tanpa celah kertas — periksa hasil" else null
-                            )
-                        )
-                    }
-                    whole.recycle()
                 }
             }
             onProgress(BuildPhase.ASSEMBLING, 1.0f)
