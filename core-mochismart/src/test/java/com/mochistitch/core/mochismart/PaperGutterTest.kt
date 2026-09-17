@@ -49,21 +49,26 @@ class PaperGutterTest {
     }
 
     @Test
-    fun testCutsLandOnPaper() {
+    fun testCutsOverlap() {
         val g = InkGrid(height = 300, ink = (90..110).toSet() + (150..170).toSet())
         val cuts = PaperGutter.sliceTallPage(g, 100)
         assertTrue(cuts.size >= 2)
-        cuts.dropLast(1).forEach { c ->
-            assertTrue("Ujung ${c.to} bukan kertas", c.to < 90 || c.to > 170 || c.to in 111..149)
+        cuts.forEach { c ->
             assertFalse(c.flagged)
+            assertTrue("Potongan melebihi batas", c.to - c.from <= 100)
         }
+        // Tiap potongan tumpang tindih dengan berikutnya: tidak ada yang hilang.
+        cuts.zipWithNext { a, b -> assertTrue("Tidak tumpang tindih", b.from < a.to) }
+        assertEquals(0, cuts.first().from)
         assertEquals(300, cuts.last().to)
     }
 
     @Test
-    fun testFullInkFlagged() {
+    fun testFullInkOverlap() {
         val cuts = PaperGutter.sliceTallPage(InkGrid(ink = (0..199).toSet()), 100)
-        assertEquals(1, cuts.size)
-        assertTrue(cuts[0].flagged)
+        assertTrue(cuts.size >= 2)
+        cuts.forEach { c -> assertFalse(c.flagged) }
+        cuts.zipWithNext { a, b -> assertTrue("Tidak tumpang tindih", b.from < a.to) }
+        assertEquals(200, cuts.last().to)
     }
 }

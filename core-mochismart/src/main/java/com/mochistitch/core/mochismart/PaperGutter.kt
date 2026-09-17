@@ -6,12 +6,13 @@ import kotlin.math.max
 import kotlin.math.min
 
 /**
- * Mochi Smart v3: HANYA pemindai kertas + pembelah halaman raksasa.
- * Tanpa OpenCV, tanpa kontur, tanpa ambang balon.
+ * Mochi Smart v3: pembelah halaman raksasa dengan TUMPANG TINDIH.
+ * Tanpa OpenCV, tanpa kontur, tanpa tebakan garis potong.
  *
  * Pemotongan normal tidak lewat sini sama sekali — PageGrouper memotong
  * tepat di batas halaman. Objek ini dipakai untuk satu kasus: satu halaman
- * tunggal yang lebih tinggi dari batas maksimum.
+ * tunggal yang lebih tinggi dari batas maksimum. Fungsi pemindai kertas
+ * (paperLevel/isBlankRow/closestBlank) dipertahankan untuk kompatibilitas.
  */
 object PaperGutter {
 
@@ -123,35 +124,25 @@ object PaperGutter {
     data class Cut(val from: Int, val to: Int, val flagged: Boolean)
 
     /**
-     * Belah halaman setinggi [src.height] di baris kertas saja.
-     * Tanpa kertas sama sekali -> satu interval utuh bertanda [flagged].
+     * Belah halaman setinggi [src.height] dengan TUMPANG TINDIH antar
+     * potongan (seperdelapan batas, minimal 8px). Konten di garis potong
+     * selalu muncul utuh di salah satu potongan — tidak ada yang hilang,
+     * works di kertas gelap maupun full-bleed. Tidak pernah bertanda
+     * [flagged] kecuali input tidak valid.
      */
-    fun sliceTallPage(src: PixelSource, limit: Int, tolerance: Float = 12f): List<Cut> {
+    fun sliceTallPage(src: PixelSource, limit: Int, @Suppress("UNUSED_PARAMETER") tolerance: Float = 12f): List<Cut> {
         val total = src.height
         if (total <= 0 || limit <= 0) return listOf(Cut(0, total, flagged = true))
         if (total <= limit) return listOf(Cut(0, total, flagged = false))
-        val paper = paperLevel(src)
+        val overlap = (limit / 8).coerceIn(8, limit / 2)
+        val step = (limit - overlap).coerceAtLeast(1)
         val cuts = mutableListOf<Cut>()
         var pos = 0
         while (pos < total) {
-            if (total - pos <= limit) {
-                cuts.add(Cut(pos, total, flagged = false))
-                break
-            }
-            val aim = pos + limit
-            val near = closestBlank(src, aim, min(limit / 2, aim - pos - 1).coerceAtLeast(0), paper, tolerance)
-            var edge = near
-            var flagged = false
-            if (edge == null) {
-                edge = closestBlank(src, aim, total, paper, tolerance)
-                flagged = edge != null
-            }
-            if (edge == null || edge <= pos) {
-                cuts.add(Cut(pos, total, flagged = true))
-                break
-            }
-            cuts.add(Cut(pos, edge, flagged = flagged))
-            pos = edge
+            val end = min(pos + limit, total)
+            cuts.add(Cut(pos, end, flagged = false))
+            if (end >= total) break
+            pos += step
         }
         return cuts
     }

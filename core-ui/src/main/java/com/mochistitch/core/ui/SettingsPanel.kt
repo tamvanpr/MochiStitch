@@ -212,7 +212,7 @@ fun SettingsPanel(
             Group("Potong Pintar") {
                 ToggleRow(
                     title = "Potong pintar aktif",
-                    desc = "Halaman raksasa dibelah hanya di baris kertas kosong.",
+                    desc = "Halaman raksasa dibelah bertumpang tindih, konten tidak hilang.",
                     checked = settings.smartCut,
                     onFlip = { onChange(settings.copy(smartCut = it)) }
                 )
