@@ -82,7 +82,6 @@ android {
 dependencies {
     implementation(project(":core-common"))
     implementation(project(":core-imaging"))
-    implementation(project(":core-mochismart"))
     implementation(project(":core-archive"))
     implementation(project(":core-settings"))
     implementation(project(":core-ui"))

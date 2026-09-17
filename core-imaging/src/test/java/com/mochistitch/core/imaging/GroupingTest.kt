@@ -59,7 +59,6 @@ class GroupingTest {
     @Test
     fun testStripConfigDefaults() {
         val c = StripConfig()
-        assertEquals(PageFit.FIT_WIDTH, c.fit)
         assertEquals(StripMatte.WHITE, c.matte)
         assertEquals(90, c.quality)
     }

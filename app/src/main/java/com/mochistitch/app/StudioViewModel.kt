@@ -34,7 +34,7 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-enum class StudioScreen { LIBRARY, STUDIO, RESULT, BATCH, SETTINGS }
+enum class StudioScreen { INPUT, SETUP, RESULT, QUEUE }
 
 data class PublishedFile(
     val projectTitle: String,
@@ -48,7 +48,7 @@ data class PublishedFile(
 data class OutInfo(val path: String?, val packs: Int, val bytes: Long, val shareUri: Uri? = null)
 
 data class StudioState(
-    val screen: StudioScreen = StudioScreen.LIBRARY,
+    val screen: StudioScreen = StudioScreen.INPUT,
     val pages: List<PageItem> = emptyList(),
     val slices: List<SliceInfo> = emptyList(),
     val settings: StitchSettings = StitchSettings(),
@@ -126,7 +126,7 @@ class StudioViewModel : ViewModel() {
             PageItem(uri = uri, title = comic.pageNames.getOrElse(i) { "Halaman ${i + 1}" })
         }
         _state.update {
-            it.copy(pages = items, activeComicId = comic.id, activeOrigin = comic.origin, screen = StudioScreen.STUDIO)
+            it.copy(pages = items, activeComicId = comic.id, activeOrigin = comic.origin, screen = StudioScreen.INPUT)
         }
     }
 
@@ -219,7 +219,7 @@ class StudioViewModel : ViewModel() {
                 }
                 shelve(name, items)
                 _state.update { s ->
-                    s.copy(busy = false, pages = items, screen = StudioScreen.STUDIO, notice = "$name: ${items.size} halaman.")
+                    s.copy(busy = false, pages = items, screen = StudioScreen.INPUT, notice = "$name: ${items.size} halaman.")
                 }
             } catch (e: Throwable) {
                 _state.update { it.copy(busy = false, failure = e.message ?: "Gagal impor arsip.") }

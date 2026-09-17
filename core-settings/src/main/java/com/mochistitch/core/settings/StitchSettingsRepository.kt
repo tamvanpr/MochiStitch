@@ -30,11 +30,7 @@ class StitchSettingsRepository(private val dataStore: DataStore<Preferences>) {
         val K_SPLIT = stringPreferencesKey("split")
         val K_MAXH = intPreferencesKey("maxh")
         val K_PPP = intPreferencesKey("ppp")
-        val K_SMART = booleanPreferencesKey("smart")
-        val K_STRICT = stringPreferencesKey("strict")
         val K_FLAGS = booleanPreferencesKey("flags")
-        val K_PAPER = floatPreferencesKey("paper")
-        val K_FIT = stringPreferencesKey("fit")
         val K_MATTE = stringPreferencesKey("matte")
         val K_THEME = stringPreferencesKey("theme")
     }
@@ -52,11 +48,7 @@ class StitchSettingsRepository(private val dataStore: DataStore<Preferences>) {
             splitRule = p[K_SPLIT]?.let { runCatching { SplitRule.valueOf(it) }.getOrNull() } ?: SplitRule.MAX_HEIGHT,
             maxStripHeight = p[K_MAXH] ?: 10000,
             pagesPerPack = p[K_PPP] ?: 10,
-            smartCut = p[K_SMART] ?: true,
-            strictness = p[K_STRICT]?.let { runCatching { Strictness.valueOf(it) }.getOrNull() } ?: Strictness.STRICT,
             showReviewFlags = p[K_FLAGS] ?: true,
-            paperSensitivity = p[K_PAPER] ?: 12f,
-            fitMode = p[K_FIT]?.let { runCatching { FitMode.valueOf(it) }.getOrNull() } ?: FitMode.FIT_WIDTH,
             matteColor = p[K_MATTE]?.let { runCatching { MatteColor.valueOf(it) }.getOrNull() } ?: MatteColor.WHITE,
             themeMode = p[K_THEME]?.let { runCatching { ThemeMode.valueOf(it) }.getOrNull() } ?: ThemeMode.SYSTEM
         )
@@ -75,11 +67,7 @@ class StitchSettingsRepository(private val dataStore: DataStore<Preferences>) {
             p[K_SPLIT] = s.splitRule.name
             p[K_MAXH] = s.maxStripHeight
             p[K_PPP] = s.pagesPerPack
-            p[K_SMART] = s.smartCut
-            p[K_STRICT] = s.strictness.name
             p[K_FLAGS] = s.showReviewFlags
-            p[K_PAPER] = s.paperSensitivity
-            p[K_FIT] = s.fitMode.name
             p[K_MATTE] = s.matteColor.name
             p[K_THEME] = s.themeMode.name
         }

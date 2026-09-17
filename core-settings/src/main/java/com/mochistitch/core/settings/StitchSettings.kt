@@ -9,12 +9,7 @@ enum class PackFormat { ZIP, CBZ, FILES }
 /** Aturan membagi strip menjadi beberapa berkas. */
 enum class SplitRule { WHOLE, MAX_HEIGHT, PAGES_PER_PACK }
 
-enum class Strictness { LENIENT, STRICT }
-
 enum class ThemeMode { SYSTEM, LIGHT, DARK }
-
-/** Cara menyesuaikan lebar halaman ke lebar strip. */
-enum class FitMode { FIT_WIDTH, CROP_CENTER, LETTERBOX }
 
 /** Warna latar strip. */
 enum class MatteColor { WHITE, BLACK, CLEAR }
@@ -31,13 +26,7 @@ data class StitchSettings(
     val splitRule: SplitRule = SplitRule.MAX_HEIGHT,
     val maxStripHeight: Int = 10000,
     val pagesPerPack: Int = 10,
-    // Mati v4: tidak ada pemotongan di dalam halaman. Disimpan hanya
-    // agar preferensi lama tetap terbaca; tidak dipakai perilaku apa pun.
-    val smartCut: Boolean = true,
-    val strictness: Strictness = Strictness.STRICT,
     val showReviewFlags: Boolean = true,
-    val paperSensitivity: Float = 12f,
-    val fitMode: FitMode = FitMode.FIT_WIDTH,
     val matteColor: MatteColor = MatteColor.WHITE,
     val themeMode: ThemeMode = ThemeMode.SYSTEM
 )

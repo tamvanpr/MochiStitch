@@ -1,24 +1,23 @@
 # MochiStitch — Agent Context
 
-Proyek: MochiStitch (`com.mochistitch.app`) v2 — rombak total dari nol.
+Proyek: MochiStitch (`com.mochistitch.app`) v4 — rombak total.
 Platform: Android native, Kotlin + Jetpack Compose
 Purpose: Penggabung halaman komik vertikal (strip webtoon).
 
-## Arsitektur v2 (page-aware, tanpa deteksi konten)
+## Arsitektur v4 (tidak ada piksel sumber yang dibuang)
 
-Pemotongan output dilakukan TEPAT di batas halaman asli yang memang
-diketahui penggabung — tidak pernah di tengah konten. Tidak ada OpenCV,
-tidak ada ambang kontur, tidak ada tebakan.
+Satu invarian struktural: tidak ada kode yang memotong/meng-crop di dalam
+halaman dalam keadaan apa pun. Pemotongan output HANYA tepat di batas
+halaman (PageGrouper). Halaman tunggal melebihi batas dibiarkan utuh +
+flag tinjau manual. Tidak ada OpenCV, deteksi, tebakan, atau mode crop.
 
-- `app/` — UI Compose + MainViewModel (impor arsip, bulk, pratinjau, ekspor)
-- `core-imaging/` — MergeEngine vertikal, PageAwareSplitter, StitchProcessor,
-  FilenameFormatter, ImageCompressor
-- `core-mochismart/` — GutterScanner murni-piksel; HANYA untuk halaman tunggal
-  yang melebihi batas (overflow): belah di baris kertas kosong
-- `core-settings/` — DataStore; default wrapper = ZIP
-- `core-ui/` — tema M3 hijau, daftar gambar, pengaturan, pratinjau
+- `app/` — wizard 3 langkah (INPUT -> SETUP -> RESULT) + QUEUE; edge-to-edge
+- `core-imaging/` — StripRenderer (gambar utuh, drawBitmap penuh), PageGrouper,
+  StripBuilder, FileNamer. Tanpa PageFit/CROP.
+- `core-settings/` — DataStore; tanpa smartCut/strictness/paper/fit (mati v4)
+- `core-ui/` — tema M3, PageStrip (thumb Fit), SettingsPanel inline, SlicePreview
 - `core-archive/` — tulis/baca ZIP/CBZ/RAR/CBR/7Z (junrar)
-- `core-common/` — util + model StitchProject
+- `core-common/` — ComicProject (antrean batch)
 
 ## Aturan Penting
 - Build hanya diverifikasi via GitHub Actions CI/CD (`./gradlew test assembleDebug`)

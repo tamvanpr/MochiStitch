@@ -44,7 +44,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.mochistitch.core.imaging.FileNamer
-import com.mochistitch.core.settings.FitMode
 import com.mochistitch.core.settings.ImageFormat
 import com.mochistitch.core.settings.MatteColor
 import com.mochistitch.core.settings.PackFormat
@@ -218,20 +217,6 @@ fun SettingsPanel(
             }
 
             Group("Tampilan Strip") {
-                SubLabel("Penyesuaian lebar")
-                ChipRow {
-                    FitMode.entries.forEach { mode ->
-                        OptionChip(
-                            active = settings.fitMode == mode,
-                            onTap = { onChange(settings.copy(fitMode = mode)) },
-                            text = when (mode) {
-                                FitMode.FIT_WIDTH -> "Paskan"
-                                FitMode.CROP_CENTER -> "Potong tengah"
-                                FitMode.LETTERBOX -> "Bingkai"
-                            }
-                        )
-                    }
-                }
                 SubLabel("Warna bingkai")
                 ChipRow {
                     MatteColor.entries.forEach { matte ->

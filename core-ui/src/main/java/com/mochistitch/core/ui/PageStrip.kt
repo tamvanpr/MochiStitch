@@ -74,7 +74,7 @@ fun PageStrip(
                     AsyncImage(
                         model = page.uri,
                         contentDescription = page.title,
-                        contentScale = ContentScale.Crop,
+                        contentScale = ContentScale.Fit,
                         modifier = Modifier
                             .size(width = 64.dp, height = 80.dp)
                             .clip(RoundedCornerShape(10.dp))

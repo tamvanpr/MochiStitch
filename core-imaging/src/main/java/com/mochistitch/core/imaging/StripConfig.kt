@@ -2,13 +2,10 @@ package com.mochistitch.core.imaging
 
 import android.graphics.Bitmap
 import android.graphics.Color
-import com.mochistitch.core.settings.FitMode
 import com.mochistitch.core.settings.MatteColor
 import com.mochistitch.core.settings.StitchSettings
 
-/** Opsi render strip vertikal. */
-enum class PageFit { FIT_WIDTH, CROP_CENTER, LETTERBOX }
-
+/** Opsi render strip vertikal. Tidak ada mode crop dalam bentuk apa pun. */
 enum class StripMatte(val colorInt: Int) {
     WHITE(Color.WHITE),
     BLACK(Color.BLACK),
@@ -16,7 +13,6 @@ enum class StripMatte(val colorInt: Int) {
 }
 
 data class StripConfig(
-    val fit: PageFit = PageFit.FIT_WIDTH,
     val matte: StripMatte = StripMatte.WHITE,
     val compressFormat: Bitmap.CompressFormat = Bitmap.CompressFormat.JPEG,
     val quality: Int = 90
@@ -34,11 +30,6 @@ data class StripConfig(
                 com.mochistitch.core.settings.ImageFormat.PNG -> 100
             }
             return StripConfig(
-                fit = when (s.fitMode) {
-                    FitMode.FIT_WIDTH -> PageFit.FIT_WIDTH
-                    FitMode.CROP_CENTER -> PageFit.CROP_CENTER
-                    FitMode.LETTERBOX -> PageFit.LETTERBOX
-                },
                 matte = when (s.matteColor) {
                     MatteColor.WHITE -> StripMatte.WHITE
                     MatteColor.BLACK -> StripMatte.BLACK

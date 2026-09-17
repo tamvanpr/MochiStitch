@@ -29,7 +29,6 @@ android {
 dependencies {
     implementation(project(":core-common"))
     implementation(project(":core-settings"))
-    implementation(project(":core-mochismart"))
     implementation(project(":core-archive"))
     implementation(libs.androidx.core.ktx)
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")

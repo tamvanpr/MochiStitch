@@ -1,197 +1,371 @@
 package com.mochistitch.app
 
-import android.widget.Toast
-import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.Album
-import androidx.compose.material.icons.filled.Layers
-import androidx.compose.material.icons.filled.SettingsSuggest
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Image
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.Unarchive
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
-import androidx.compose.material3.LinearProgressIndicator
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
-import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableLongStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.mochistitch.app.batch.BatchBoard
-import com.mochistitch.app.library.LibraryHome
-import com.mochistitch.app.studio.Workbench
+import androidx.compose.ui.window.Dialog
+import com.mochistitch.core.settings.PackFormat
+import com.mochistitch.core.ui.PageStrip
 import com.mochistitch.core.ui.SettingsPanel
 import com.mochistitch.core.ui.SlicePreview
-import kotlinx.coroutines.launch
 
-private data class Deck(val screen: StudioScreen, val label: String, val icon: ImageVector)
-
-private val DECKS = listOf(
-    Deck(StudioScreen.LIBRARY, "Pustaka", Icons.Default.Album),
-    Deck(StudioScreen.BATCH, "Batch", Icons.Default.Layers),
-    Deck(StudioScreen.SETTINGS, "Setelan", Icons.Default.SettingsSuggest)
-)
-
+/**
+ * v4: wizard 3 langkah — Masukkan -> Atur -> Hasil — plus layar Antrean.
+ * Tanpa bottom-nav, tanpa layar setelan terpisah: semua setelan inline
+ * di langkah Atur, semua aksi dalam satu alur maju yang jelas.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun StudioApp(viewModel: StudioViewModel, onExitApp: () -> Unit = {}, modifier: Modifier = Modifier) {
+fun StudioApp(viewModel: StudioViewModel, onExitApp: () -> Unit) {
+    val ctx = LocalContext.current
     val state by viewModel.state.collectAsState()
-    val context = LocalContext.current
-    val scope = rememberCoroutineScope()
-    var lastBack by remember { mutableLongStateOf(0L) }
+    val settings = state.settings
 
-    BackHandler {
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = {
+                    Column {
+                        Text("MochiStitch", fontWeight = FontWeight.Bold)
+                        Text(
+                            when (state.screen) {
+                                StudioScreen.INPUT -> "Langkah 1 dari 3 · Masukkan halaman"
+                                StudioScreen.SETUP -> "Langkah 2 dari 3 · Atur & rakit"
+                                StudioScreen.RESULT -> "Langkah 3 dari 3 · Hasil"
+                                StudioScreen.QUEUE -> "Antrean batch"
+                            },
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f)
+                        )
+                    }
+                },
+                navigationIcon = {
+                    IconButton(onClick = onExitApp) {
+                        Icon(Icons.Default.Close, contentDescription = "Tutup")
+                    }
+                },
+                actions = {
+                    TextButton(
+                        onClick = { viewModel.travel(StudioScreen.QUEUE) },
+                        enabled = state.screen != StudioScreen.QUEUE
+                    ) {
+                        Text("Antrean (${state.comics.size})")
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.primaryContainer,
+                    titleContentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                )
+            )
+        }
+    ) { inner ->
         when (state.screen) {
-            StudioScreen.STUDIO -> viewModel.travel(StudioScreen.LIBRARY)
-            StudioScreen.RESULT -> {
-                viewModel.dropSlices()
-                viewModel.travel(StudioScreen.STUDIO)
+            StudioScreen.INPUT -> InputStep(
+                viewModel = viewModel,
+                modifier = Modifier.padding(inner).fillMaxSize()
+            )
+            StudioScreen.SETUP -> Column(modifier = Modifier.padding(inner).fillMaxSize()) {
+                SettingsPanel(
+                    settings = settings,
+                    onChange = viewModel::keepSettings,
+                    onBack = { viewModel.travel(StudioScreen.INPUT) },
+                    modifier = Modifier.weight(1f)
+                )
+                Button(
+                    onClick = { viewModel.assemble(ctx) },
+                    enabled = !state.busy && state.pages.isNotEmpty(),
+                    modifier = Modifier.fillMaxWidth().padding(16.dp)
+                ) {
+                    Text("Rakit ${state.pages.size} halaman")
+                }
             }
-            else -> {
-                val now = System.currentTimeMillis()
-                if (now - lastBack < 2000) onExitApp() else {
-                    lastBack = now
-                    scope.launch { Toast.makeText(context, "Sekali lagi untuk keluar", Toast.LENGTH_SHORT).show() }
+            StudioScreen.RESULT -> Column(modifier = Modifier.padding(inner).fillMaxSize()) {
+                SlicePreview(
+                    slices = state.slices,
+                    showFlags = settings.showReviewFlags,
+                    pack = settings.packFormat,
+                    onPackChange = { viewModel.keepSettings(settings.copy(packFormat = it)) },
+                    onPublish = { viewModel.publish(ctx) },
+                    onBack = { viewModel.travel(StudioScreen.SETUP) },
+                    modifier = Modifier.weight(1f)
+                )
+                if (state.published?.shareUri != null) {
+                    OutlinedButton(
+                        onClick = { viewModel.sharePublished(ctx) },
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)
+                    ) {
+                        Icon(Icons.Default.Share, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.size(8.dp))
+                        Text("Bagikan hasil")
+                    }
+                }
+            }
+            StudioScreen.QUEUE -> QueueStep(
+                viewModel = viewModel,
+                modifier = Modifier.padding(inner).fillMaxSize()
+            )
+        }
+    }
+
+    if (state.busy) {
+        Dialog(onDismissRequest = {}) {
+            Card(shape = RoundedCornerShape(20.dp)) {
+                Column(
+                    modifier = Modifier.padding(24.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    CircularProgressIndicator()
+                    Text(state.phase.ifBlank { "Bekerja…" }, style = MaterialTheme.typography.bodyMedium)
+                    LinearProgressIndicator(progress = { state.fraction.coerceIn(0f, 1f) })
                 }
             }
         }
     }
+    state.failure?.let { msg ->
+        AlertDialog(
+            onDismissRequest = viewModel::clearFailure,
+            confirmButton = { TextButton(onClick = viewModel::clearFailure) { Text("Tutup") } },
+            title = { Text("Gagal") },
+            text = { Text(msg) }
+        )
+    }
+    state.notice?.let { msg ->
+        AlertDialog(
+            onDismissRequest = viewModel::clearNotice,
+            confirmButton = { TextButton(onClick = viewModel::clearNotice) { Text("OK") } },
+            text = { Text(msg) }
+        )
+    }
+    state.published?.let { pub ->
+        AlertDialog(
+            onDismissRequest = viewModel::clearPublished,
+            confirmButton = { TextButton(onClick = viewModel::clearPublished) { Text("Tutup") } },
+            dismissButton = {
+                if (pub.shareUri != null) TextButton(onClick = { viewModel.sharePublished(ctx) }) { Text("Bagikan") }
+            },
+            title = { Text("Tersimpan") },
+            text = { Text("${pub.projectTitle}\n${pub.path ?: ""}\n${pub.packs} berkas · ${pub.bytes / 1024} KB") }
+        )
+    }
+}
 
-    Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-        androidx.compose.foundation.layout.Box(modifier = Modifier.fillMaxSize()) {
-            when (state.screen) {
-                StudioScreen.STUDIO -> Workbench(viewModel = viewModel, modifier = modifier)
-            StudioScreen.RESULT -> SlicePreview(
-                slices = state.slices,
-                showFlags = state.settings.showReviewFlags,
-                pack = state.settings.packFormat,
-                onPackChange = { viewModel.keepSettings(state.settings.copy(packFormat = it)) },
-                onPublish = { viewModel.publish(context) },
-                    onBack = {
-                        viewModel.dropSlices()
-                        viewModel.travel(StudioScreen.STUDIO)
-                    },
-                    modifier = modifier
+@Composable
+private fun InputStep(viewModel: StudioViewModel, modifier: Modifier = Modifier) {
+    val ctx = LocalContext.current
+    val state by viewModel.state.collectAsState()
+    val pickImages = rememberLauncherForActivityResult(ActivityResultContracts.PickMultipleVisualMedia()) { uris ->
+        if (uris.isNotEmpty()) viewModel.takeImages(uris, ctx)
+    }
+    val pickArchive = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) viewModel.takeArchive(uri, ctx)
+    }
+    Column(
+        modifier = modifier.padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
+            Button(
+                onClick = {
+                    pickImages.launch(
+                        ActivityResultContracts.PickVisualMediaRequest(
+                            ActivityResultContracts.PickVisualMedia.ImageOnly
+                        )
+                    )
+                },
+                modifier = Modifier.weight(1f)
+            ) {
+                Icon(Icons.Default.Image, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(modifier = Modifier.size(8.dp))
+                Text("Gambar")
+            }
+            Button(
+                onClick = { pickArchive.launch(arrayOf("*/*")) },
+                modifier = Modifier.weight(1f)
+            ) {
+                Icon(Icons.Default.Unarchive, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(modifier = Modifier.size(8.dp))
+                Text("Arsip")
+            }
+        }
+        if (state.pages.isEmpty()) {
+            Card(
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(
+                    "Belum ada halaman. Pilih gambar atau arsip (ZIP/CBZ/RAR/CBR/7Z) untuk mulai.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.padding(20.dp)
                 )
-                else -> {
-                    Scaffold(
-                        bottomBar = {
-                            NavigationBar {
-                                DECKS.forEach { deck ->
-                                    NavigationBarItem(
-                                        selected = state.screen == deck.screen,
-                                        onClick = { viewModel.travel(deck.screen) },
-                                        icon = { Icon(deck.icon, contentDescription = deck.label) },
-                                        label = { Text(deck.label) }
+            }
+            Spacer(modifier = Modifier.weight(1f))
+        } else {
+            Text("${state.pages.size} halaman", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+            PageStrip(
+                pages = state.pages,
+                onShiftUp = viewModel::shiftEarlier,
+                onShiftDown = viewModel::shiftLater,
+                onDrop = viewModel::dropPage,
+                modifier = Modifier.weight(1f).fillMaxWidth()
+            )
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
+            TextButton(onClick = viewModel::wipePages, enabled = state.pages.isNotEmpty()) {
+                Text("Bersihkan")
+            }
+            Spacer(modifier = Modifier.weight(1f))
+            Button(
+                onClick = { viewModel.travel(StudioScreen.SETUP) },
+                enabled = state.pages.isNotEmpty()
+            ) {
+                Text("Lanjut")
+                Spacer(modifier = Modifier.size(8.dp))
+                Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = null, modifier = Modifier.size(18.dp))
+            }
+        }
+    }
+}
+
+@Composable
+private fun QueueStep(viewModel: StudioViewModel, modifier: Modifier = Modifier) {
+    val ctx = LocalContext.current
+    val state by viewModel.state.collectAsState()
+    Column(
+        modifier = modifier.padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        if (state.comics.isEmpty()) {
+            Card(
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(
+                    "Antrean kosong. Impor arsip atau rakit sekali — tiap komik otomatis masuk antrean dan bisa diproses bersama di sini.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.padding(20.dp)
+                )
+            }
+        } else {
+            LazyColumn(
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+                modifier = Modifier.weight(1f).fillMaxWidth()
+            ) {
+                items(state.comics, key = { it.id }) { comic ->
+                    Card(modifier = Modifier.fillMaxWidth()) {
+                        Column(
+                            modifier = Modifier.padding(14.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(comic.origin, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                                    Text(
+                                        "${comic.pageUris.size} halaman · ${comic.packFor(state.settings.packFormat)}",
+                                        style = MaterialTheme.typography.bodySmall
+                                    )
+                                }
+                                IconButton(onClick = { viewModel.openComic(comic.id) }) {
+                                    Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = "Buka")
+                                }
+                                IconButton(onClick = { viewModel.forgetComic(comic.id) }) {
+                                    Icon(
+                                        Icons.Default.Delete,
+                                        contentDescription = "Hapus",
+                                        tint = MaterialTheme.colorScheme.error
                                     )
                                 }
                             }
-                        },
-                        modifier = modifier
-                    ) { _ ->
-                        when (state.screen) {
-                            StudioScreen.LIBRARY -> LibraryHome(viewModel = viewModel)
-                            StudioScreen.BATCH -> BatchBoard(viewModel = viewModel)
-                            StudioScreen.SETTINGS -> SettingsPanel(
-                                settings = state.settings,
-                                onChange = { viewModel.keepSettings(it) },
-                                onBack = { viewModel.travel(StudioScreen.LIBRARY) }
-                            )
-                            else -> LibraryHome(viewModel = viewModel)
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                PackFormat.entries.forEach { pack ->
+                                    FilterChip(
+                                        selected = comic.packFor(state.settings.packFormat) == pack,
+                                        onClick = {
+                                            viewModel.setComicPack(
+                                                comic.id,
+                                                if (comic.packOverride == pack) null else pack
+                                            )
+                                        },
+                                        label = { Text(pack.name) }
+                                    )
+                                }
+                            }
                         }
                     }
                 }
             }
-            BusyVeil(busy = state.busy, phase = state.phase, fraction = state.fraction)
-            PublishedSheet(state = state, viewModel = viewModel, context = context)
-            FailurePop(state = state, viewModel = viewModel)
         }
-    }
-}
-
-@Composable
-private fun BusyVeil(busy: Boolean, phase: String, fraction: Float) {
-    if (!busy) return
-    androidx.compose.ui.window.Dialog(onDismissRequest = {}) {
-        Card(shape = RoundedCornerShape(16.dp), modifier = Modifier.padding(24.dp)) {
-            Column(modifier = Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        state.batchOutcomes.forEach { out ->
+            Card(
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                modifier = Modifier.fillMaxWidth()
+            ) {
                 Text(
-                    phase.ifBlank { "Bekerja…" },
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold
+                    if (out.error == null) "OK · ${out.projectTitle} · ${out.packs} berkas"
+                    else "Gagal · ${out.projectTitle}: ${out.error}",
+                    style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier.padding(12.dp)
                 )
-                LinearProgressIndicator(progress = { fraction.coerceIn(0f, 1f) }, modifier = Modifier.fillMaxWidth())
-                Text("${(fraction * 100).toInt()}%", style = MaterialTheme.typography.bodySmall)
+            }
+        }
+        Spacer(modifier = Modifier.height(4.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
+            if (state.batchOutcomes.isNotEmpty()) {
+                TextButton(onClick = viewModel::clearBatchOutcomes) { Text("Bersihkan hasil") }
+            }
+            Spacer(modifier = Modifier.weight(1f))
+            Button(
+                onClick = { viewModel.runBatch(ctx) },
+                enabled = !state.busy && state.comics.isNotEmpty()
+            ) {
+                Icon(Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(modifier = Modifier.size(8.dp))
+                Text("Proses semua (${state.comics.size})")
             }
         }
     }
-}
-
-@Composable
-private fun PublishedSheet(state: StudioState, viewModel: StudioViewModel, context: android.content.Context) {
-    val published = state.published ?: return
-    AlertDialog(
-        onDismissRequest = { viewModel.clearPublished() },
-        title = {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Default.CheckCircle, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-                Spacer(modifier = Modifier.width(8.dp))
-                Text("Terbit!")
-            }
-        },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text(published.projectTitle, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
-                Text("${published.packs} berkas", style = MaterialTheme.typography.bodySmall)
-                Text(published.path ?: "", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
-            }
-        },
-        confirmButton = {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                TextButton(onClick = { viewModel.clearPublished() }) { Text("Tutup") }
-                Button(onClick = { viewModel.sharePublished(context) }) { Text("Bagikan") }
-            }
-        }
-    )
-}
-
-@Composable
-private fun FailurePop(state: StudioState, viewModel: StudioViewModel) {
-    val failure = state.failure ?: return
-    // BatchBoard menampilkan galatnya sendiri; jangan ganda.
-    if (state.screen == StudioScreen.BATCH) return
-    AlertDialog(
-        onDismissRequest = { viewModel.clearFailure() },
-        title = { Text("Gagal") },
-        text = { Text(failure) },
-        confirmButton = { TextButton(onClick = { viewModel.clearFailure() }) { Text("OK") } }
-    )
 }

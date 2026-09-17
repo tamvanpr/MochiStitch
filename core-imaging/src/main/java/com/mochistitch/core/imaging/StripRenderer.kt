@@ -10,13 +10,13 @@ import android.net.Uri
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.InputStream
-import java.io.OutputStream
 import kotlin.math.max
-import kotlin.math.min
-import kotlin.math.roundToInt
 
 /**
- * Merender tumpukan halaman vertikal. Satu-satunya arah yang ada.
+ * v4: susun halaman PENUH vertikal. Satu-satunya operasi adalah
+ * skala proporsional ke lebar strip + tumpuk. Tidak ada mode crop,
+ * tidak ada rect sumber parsial: seluruh bitmap hasil decode
+ * digambar utuh ke selnya, sehingga tidak ada piksel yang terbuang.
  */
 class StripRenderer(private val openStream: (Uri) -> InputStream?) {
 
@@ -24,7 +24,7 @@ class StripRenderer(private val openStream: (Uri) -> InputStream?) {
 
     data class Measured(val uri: Uri, val width: Int, val height: Int)
 
-    data class Placed(val uri: Uri, val src: Rect, val dst: Rect, val cell: Rect)
+    data class Placed(val uri: Uri, val dst: Rect)
 
     fun measure(uri: Uri): Pair<Int, Int> {
         return try {
@@ -39,19 +39,12 @@ class StripRenderer(private val openStream: (Uri) -> InputStream?) {
     }
 
     /** Susun vertikal: tiap halaman diskala proporsional ke [stripWidth]. */
-    fun layout(measured: List<Measured>, stripWidth: Int, config: StripConfig): List<Placed> {
+    fun layout(measured: List<Measured>, stripWidth: Int): List<Placed> {
         val out = mutableListOf<Placed>()
         var y = 0
         for (m in measured) {
-            val h = (m.height.toFloat() * stripWidth / m.width).roundToInt().coerceAtLeast(1)
-            out.add(
-                Placed(
-                    uri = m.uri,
-                    src = Rect(0, 0, m.width, m.height),
-                    dst = Rect(0, y, stripWidth, y + h),
-                    cell = Rect(0, y, stripWidth, y + h)
-                )
-            )
+            val h = (m.height.toLong() * stripWidth / m.width.coerceAtLeast(1)).toInt().coerceAtLeast(1)
+            out.add(Placed(uri = m.uri, dst = Rect(0, y, stripWidth, y + h)))
             y += h
         }
         return out
@@ -72,11 +65,11 @@ class StripRenderer(private val openStream: (Uri) -> InputStream?) {
                 }
                 Measured(uri, w, h)
             }
-            val stripWidth = measured.maxOf { it.width }
-            val placed = layout(measured, stripWidth, config)
-            val stripHeight = placed.maxOfOrNull { it.cell.bottom } ?: 1
+            val stripWidth = max(1, measured.maxOf { it.width })
+            val placed = layout(measured, stripWidth)
+            val stripHeight = max(1, placed.sumOf { it.dst.height() })
 
-            val strip = Bitmap.createBitmap(max(1, stripWidth), max(1, stripHeight), Bitmap.Config.RGB_565)
+            val strip = Bitmap.createBitmap(stripWidth, stripHeight, Bitmap.Config.RGB_565)
             val canvas = Canvas(strip)
             canvas.drawColor(config.matte.colorInt)
             val paint = Paint(Paint.FILTER_BITMAP_FLAG or Paint.ANTI_ALIAS_FLAG)
@@ -84,10 +77,9 @@ class StripRenderer(private val openStream: (Uri) -> InputStream?) {
             placed.forEachIndexed { i, item ->
                 val stream = openStream(item.uri)
                     ?: return@withContext Result.failure(IllegalStateException("Tidak dapat membuka: ${item.uri}"))
-                val sample = sampleSize(item.src.width(), item.src.height(), item.dst.width(), item.dst.height())
                 val opts = BitmapFactory.Options().apply {
                     inPreferredConfig = Bitmap.Config.RGB_565
-                    inSampleSize = sample
+                    inSampleSize = budgetSample(item.dst.width(), item.dst.height())
                 }
                 val src = BitmapFactory.decodeStream(stream, null, opts)
                 stream.close()
@@ -95,13 +87,8 @@ class StripRenderer(private val openStream: (Uri) -> InputStream?) {
                     strip.recycle()
                     return@withContext Result.failure(IllegalStateException("Gagal decode: ${item.uri}"))
                 }
-                val scaled = Rect(
-                    item.src.left / sample,
-                    item.src.top / sample,
-                    min(item.src.right / sample, src.width),
-                    min(item.src.bottom / sample, src.height)
-                )
-                canvas.drawBitmap(src, scaled, item.dst, paint)
+                // src null = SELURUH bitmap digambar; tidak ada crop.
+                canvas.drawBitmap(src, null as Rect?, item.dst, paint)
                 src.recycle()
                 onProgress(0.1f + 0.8f * ((i + 1).toFloat() / placed.size.toFloat()))
             }
@@ -112,48 +99,10 @@ class StripRenderer(private val openStream: (Uri) -> InputStream?) {
         }
     }
 
-    suspend fun renderToStream(
-        uris: List<Uri>,
-        output: OutputStream,
-        config: StripConfig = StripConfig(),
-        onProgress: (Float) -> Unit = {}
-    ): StripOutcome = withContext(Dispatchers.IO) {
-        renderStrip(uris, config, onProgress).fold(
-            onSuccess = { bmp ->
-                try {
-                    var count = 0L
-                    val meter = object : OutputStream() {
-                        override fun write(b: Int) {
-                            output.write(b)
-                            count++
-                        }
-
-                        override fun write(b: ByteArray, off: Int, len: Int) {
-                            output.write(b, off, len)
-                            count += len
-                        }
-                    }
-                    bmp.compress(config.compressFormat, config.quality, meter)
-                    meter.flush()
-                    val outcome = StripOutcome.Done(bmp.width, bmp.height, count)
-                    bmp.recycle()
-                    outcome
-                } catch (e: Throwable) {
-                    bmp.recycle()
-                    StripOutcome.Failed(e.message ?: "Gagal kompresi", e)
-                }
-            },
-            onFailure = { StripOutcome.Failed(it.message ?: "Gagal render", it) }
-        )
-    }
-
-    private fun sampleSize(srcW: Int, srcH: Int, dstW: Int, dstH: Int): Int {
+    /** Sample agar decode ≤ ~16MP; downsample seragam tidak membuang konten. */
+    private fun budgetSample(dstW: Int, dstH: Int): Int {
         var s = 1
-        if (srcH > dstH * 2 || srcW > dstW * 2) {
-            val halfH = srcH / 2
-            val halfW = srcW / 2
-            while ((halfH / s) >= dstH && (halfW / s) >= dstW) s *= 2
-        }
+        while ((dstW / s).toLong() * (dstH / s).toLong() > 16_000_000L) s *= 2
         return max(1, s)
     }
 }
