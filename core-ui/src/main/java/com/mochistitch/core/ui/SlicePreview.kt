@@ -22,6 +22,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -29,6 +30,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
+import com.mochistitch.core.settings.PackFormat
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -43,6 +45,8 @@ import androidx.compose.ui.unit.dp
 fun SlicePreview(
     slices: List<SliceInfo>,
     showFlags: Boolean,
+    pack: PackFormat,
+    onPackChange: (PackFormat) -> Unit,
     onPublish: () -> Unit,
     onBack: () -> Unit,
     modifier: Modifier = Modifier
@@ -128,6 +132,29 @@ fun SlicePreview(
                 Icon(Icons.Default.Publish, contentDescription = null, modifier = Modifier.size(18.dp))
                 Spacer(modifier = Modifier.width(8.dp))
                 Text("Terbitkan", fontWeight = FontWeight.Bold)
+            }
+            Text(
+                "Kemas sebagai:",
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                PackFormat.entries.forEach { option ->
+                    val label = when (option) {
+                        PackFormat.FILES -> "Lepas"
+                        PackFormat.CBZ -> "CBZ"
+                        PackFormat.ZIP -> "ZIP"
+                    }
+                    FilterChip(
+                        selected = pack == option,
+                        onClick = { onPackChange(option) },
+                        label = { Text(label) }
+                    )
+                }
             }
         }
     }

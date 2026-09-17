@@ -89,10 +89,12 @@ fun StudioApp(viewModel: StudioViewModel, onExitApp: () -> Unit = {}, modifier: 
         androidx.compose.foundation.layout.Box(modifier = Modifier.fillMaxSize()) {
             when (state.screen) {
                 StudioScreen.STUDIO -> Workbench(viewModel = viewModel, modifier = modifier)
-                StudioScreen.RESULT -> SlicePreview(
-                    slices = state.slices,
-                    showFlags = state.settings.showReviewFlags,
-                    onPublish = { viewModel.publish(context) },
+            StudioScreen.RESULT -> SlicePreview(
+                slices = state.slices,
+                showFlags = state.settings.showReviewFlags,
+                pack = state.settings.packFormat,
+                onPackChange = { viewModel.keepSettings(state.settings.copy(packFormat = it)) },
+                onPublish = { viewModel.publish(context) },
                     onBack = {
                         viewModel.dropSlices()
                         viewModel.travel(StudioScreen.STUDIO)
