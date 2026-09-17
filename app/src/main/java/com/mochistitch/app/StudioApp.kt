@@ -14,7 +14,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.Collections
+import androidx.compose.material.icons.filled.Album
 import androidx.compose.material.icons.filled.Layers
 import androidx.compose.material.icons.filled.SettingsSuggest
 import androidx.compose.material3.AlertDialog
@@ -45,6 +45,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
 import com.mochistitch.app.batch.BatchBoard
 import com.mochistitch.app.library.LibraryHome
 import com.mochistitch.app.studio.Workbench
@@ -55,7 +56,7 @@ import kotlinx.coroutines.launch
 private data class Deck(val screen: StudioScreen, val label: String, val icon: ImageVector)
 
 private val DECKS = listOf(
-    Deck(StudioScreen.LIBRARY, "Pustaka", Icons.Default.FolderCopy),
+    Deck(StudioScreen.LIBRARY, "Pustaka", Icons.Default.Album),
     Deck(StudioScreen.BATCH, "Batch", Icons.Default.Layers),
     Deck(StudioScreen.SETTINGS, "Setelan", Icons.Default.SettingsSuggest)
 )
