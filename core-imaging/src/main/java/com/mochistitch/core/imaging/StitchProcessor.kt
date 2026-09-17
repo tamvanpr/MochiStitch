@@ -282,6 +282,8 @@ class StitchProcessor(
             var safeSplit = candidate
             var needsReview = false
             var reviewReason: String? = null
+            // Dikumpulkan dari deteksi Smart; dipakai pengaman anti-potong balon.
+            var protectedBoxesCanvas: List<com.mochistitch.core.mochismart.BoundingBox> = emptyList()
 
             val crossAxisDim = if (isVertical) totalCanvasWidth else totalCanvasHeight
 
@@ -376,7 +378,7 @@ class StitchProcessor(
                         settings.mochiSmartSensitivity
                     )
 
-                    val protectedBoxesCanvas = boxes.filter { it.isProtected }.map { box ->
+                    protectedBoxesCanvas = boxes.filter { it.isProtected }.map { box ->
                         if (isVertical) {
                             box.copy(
                                 top = bandStart + box.top,
