@@ -80,7 +80,12 @@ object PaperGutter {
         return true
     }
 
-    /** Baris kosong terdekat dari [target] dalam ±[radius]; atas menang seri. */
+    /**
+     * Baris kosong terdekat dari [target] dalam ±[radius]; atas menang seri.
+     * Yang dikembalikan adalah TENGAH rentang baris kosong ditemukannya,
+     * supaya potongan punya jarak aman dari tinta di kedua sisi (balon
+     * tidak tersangkut).
+     */
     fun closestBlank(
         src: PixelSource,
         target: Int,
@@ -91,16 +96,28 @@ object PaperGutter {
         val h = src.height
         if (h <= 0 || radius < 0) return null
         val t = target.coerceIn(0, h - 1)
-        if (isBlankRow(src, t, paper, tolerance)) return t
-        var d = 1
-        while (d <= radius) {
-            val up = t - d
-            if (up >= 0 && isBlankRow(src, up, paper, tolerance)) return up
-            val down = t + d
-            if (down < h && isBlankRow(src, down, paper, tolerance)) return down
-            d++
+        var found = -1
+        if (isBlankRow(src, t, paper, tolerance)) {
+            found = t
+        } else {
+            var d = 1
+            while (d <= radius && found < 0) {
+                val up = t - d
+                if (up >= 0 && isBlankRow(src, up, paper, tolerance)) {
+                    found = up
+                    break
+                }
+                val down = t + d
+                if (down < h && isBlankRow(src, down, paper, tolerance)) found = down
+                d++
+            }
         }
-        return null
+        if (found < 0) return null
+        var top = found
+        while (top - 1 >= 0 && isBlankRow(src, top - 1, paper, tolerance)) top--
+        var bottom = found
+        while (bottom + 1 < h && isBlankRow(src, bottom + 1, paper, tolerance)) bottom++
+        return (top + bottom) / 2
     }
 
     data class Cut(val from: Int, val to: Int, val flagged: Boolean)

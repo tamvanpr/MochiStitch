@@ -33,10 +33,11 @@ class PaperGutterTest {
     }
 
     @Test
-    fun testClosestBlankPrefersUp() {
+    fun testClosestBlankMidpoint() {
         val g = InkGrid(ink = (48..52).toSet())
-        assertEquals(40, PaperGutter.closestBlank(g, 40, 8, 255f))
-        assertEquals(47, PaperGutter.closestBlank(g, 50, 8, 255f))
+        // Rentang kertas 0..47 -> tengah = 23, bukan tepi tinta.
+        assertEquals(23, PaperGutter.closestBlank(g, 40, 8, 255f))
+        assertEquals(23, PaperGutter.closestBlank(g, 50, 8, 255f))
         assertNull(PaperGutter.closestBlank(g, 50, 0, 255f))
     }
 
