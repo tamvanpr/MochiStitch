@@ -278,9 +278,9 @@ class ContourDetectorTest {
     @Test
     fun testCalculateAdaptiveToleranceScalingAndCapping() {
         // Base tolerance = 100, canvasWidth = 2000 => effectiveBaseTolerance = 100 * (2000/1000) = 200
-        // Protected balloon height = 600, marginFactor = 0.5 => expanded = 300
-        // maxExpandedTolerance = min(200 * 3, 5000 * 0.20) = min(600, 1000) = 600
-        // Result should be 300
+        // Protected balloon height = 600, marginFactor default 1.25 => expanded = 750
+        // maxExpandedTolerance = min(200 * 2, 5000 * 0.15) = min(400, 750) = 400
+        // Result should be 400 (diketatkan dari 600)
         val box = BoundingBox(left = 0, top = 400, right = 200, bottom = 1000, type = BoundingBoxType.PROTECTED_BALLOON)
         val tol = ContourDetector.calculateAdaptiveTolerance(
             baseTolerance = 100,
@@ -290,11 +290,13 @@ class ContourDetectorTest {
             isVertical = true,
             targetPos = 500
         )
-        assertEquals(600, tol)
+        assertEquals(400, tol)
     }
 
     @Test
     fun testCalculateAdaptiveToleranceAutoDefault() {
+        // Default: base 150, width 1000 => effBase 150; box 400px * 1.25 = 500;
+        // cap = min(300, 450) = 450 => hasil 450.
         val box = BoundingBox(left = 0, top = 400, right = 200, bottom = 800, type = BoundingBoxType.PROTECTED_BALLOON)
         val tol = ContourDetector.calculateAdaptiveTolerance(
             canvasWidth = 1000,
@@ -303,15 +305,15 @@ class ContourDetectorTest {
             isVertical = true,
             targetPos = 500
         )
-        assertEquals(400, tol)
+        assertEquals(450, tol)
     }
 
     @Test
     fun testCalculateAdaptiveToleranceMaxCap() {
         // Base tolerance = 100, canvasWidth = 1000 => effectiveBase = 100
-        // Giant balloon height = 1000 => expanded = 500
-        // Cap = min(100 * 3, 1000 * 0.20) = min(300, 200) = 200
-        // Result should be capped at 200
+        // Giant balloon height = 1000 * 1.25 => expanded = 1250
+        // Cap = min(100 * 2, 1000 * 0.15) = min(200, 150) = 150
+        // Result should be capped at 150
         val box = BoundingBox(left = 0, top = 0, right = 200, bottom = 1000, type = BoundingBoxType.PROTECTED_BALLOON)
         val tol = ContourDetector.calculateAdaptiveTolerance(
             baseTolerance = 100,
@@ -321,7 +323,7 @@ class ContourDetectorTest {
             isVertical = true,
             targetPos = 500
         )
-        assertEquals(200, tol)
+        assertEquals(150, tol)
     }
 
     @Test

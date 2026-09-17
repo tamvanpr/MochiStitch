@@ -13,7 +13,6 @@ import com.mochistitch.core.archive.ArchiveHandler
 import com.mochistitch.core.imaging.AlignmentMode
 import com.mochistitch.core.imaging.FilenameFormatter
 import com.mochistitch.core.imaging.ImageCompressor
-import com.mochistitch.core.imaging.MergeDirection
 import com.mochistitch.core.imaging.PaddingColor
 import com.mochistitch.core.imaging.ProcessingStage
 import com.mochistitch.core.imaging.StitchProcessor
@@ -23,9 +22,9 @@ import com.mochistitch.core.settings.MochiStitchSettingsRepository
 import com.mochistitch.core.settings.OutputFormat
 import com.mochistitch.core.settings.OutputWrapperFormat
 import com.mochistitch.core.settings.PaddingColorSetting
-import com.mochistitch.core.settings.ReadingDirection
 import com.mochistitch.core.ui.ImageItem
 import com.mochistitch.core.ui.PreviewSliceItem
+import com.mochistitch.core.ui.StitchProject
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -53,6 +52,15 @@ data class ExportResultInfo(
     val exportFolderPath: String? = null
 )
 
+/** Hasil ekspor satu projek dalam pemrosesan bulk. */
+data class BulkExportResult(
+    val projectName: String,
+    val outputPath: String?,
+    val outputCount: Int,
+    val bytesWritten: Long,
+    val errorMessage: String? = null
+)
+
 data class MainUiState(
     val currentScreen: Screen = Screen.MAIN,
     val selectedImages: List<ImageItem> = emptyList(),
@@ -64,7 +72,14 @@ data class MainUiState(
     val exportResult: ExportResultInfo? = null,
     val resultOutputUri: Uri? = null,
     val errorMessage: String? = null,
-    val userMessage: String? = null
+    val userMessage: String? = null,
+    /** Daftar projek bulk. Working set (selectedImages) = projek aktif. */
+    val projects: List<StitchProject> = emptyList(),
+    val activeProjectId: String? = null,
+    /** Nama sumber aktif (mis. "komik.zip") untuk penamaan output sama. */
+    val activeSourceName: String? = null,
+    /** Hasil pemrosesan bulk terakhir. */
+    val bulkResults: List<BulkExportResult> = emptyList()
 )
 
 class MainViewModel : ViewModel() {
@@ -178,7 +193,220 @@ class MainViewModel : ViewModel() {
 
     fun clearAll() {
         clearPreviewSlices()
-        _uiState.update { it.copy(selectedImages = emptyList()) }
+        _uiState.update { it.copy(selectedImages = emptyList(), activeSourceName = null) }
+    }
+
+    // ── Bulk projek ──────────────────────────────────────────────────────
+
+    /**
+     * Menyimpan working set saat ini sebagai satu projek bulk.
+     * Tiap projek bisa menentukan format outputnya SENDIRI lewat
+     * [StitchProject.wrapperOverride].
+     */
+    fun saveCurrentAsProject(sourceName: String) {
+        val images = _uiState.value.selectedImages
+        if (images.isEmpty()) {
+            _uiState.update { it.copy(userMessage = "Tidak ada gambar untuk dijadikan projek.") }
+            return
+        }
+        val project = StitchProject(
+            sourceName = sourceName.ifBlank { "projek-${_uiState.value.projects.size + 1}" },
+            images = images
+        )
+        _uiState.update { state ->
+            state.copy(
+                projects = state.projects + project,
+                activeProjectId = project.id,
+                activeSourceName = project.sourceName,
+                userMessage = "Projek \"${project.sourceName}\" disimpan (${images.size} gambar)."
+            )
+        }
+    }
+
+    /**
+     * Mengimpor arsip ZIP/CBZ/RAR/CBR/7Z: mengekstrak gambar ke cache,
+     * memuatnya sebagai working set, sekaligus mendaftarkan projek bulk
+     * dengan nama sumber = nama file arsip (untuk penamaan output sama).
+     */
+    fun importArchive(uri: Uri, context: Context) {
+        initSettings(context)
+        viewModelScope.launch(Dispatchers.IO) {
+            _uiState.update {
+                it.copy(isProcessing = true, processingStep = "Mengekstrak arsip", progress = 0f, errorMessage = null)
+            }
+            try {
+                val displayName = queryFileName(context, uri)
+                    ?: uri.lastPathSegment?.substringAfterLast('/') ?: "arsip"
+                if (!ArchiveHandler.isSupportedArchive(displayName)) {
+                    _uiState.update {
+                        it.copy(isProcessing = false, errorMessage = "Format arsip tidak didukung: $displayName")
+                    }
+                    return@launch
+                }
+                try {
+                    context.contentResolver.takePersistableUriPermission(
+                        uri, Intent.FLAG_GRANT_READ_URI_PERMISSION
+                    )
+                } catch (e: SecurityException) {
+                    // Abaikan — stream masih bisa dibuka sekali.
+                }
+                val input = context.contentResolver.openInputStream(uri)
+                    ?: throw IllegalStateException("Tidak dapat membuka arsip: $displayName")
+                val extracted = input.use { ArchiveHandler.extractImages(it, displayName) }
+                if (extracted.isEmpty()) {
+                    _uiState.update {
+                        it.copy(isProcessing = false, errorMessage = "Tidak ada gambar di dalam arsip $displayName.")
+                    }
+                    return@launch
+                }
+                val stem = ArchiveHandler.stripKnownExtension(displayName).ifBlank { "arsip" }
+                val importDir = File(File(context.cacheDir, "mochi_import"), stem).apply { mkdirs() }
+                val items = extracted.mapIndexed { index, img ->
+                    val safeName = "%03d_%s".format(index + 1, img.name.ifBlank { "halaman.png" })
+                    val dest = File(importDir, safeName)
+                    dest.outputStream().use { out -> out.write(img.bytes) }
+                    ImageItem(uri = Uri.fromFile(dest), name = img.name)
+                }
+                val project = StitchProject(sourceName = displayName, images = items)
+                _uiState.update { state ->
+                    state.copy(
+                        isProcessing = false,
+                        selectedImages = items,
+                        projects = state.projects + project,
+                        activeProjectId = project.id,
+                        activeSourceName = displayName,
+                        userMessage = "Arsip \"$displayName\" diimpor (${items.size} gambar)."
+                    )
+                }
+            } catch (e: Throwable) {
+                _uiState.update {
+                    it.copy(
+                        isProcessing = false,
+                        errorMessage = e.message ?: "Gagal mengimpor arsip."
+                    )
+                }
+            }
+        }
+    }
+
+    /** Memuat projek bulk ke working set (pratinjau & ekspor memakai projek ini). */
+    fun loadProject(id: String) {
+        val project = _uiState.value.projects.find { it.id == id } ?: return
+        clearPreviewSlices()
+        _uiState.update {
+            it.copy(
+                selectedImages = project.images,
+                activeProjectId = project.id,
+                activeSourceName = project.sourceName
+            )
+        }
+    }
+
+    /** Menentukan format output KHUSUS satu projek (null = ikut global). */
+    fun updateProjectWrapper(id: String, wrapper: OutputWrapperFormat?) {
+        _uiState.update { state ->
+            state.copy(projects = state.projects.map { p ->
+                if (p.id == id) p.copy(wrapperOverride = wrapper) else p
+            })
+        }
+    }
+
+    fun deleteProject(id: String) {
+        _uiState.update { state ->
+            val remaining = state.projects.filterNot { it.id == id }
+            val clearedActive = state.activeProjectId == id
+            state.copy(
+                projects = remaining,
+                activeProjectId = if (clearedActive) null else state.activeProjectId,
+                activeSourceName = if (clearedActive) null else state.activeSourceName
+            )
+        }
+    }
+
+    fun dismissBulkResults() {
+        _uiState.update { it.copy(bulkResults = emptyList()) }
+    }
+
+    /**
+     * Memproses SEMUA projek bulk satu per satu, masing-masing dengan
+     * format outputnya sendiri. Hasil dikumpulkan di [MainUiState.bulkResults].
+     */
+    fun processAllProjects(context: Context) {
+        initSettings(context)
+        val projects = _uiState.value.projects.filter { it.images.isNotEmpty() }
+        if (projects.isEmpty()) {
+            _uiState.update { it.copy(errorMessage = "Tidak ada projek bulk untuk diproses.") }
+            return
+        }
+        _uiState.update {
+            it.copy(isProcessing = true, processingStep = "Memproses bulk projek", progress = 0f, errorMessage = null, bulkResults = emptyList())
+        }
+        viewModelScope.launch {
+            val results = mutableListOf<BulkExportResult>()
+            val baseSettings = _uiState.value.settings
+            val processor = StitchProcessor(context)
+            projects.forEachIndexed { projectIndex, project ->
+                _uiState.update { state ->
+                    state.copy(
+                        processingStep = "Memproses ${project.sourceName} (${projectIndex + 1}/${projects.size})",
+                        progress = projectIndex.toFloat() / projects.size.toFloat()
+                    )
+                }
+                val wrapper = project.effectiveWrapper(baseSettings.wrapperFormat)
+                val projectSettings = baseSettings.copy(wrapperFormat = wrapper)
+                try {
+                    val processResult = processor.process(
+                        imageUris = project.images.map { it.uri },
+                        settings = projectSettings,
+                        onProgress = { _, progress ->
+                            val overall = (projectIndex + progress) / projects.size.toFloat()
+                            _uiState.update { it.copy(progress = overall) }
+                        }
+                    )
+                    if (processResult.isFailure) {
+                        throw processResult.exceptionOrNull() ?: IllegalStateException("Gagal memproses ${project.sourceName}.")
+                    }
+                    val processedItems = processResult.getOrThrow()
+                    val extension = ImageCompressor.getFileExtension(projectSettings.outputFormat)
+                    val files = processedItems.map { item ->
+                        "${item.filename}.$extension" to item.cacheFile
+                    }
+                    val info = exportItemsToDisk(
+                        files = files,
+                        sourceName = project.sourceName,
+                        wrapper = wrapper,
+                        settings = projectSettings,
+                        width = processedItems.maxOfOrNull { it.width } ?: 0,
+                        height = processedItems.sumOf { it.height },
+                        manualReviewCount = processedItems.count { it.needsManualReview }
+                    )
+                    // Cache potongan bulk tidak dipakai lagi (arsip sudah berisi salinannya).
+                    processedItems.forEach { item ->
+                        try { item.cacheFile.delete() } catch (t: Throwable) { }
+                    }
+                    results.add(
+                        BulkExportResult(
+                            projectName = project.sourceName,
+                            outputPath = info.exportFolderPath,
+                            outputCount = info.outputCount,
+                            bytesWritten = info.bytesWritten
+                        )
+                    )
+                } catch (e: Throwable) {
+                    val isOom = e is OutOfMemoryError || (e.message?.contains("OutOfMemory", ignoreCase = true) == true)
+                    results.add(
+                        BulkExportResult(
+                            projectName = project.sourceName,
+                            outputPath = null,
+                            outputCount = 0,
+                            bytesWritten = 0L,
+                            errorMessage = if (isOom) "Memori tidak cukup." else (e.message ?: "Gagal memproses.")
+                        )
+                    )
+                }
+            }
+            _uiState.update { it.copy(isProcessing = false, progress = 1f, bulkResults = results) }
+        }
     }
 
     fun clearPreviewSlices() {
@@ -189,16 +417,6 @@ class MainViewModel : ViewModel() {
             }
         }
         _uiState.update { it.copy(previewSlices = emptyList()) }
-    }
-
-    fun updateDirection(direction: MergeDirection) {
-        val readingDir = when (direction) {
-            MergeDirection.VERTICAL -> ReadingDirection.VERTICAL
-            MergeDirection.HORIZONTAL_LTR -> ReadingDirection.LTR
-            MergeDirection.HORIZONTAL_RTL -> ReadingDirection.RTL
-        }
-        val newSettings = _uiState.value.settings.copy(readingDirection = readingDir)
-        saveSettings(newSettings)
     }
 
     fun updateAlignmentMode(alignmentMode: AlignmentMode) {
@@ -346,6 +564,7 @@ class MainViewModel : ViewModel() {
         }
 
         val settings = _uiState.value.settings
+        val sourceName = _uiState.value.activeSourceName
 
         _uiState.update {
             it.copy(
@@ -358,80 +577,21 @@ class MainViewModel : ViewModel() {
 
         viewModelScope.launch {
             try {
-                var bytesWritten = 0L
-                val maxW = previewSlices.maxOfOrNull { it.width } ?: 0
-                val totalH = previewSlices.sumOf { it.height }
-                val manualReviewCount = previewSlices.count { it.needsManualReview }
-
-                val picturesDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES)
-                val mochistitchDir = File(picturesDir, "MochiStitch")
-                if (!mochistitchDir.exists()) mochistitchDir.mkdirs()
-
-                val dateFormat = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault())
-                val timestamp = dateFormat.format(Date())
-
-                if (settings.wrapperFormat == OutputWrapperFormat.CBZ || settings.wrapperFormat == OutputWrapperFormat.ZIP) {
-                    val archiveName = getExportDefaultFilename().let { name ->
-                        val extension = when (settings.wrapperFormat) {
-                            OutputWrapperFormat.CBZ -> ".cbz"
-                            OutputWrapperFormat.ZIP -> ".zip"
-                            else -> ".zip"
-                        }
-                        val baseName = name.substringBeforeLast(".")
-                        "${baseName}_$timestamp$extension"
-                    }
-                    val outputArchiveFile = File(mochistitchDir, archiveName)
-
-                    val archiveEntries = previewSlices.mapIndexed { index, slice ->
-                        _uiState.update { it.copy(progress = (index + 1).toFloat() / previewSlices.size.toFloat()) }
-                        ArchiveEntry(slice.filename) { out ->
-                            val srcFile = slice.cacheFilePath?.let { File(it) }
-                            if (srcFile != null && srcFile.exists()) {
-                                srcFile.inputStream().use { input ->
-                                    input.copyTo(out)
-                                }
-                            }
-                        }
-                    }
-                    bytesWritten = ArchiveHandler.createArchive(archiveEntries, outputArchiveFile.outputStream())
-
-                    _uiState.update {
-                        it.copy(
-                            isProcessing = false,
-                            exportResult = ExportResultInfo(
-                                width = maxW, height = totalH, bytesWritten = bytesWritten,
-                                outputCount = previewSlices.size,
-                                itemsNeedingManualReview = manualReviewCount,
-                                exportFolderPath = outputArchiveFile.absolutePath
-                            ),
-                            resultOutputUri = null
-                        )
-                    }
-                } else {
-                    val outputFolder = File(mochistitchDir, "export_$timestamp")
-                    if (!outputFolder.exists()) outputFolder.mkdirs()
-
-                    previewSlices.forEachIndexed { index, slice ->
-                        _uiState.update { it.copy(progress = (index + 1).toFloat() / previewSlices.size.toFloat()) }
-                        val destFile = File(outputFolder, slice.filename)
-                        val srcFile = slice.cacheFilePath?.let { File(it) }
-                        if (srcFile != null && srcFile.exists()) {
-                            srcFile.copyTo(destFile, overwrite = true)
-                            bytesWritten += destFile.length()
-                        }
-                    }
-
-                    _uiState.update {
-                        it.copy(
-                            isProcessing = false,
-                            exportResult = ExportResultInfo(
-                                width = maxW, height = totalH, bytesWritten = bytesWritten,
-                                outputCount = previewSlices.size,
-                                itemsNeedingManualReview = manualReviewCount,
-                                exportFolderPath = outputFolder.absolutePath
-                            )
-                        )
-                    }
+                val files = previewSlices.map { slice ->
+                    slice.filename to slice.cacheFilePath?.let { File(it) }
+                }
+                val info = exportItemsToDisk(
+                    files = files,
+                    sourceName = sourceName,
+                    wrapper = settings.wrapperFormat,
+                    settings = settings,
+                    width = previewSlices.maxOfOrNull { it.width } ?: 0,
+                    height = previewSlices.sumOf { it.height },
+                    manualReviewCount = previewSlices.count { it.needsManualReview },
+                    onProgress = { p -> _uiState.update { it.copy(progress = p) } }
+                )
+                _uiState.update {
+                    it.copy(isProcessing = false, exportResult = info, resultOutputUri = null)
                 }
             } catch (e: Throwable) {
                 _uiState.update {
@@ -444,6 +604,81 @@ class MainViewModel : ViewModel() {
                     )
                 }
             }
+        }
+    }
+
+    /**
+     * Menulis hasil potongan ke disk — dipakai ekspor tunggal maupun bulk.
+     *
+     * Aturan penamaan arsip: bila [sourceName] adalah arsip yang didukung
+     * (mis. "komik.zip"), nama output SAMA dengan basename input
+     * ("komik.zip" / "komik.cbz", tanpa timestamp). Selain itu memakai
+     * nama default + timestamp agar tidak tertimpa.
+     */
+    private suspend fun exportItemsToDisk(
+        files: List<Pair<String, File?>>,
+        sourceName: String?,
+        wrapper: OutputWrapperFormat,
+        settings: MochiStitchSettings,
+        width: Int = 0,
+        height: Int = 0,
+        manualReviewCount: Int = 0,
+        onProgress: suspend (Float) -> Unit = {}
+    ): ExportResultInfo = withContext(Dispatchers.IO) {
+        var bytesWritten = 0L
+
+        val picturesDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES)
+        val mochistitchDir = File(picturesDir, "MochiStitch")
+        if (!mochistitchDir.exists()) mochistitchDir.mkdirs()
+
+        val dateFormat = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault())
+        val timestamp = dateFormat.format(Date())
+
+        if (wrapper == OutputWrapperFormat.CBZ || wrapper == OutputWrapperFormat.ZIP) {
+            val archiveName = if (sourceName != null && ArchiveHandler.isSupportedArchive(sourceName)) {
+                FilenameFormatter.resolveArchiveOutputName(sourceName, wrapper)
+            } else {
+                FilenameFormatter.resolveArchiveOutputName(
+                    getExportDefaultFilename(), wrapper, timestamp
+                )
+            }
+            val outputArchiveFile = File(mochistitchDir, archiveName)
+
+            val archiveEntries = files.mapIndexed { index, (filename, srcFile) ->
+                onProgress((index + 1).toFloat() / files.size.toFloat())
+                ArchiveEntry(filename) { out ->
+                    if (srcFile != null && srcFile.exists()) {
+                        srcFile.inputStream().use { input -> input.copyTo(out) }
+                    }
+                }
+            }
+            bytesWritten = ArchiveHandler.createArchive(archiveEntries, outputArchiveFile.outputStream())
+
+            ExportResultInfo(
+                width = width, height = height, bytesWritten = bytesWritten,
+                outputCount = files.size,
+                itemsNeedingManualReview = manualReviewCount,
+                exportFolderPath = outputArchiveFile.absolutePath
+            )
+        } else {
+            val outputFolder = File(mochistitchDir, "export_$timestamp")
+            if (!outputFolder.exists()) outputFolder.mkdirs()
+
+            files.forEachIndexed { index, (filename, srcFile) ->
+                onProgress((index + 1).toFloat() / files.size.toFloat())
+                val destFile = File(outputFolder, filename)
+                if (srcFile != null && srcFile.exists()) {
+                    srcFile.copyTo(destFile, overwrite = true)
+                    bytesWritten += destFile.length()
+                }
+            }
+
+            ExportResultInfo(
+                width = width, height = height, bytesWritten = bytesWritten,
+                outputCount = files.size,
+                itemsNeedingManualReview = manualReviewCount,
+                exportFolderPath = outputFolder.absolutePath
+            )
         }
     }
 

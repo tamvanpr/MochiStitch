@@ -3,10 +3,15 @@ package com.mochistitch.core.imaging
 import android.graphics.Bitmap
 import android.graphics.Color
 
+/**
+ * Arah penggabungan halaman komik.
+ *
+ * MochiStitch hanya mendukung penggabungan VERTIKAL (strip webtoon panjang).
+ * Varian horizontal (kiri-kanan) dihapus total — tidak ada cabang kode,
+ * opsi UI, maupun pengaturan untuk arah horizontal di mana pun.
+ */
 enum class MergeDirection {
-    VERTICAL,
-    HORIZONTAL_LTR,
-    HORIZONTAL_RTL
+    VERTICAL
 }
 
 enum class AlignmentMode {

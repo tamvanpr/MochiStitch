@@ -67,8 +67,8 @@ object SplitEngine {
             return listOf(SlicedPiece(copyBitmap(source), needsManualReview = false))
         }
 
-        val isVertical = direction == ReadingDirection.VERTICAL
-        val totalLength = if (isVertical) source.height else source.width
+        val isVertical = true
+        val totalLength = source.height
 
         if (splitMode == SplitMode.PAGES_PER_FILE && maxPagesPerFile > 0) {
             return sliceWithPageLimit(source, maxPixelLength, direction, maxPagesPerFile)
@@ -84,6 +84,11 @@ object SplitEngine {
         } else {
             emptyList()
         }
+
+        // Gerbang ketat: Smart diminta tapi OpenCV tidak siap berarti detector
+        // buta — semua potongan dari jalur ini WAJIB ditandai tinjauan manual.
+        val smartBlind = mochiSmartEnabled && !ContourDetector.isReady()
+        val blindReason = "Mochi Smart tidak aktif (OpenCV) — periksa potongan manual."
 
         // 2. Calculate safe gaps along primary axis
         val safeGaps = ContourDetector.calculateSafeGaps(
@@ -184,63 +189,14 @@ object SplitEngine {
                 val effectiveSplitPos = splitResult.splitPosition.coerceIn(currentY + 1, totalLength - 1)
                 val sliceHeight = (effectiveSplitPos - currentY).coerceIn(1, remaining)
                 val slice = createIndependentSlice(source, 0, currentY, source.width, sliceHeight)
-                slices.add(SlicedPiece(slice, splitResult.needsManualReview, splitResult.reviewReason))
-                currentY += sliceHeight
-            }
-        } else {
-            var currentX = 0
-            while (currentX < totalLength) {
-                val remaining = totalLength - currentX
-                if (remaining <= maxPixelLength) {
-                    val slice = createIndependentSlice(source, currentX, 0, remaining, source.height)
-                    slices.add(SlicedPiece(slice, needsManualReview = false))
-                    break
-                }
-
-                val targetCutX = currentX + maxPixelLength
-
-                val adaptiveToleranceX = ContourDetector.calculateAdaptiveTolerance(
-                    baseTolerance = tolerance,
-                    canvasWidth = source.height,
-                    canvasLength = totalLength,
-                    protectedBoxes = boundingBoxes.filter { it.isProtected },
-                    isVertical = false,
-                    targetPos = targetCutX
-                )
-
-                val snappedBoundaryX = PageBoundarySnapping.findSnapBoundary(
-                    targetPos = targetCutX,
-                    tolerance = adaptiveToleranceX,
-                    pageBoundaries = pageBoundaries,
-                    protectedBoxes = boundingBoxes.filter { it.isProtected },
-                    isVertical = false
-                )
-
-                val splitResult = if (snappedBoundaryX != null) {
-                    SmartSplitResult(snappedBoundaryX, needsManualReview = false)
-                } else if (mochiSmartEnabled || autoGutterDetectionEnabled) {
-                    ContourDetector.findSafeSplitPointDetailed(
-                        totalLength = totalLength,
-                        currentPos = currentX,
-                        targetPos = targetCutX,
-                        tolerance = adaptiveToleranceX,
-                        safeGaps = safeGaps,
-                        allowExceedOnNoSafeGap = allowExceedOnNoSafeGap,
-                        preferShorterOverLonger = preferShorterOverLonger,
-                        sfxBoxes = boundingBoxes.filter { !it.isProtected },
-                        protectedBoxes = boundingBoxes.filter { it.isProtected },
-                        isVertical = false,
-                        selectBestInGap = null
+                slices.add(
+                    SlicedPiece(
+                        slice,
+                        splitResult.needsManualReview || smartBlind,
+                        splitResult.reviewReason ?: if (smartBlind) blindReason else null
                     )
-                } else {
-                    SmartSplitResult(targetCutX.coerceAtMost(totalLength - 1), needsManualReview = false)
-                }
-
-                val effectiveSplitPos = splitResult.splitPosition.coerceIn(currentX + 1, totalLength - 1)
-                val sliceWidth = (effectiveSplitPos - currentX).coerceIn(1, remaining)
-                val slice = createIndependentSlice(source, currentX, 0, sliceWidth, source.height)
-                slices.add(SlicedPiece(slice, splitResult.needsManualReview, splitResult.reviewReason))
-                currentX += sliceWidth
+                )
+                currentY += sliceHeight
             }
         }
 
@@ -253,8 +209,8 @@ object SplitEngine {
         direction: ReadingDirection,
         maxPagesPerFile: Int
     ): List<SlicedPiece> {
-        val isVertical = direction == ReadingDirection.VERTICAL
-        val totalLength = if (isVertical) source.height else source.width
+        // Selalu vertikal — parameter direction dipertahankan demi kompatibilitas API.
+        val totalLength = source.height
 
         if (totalLength <= maxPixelLength) {
             return listOf(SlicedPiece(copyBitmap(source), needsManualReview = false))
@@ -262,27 +218,17 @@ object SplitEngine {
 
         val slices = mutableListOf<SlicedPiece>()
         var currentY = 0
-        var currentX = 0
         var pageCount = 0
 
-        while (if (isVertical) currentY < totalLength else currentX < totalLength) {
-            val remaining = totalLength - if (isVertical) currentY else currentX
+        while (currentY < totalLength) {
+            val remaining = totalLength - currentY
             val currentSliceLength = min(remaining, maxPixelLength)
 
-            val slice = if (isVertical) {
-                createIndependentSlice(source, 0, currentY, source.width, currentSliceLength)
-            } else {
-                createIndependentSlice(source, currentX, 0, currentSliceLength, source.height)
-            }
+            val slice = createIndependentSlice(source, 0, currentY, source.width, currentSliceLength)
 
             slices.add(SlicedPiece(slice, needsManualReview = false))
             pageCount++
-
-            if (isVertical) {
-                currentY += currentSliceLength
-            } else {
-                currentX += currentSliceLength
-            }
+            currentY += currentSliceLength
 
             if (pageCount >= maxPagesPerFile) {
                 pageCount = 0

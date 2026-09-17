@@ -12,7 +12,6 @@ import com.mochistitch.core.mochismart.ContourDetector
 import com.mochistitch.core.settings.AlignmentModeSetting
 import com.mochistitch.core.settings.MochiStitchSettings
 import com.mochistitch.core.settings.PaddingColorSetting
-import com.mochistitch.core.settings.ReadingDirection
 import com.mochistitch.core.settings.SplitMode
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -87,19 +86,19 @@ class StitchProcessor(
             val maxInputHeight = sizes.maxOf { it.height }
 
             val placements = calculateItemPlacements(sizes, maxInputWidth, maxInputHeight, mergeConfig)
-            val isVertical = mergeConfig.direction == MergeDirection.VERTICAL
 
-            val totalCanvasWidth = if (isVertical) maxInputWidth else placements.maxOf { it.pageBox.right }
-            val totalCanvasHeight = if (isVertical) placements.maxOf { it.pageBox.bottom } else maxInputHeight
+            val totalCanvasWidth = maxInputWidth
+            val totalCanvasHeight = placements.maxOf { it.pageBox.bottom }
 
-            val totalLength = if (isVertical) totalCanvasHeight else totalCanvasWidth
+            val totalLength = totalCanvasHeight
 
             onProgress(ProcessingStage.GROUPING, 0.2f)
 
-            // Step 2: Tentukan interval pemotongan (slice intervals) pada canvas gabungan
+            // Step 2: Tentukan interval pemotongan (slice intervals) pada canvas gabungan.
+            // Selalu vertikal — tidak ada lagi jalur horizontal.
             val sliceIntervals = calculateSliceIntervals(
                 totalLength = totalLength,
-                isVertical = isVertical,
+                isVertical = true,
                 totalCanvasWidth = totalCanvasWidth,
                 totalCanvasHeight = totalCanvasHeight,
                 placements = placements,
@@ -521,11 +520,7 @@ class StitchProcessor(
         refHeight: Int,
         config: MergeConfig
     ): List<MergeEngine.ItemPlacement> {
-        return when (config.direction) {
-            MergeDirection.VERTICAL -> calculateVerticalPlacements(sizes, refWidth, refHeight, config)
-            MergeDirection.HORIZONTAL_LTR -> calculateHorizontalPlacements(sizes, refWidth, refHeight, config, leftToRight = true)
-            MergeDirection.HORIZONTAL_RTL -> calculateHorizontalPlacements(sizes, refWidth, refHeight, config, leftToRight = false)
-        }
+        return calculateVerticalPlacements(sizes, refWidth, refHeight, config)
     }
 
     private fun calculateVerticalPlacements(
@@ -548,54 +543,6 @@ class StitchProcessor(
             )
             placements.add(MergeEngine.ItemPlacement(item.uri, placement.srcRect, adjustedDst, pageBox))
             currentY += placement.pageH
-        }
-
-        return placements
-    }
-
-    private fun calculateHorizontalPlacements(
-        sizes: List<MergeEngine.ImageSize>,
-        refWidth: Int,
-        refHeight: Int,
-        config: MergeConfig,
-        leftToRight: Boolean
-    ): List<MergeEngine.ItemPlacement> {
-        val placements = mutableListOf<MergeEngine.ItemPlacement>()
-
-        if (leftToRight) {
-            var currentX = 0
-            for (item in sizes) {
-                val placement = computePlacement(item.width, item.height, refWidth, refHeight, config.alignmentMode, isVertical = false)
-                val pageBox = Rect(currentX, 0, currentX + placement.pageW, refHeight)
-                val adjustedDst = Rect(
-                    currentX + placement.dstRect.left,
-                    placement.dstRect.top,
-                    currentX + placement.dstRect.right,
-                    placement.dstRect.bottom
-                )
-                placements.add(MergeEngine.ItemPlacement(item.uri, placement.srcRect, adjustedDst, pageBox))
-                currentX += placement.pageW
-            }
-        } else {
-            val computed = sizes.map { item ->
-                computePlacement(item.width, item.height, refWidth, refHeight, config.alignmentMode, isVertical = false)
-            }
-            val totalWidth = computed.sumOf { it.pageW }
-            var currentX = totalWidth
-
-            for ((index, item) in sizes.withIndex()) {
-                val placement = computed[index]
-                val itemStartX = currentX - placement.pageW
-                val pageBox = Rect(itemStartX, 0, itemStartX + placement.pageW, refHeight)
-                val adjustedDst = Rect(
-                    itemStartX + placement.dstRect.left,
-                    placement.dstRect.top,
-                    itemStartX + placement.dstRect.right,
-                    placement.dstRect.bottom
-                )
-                placements.add(MergeEngine.ItemPlacement(item.uri, placement.srcRect, adjustedDst, pageBox))
-                currentX -= placement.pageW
-            }
         }
 
         return placements
@@ -670,12 +617,10 @@ class StitchProcessor(
     )
 
     private fun buildMergeConfig(settings: MochiStitchSettings): MergeConfig {
+        // Selalu vertikal. Nilai lama (LTR/RTL) dari DataStore dinormalisasi
+        // ke VERTICAL agar preferensi lama tidak merusak alur.
         return MergeConfig(
-            direction = when (settings.readingDirection) {
-                ReadingDirection.VERTICAL -> MergeDirection.VERTICAL
-                ReadingDirection.LTR -> MergeDirection.HORIZONTAL_LTR
-                ReadingDirection.RTL -> MergeDirection.HORIZONTAL_RTL
-            },
+            direction = MergeDirection.VERTICAL,
             alignmentMode = when (settings.alignmentMode) {
                 AlignmentModeSetting.RESIZE_PROPORTIONAL -> AlignmentMode.RESIZE_PROPORTIONAL
                 AlignmentModeSetting.CENTER_CROP -> AlignmentMode.CENTER_CROP

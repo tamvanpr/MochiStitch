@@ -63,7 +63,6 @@ import com.mochistitch.core.settings.MochiStitchSettings
 import com.mochistitch.core.settings.OutputFormat
 import com.mochistitch.core.settings.OutputWrapperFormat
 import com.mochistitch.core.settings.PaddingColorSetting
-import com.mochistitch.core.settings.ReadingDirection
 import com.mochistitch.core.settings.SplitMode
 import kotlin.math.roundToInt
 
@@ -274,8 +273,11 @@ fun SettingsScreenContent(
                 }
             }
 
-            // ── 3. Mochi Smart (Deteksi Otomatis) ─────────────────────
-            SectionCard(title = "Mochi Smart (Deteksi Otomatis)") {
+            // ── 3. Mochi Smart (Deteksi Otomatis, mode ketat) ──────────
+            SectionCard(title = "Mochi Smart (Mode Ketat)") {
+                TooltipBox(
+                    text = "Mode ketat: sensitivitas default Tinggi, jendela toleransi dipersempit, dan bila OpenCV tidak siap maka semua potongan otomatis ditandai perlu tinjauan manual."
+                )
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -584,23 +586,14 @@ private fun AdvancedSettingsCard(
 
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
 
-                // Layout & Reading
+                // Layout — MochiStitch hanya menggabung vertikal (strip webtoon).
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    SettingSectionLabel("Arah Baca / Penggabungan")
-                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        ReadingDirection.entries.forEach { dir ->
-                            val label = when (dir) {
-                                ReadingDirection.VERTICAL -> "Vertikal (Webtoon)"
-                                ReadingDirection.LTR -> "Kiri ke Kanan"
-                                ReadingDirection.RTL -> "Kanan ke Kiri"
-                            }
-                            MochiChoiceChip(
-                                selected = settings.readingDirection == dir,
-                                onClick = { onSettingsChanged(settings.copy(readingDirection = dir)) },
-                                label = label
-                            )
-                        }
-                    }
+                    SettingSectionLabel("Arah Penggabungan")
+                    Text(
+                        text = "Vertikal (Webtoon) — satu-satunya mode. Opsi horizontal telah dihapus.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
 
                     Spacer(modifier = Modifier.height(4.dp))
                     SettingSectionLabel("Mode Penyesuaian Lebar")

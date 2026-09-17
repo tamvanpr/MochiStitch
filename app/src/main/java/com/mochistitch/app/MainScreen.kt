@@ -14,14 +14,21 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Archive
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Clear
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.FolderOpen
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.AlertDialog
@@ -29,14 +36,17 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -59,6 +69,7 @@ import com.mochistitch.core.settings.OutputWrapperFormat
 import com.mochistitch.core.ui.ImageReorderList
 import com.mochistitch.core.ui.PreviewScreenContent
 import com.mochistitch.core.ui.SettingsScreenContent
+import com.mochistitch.core.ui.StitchProject
 import kotlinx.coroutines.launch
 import java.util.Locale
 
@@ -132,6 +143,29 @@ fun MainScreen(
         }
     }
 
+    val importArchiveLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri != null) {
+            viewModel.importArchive(uri, context)
+        }
+    }
+
+    fun launchArchivePicker() {
+        importArchiveLauncher.launch(
+            arrayOf(
+                "application/zip",
+                "application/x-zip-compressed",
+                "application/x-cbz",
+                "application/x-rar-compressed",
+                "application/vnd.rar",
+                "application/x-7z-compressed",
+                "application/octet-stream",
+                "*/*"
+            )
+        )
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -175,6 +209,57 @@ fun MainScreen(
                 .padding(horizontal = 12.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
+            // ── Hero ringkas: mode vertikal + output default ZIP ──────
+            HeroStrip(
+                imageCount = uiState.selectedImages.size,
+                projectCount = uiState.projects.size,
+                defaultWrapper = uiState.settings.wrapperFormat
+            )
+
+            // ── Tombol impor: gambar satuan + arsip (ZIP/CBZ/RAR/CBR) ──
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                OutlinedButton(
+                    onClick = { selectImagesLauncher.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) },
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Icon(imageVector = Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("Gambar")
+                }
+                Button(
+                    onClick = { launchArchivePicker() },
+                    modifier = Modifier.weight(1f),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Icon(imageVector = Icons.Default.Archive, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("Impor Arsip")
+                }
+            }
+
+            // ── Penanda sumber arsip: nama output = nama input ─────────
+            val activeSource = uiState.activeSourceName
+            if (activeSource != null && com.mochistitch.core.archive.ArchiveHandler.isSupportedArchive(activeSource)) {
+                val outName = com.mochistitch.core.imaging.FilenameFormatter.resolveArchiveOutputName(
+                    activeSource, uiState.settings.wrapperFormat
+                )
+                Surface(
+                    color = MaterialTheme.colorScheme.secondaryContainer,
+                    shape = RoundedCornerShape(8.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(
+                        text = "Sumber: $activeSource → output: $outName",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSecondaryContainer,
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                    )
+                }
+            }
+
             // ── Section header + page count ─────────────────────────────
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -195,44 +280,61 @@ fun MainScreen(
                 }
                 if (uiState.selectedImages.isNotEmpty()) {
                     TextButton(
-                        onClick = { selectImagesLauncher.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }
+                        onClick = { viewModel.saveCurrentAsProject(activeSource ?: "pilihan manual") }
                     ) {
                         Icon(
-                            imageVector = Icons.Default.Add,
+                            imageVector = Icons.Default.FolderOpen,
                             contentDescription = null,
                             modifier = Modifier.size(18.dp)
                         )
                         Spacer(modifier = Modifier.width(4.dp))
-                        Text("Tambah Gambar")
+                        Text("Jadikan Projek")
                     }
                 }
             }
 
             // ── Image list or empty state ───────────────────────────────
-            if (uiState.selectedImages.isEmpty()) {
+            if (uiState.selectedImages.isEmpty() && uiState.projects.isEmpty()) {
                 EmptyStateBox(
-                    onSelectClicked = { selectImagesLauncher.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }
+                    onSelectClicked = { selectImagesLauncher.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) },
+                    onArchiveClicked = { launchArchivePicker() }
                 )
             } else {
-                ImageReorderList(
-                    items = uiState.selectedImages,
-                    onMoveUp = { viewModel.moveUp(it) },
-                    onMoveDown = { viewModel.moveDown(it) },
-                    onRemove = { viewModel.remove(it) },
-                    modifier = Modifier.weight(1f)
-                )
+                if (uiState.selectedImages.isNotEmpty()) {
+                    ImageReorderList(
+                        items = uiState.selectedImages,
+                        onMoveUp = { viewModel.moveUp(it) },
+                        onMoveDown = { viewModel.moveDown(it) },
+                        onRemove = { viewModel.remove(it) },
+                        modifier = Modifier.weight(1f)
+                    )
 
-                Button(
-                    onClick = { viewModel.generatePreview(context) },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(48.dp),
-                    enabled = uiState.selectedImages.isNotEmpty() && !uiState.isProcessing,
-                    shape = RoundedCornerShape(12.dp)
-                ) {
-                    Text(
-                        text = if (uiState.isProcessing) "Memproses..." else "Buat Pratinjau",
-                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold)
+                    Button(
+                        onClick = { viewModel.generatePreview(context) },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(48.dp),
+                        enabled = uiState.selectedImages.isNotEmpty() && !uiState.isProcessing,
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Text(
+                            text = if (uiState.isProcessing) "Memproses..." else "Buat Pratinjau",
+                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold)
+                        )
+                    }
+                }
+
+                // ── Daftar projek bulk: output bisa ditentukan sendiri ──
+                if (uiState.projects.isNotEmpty()) {
+                    BulkProjectSection(
+                        projects = uiState.projects,
+                        activeProjectId = uiState.activeProjectId,
+                        globalWrapper = uiState.settings.wrapperFormat,
+                        onLoad = { viewModel.loadProject(it) },
+                        onWrapperChange = { id, wrapper -> viewModel.updateProjectWrapper(id, wrapper) },
+                        onDelete = { viewModel.deleteProject(it) },
+                        onProcessAll = { viewModel.processAllProjects(context) },
+                        isProcessing = uiState.isProcessing
                     )
                 }
             }
@@ -241,11 +343,206 @@ fun MainScreen(
 
     ProcessingProgressDialog(uiState = uiState)
     ExportResultDialogs(uiState = uiState, viewModel = viewModel, context = context)
+    BulkResultDialog(uiState = uiState, viewModel = viewModel)
+}
+
+// ── Hero strip ─────────────────────────────────────────────────────────────
+@Composable
+private fun HeroStrip(
+    imageCount: Int,
+    projectCount: Int,
+    defaultWrapper: OutputWrapperFormat
+) {
+    val wrapperLabel = when (defaultWrapper) {
+        OutputWrapperFormat.ZIP -> "ZIP"
+        OutputWrapperFormat.CBZ -> "CBZ"
+        OutputWrapperFormat.LOOSE_FILES -> "Berkas"
+    }
+    Card(
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
+        shape = RoundedCornerShape(14.dp),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 14.dp, vertical = 10.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = "Penggabung Vertikal",
+                    style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                )
+                Text(
+                    text = "$imageCount gambar • $projectCount projek • Output $wrapperLabel",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                )
+            }
+            Icon(
+                imageVector = Icons.Default.PlayArrow,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onPrimaryContainer
+            )
+        }
+    }
+}
+
+// ── Daftar projek bulk ─────────────────────────────────────────────────────
+@Composable
+private fun BulkProjectSection(
+    projects: List<StitchProject>,
+    activeProjectId: String?,
+    globalWrapper: OutputWrapperFormat,
+    onLoad: (String) -> Unit,
+    onWrapperChange: (String, OutputWrapperFormat?) -> Unit,
+    onDelete: (String) -> Unit,
+    onProcessAll: () -> Unit,
+    isProcessing: Boolean
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "Projek Bulk (${projects.size})",
+                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold)
+            )
+            Button(
+                onClick = onProcessAll,
+                enabled = !isProcessing && projects.any { it.images.isNotEmpty() }
+            ) {
+                Text("Proses Semua")
+            }
+        }
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(max = 220.dp)
+                .verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            projects.forEach { project ->
+                Card(
+                    colors = CardDefaults.cardColors(
+                        containerColor = if (project.id == activeProjectId) {
+                            MaterialTheme.colorScheme.secondaryContainer
+                        } else {
+                            MaterialTheme.colorScheme.surfaceVariant
+                        }
+                    ),
+                    shape = RoundedCornerShape(10.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = project.sourceName,
+                                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
+                                modifier = Modifier.weight(1f)
+                            )
+                            Text(
+                                text = "${project.images.size} hlm",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            OutputWrapperFormat.entries.forEach { wrapper ->
+                                val label = when (wrapper) {
+                                    OutputWrapperFormat.LOOSE_FILES -> "Berkas"
+                                    OutputWrapperFormat.CBZ -> "CBZ"
+                                    OutputWrapperFormat.ZIP -> "ZIP"
+                                }
+                                val selected = project.effectiveWrapper(globalWrapper) == wrapper
+                                FilterChip(
+                                    selected = selected,
+                                    onClick = {
+                                        // Ketuk opsi aktif lagi = kembali ikut global.
+                                        onWrapperChange(project.id, if (selected) null else wrapper)
+                                    },
+                                    label = { Text(label, style = MaterialTheme.typography.labelSmall) }
+                                )
+                            }
+                            Spacer(modifier = Modifier.weight(1f))
+                            if (project.id != activeProjectId) {
+                                TextButton(onClick = { onLoad(project.id) }) { Text("Muat") }
+                            }
+                            IconButton(onClick = { onDelete(project.id) }) {
+                                Icon(
+                                    imageVector = Icons.Default.Delete,
+                                    contentDescription = "Hapus projek",
+                                    tint = MaterialTheme.colorScheme.error
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+// ── Dialog hasil bulk ──────────────────────────────────────────────────────
+@Composable
+private fun BulkResultDialog(
+    uiState: MainUiState,
+    viewModel: MainViewModel
+) {
+    if (uiState.bulkResults.isEmpty()) return
+    val successCount = uiState.bulkResults.count { it.errorMessage == null }
+    AlertDialog(
+        onDismissRequest = { viewModel.dismissBulkResults() },
+        title = { Text("Bulk Selesai ($successCount/${uiState.bulkResults.size})") },
+        text = {
+            Column(
+                modifier = Modifier.verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                uiState.bulkResults.forEach { result ->
+                    Column {
+                        Text(
+                            text = result.projectName,
+                            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold)
+                        )
+                        Text(
+                            text = result.errorMessage ?: "${result.outputCount} berkas • ${formatFileSize(result.bytesWritten)}\n${result.outputPath}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = if (result.errorMessage == null) {
+                                MaterialTheme.colorScheme.onSurfaceVariant
+                            } else {
+                                MaterialTheme.colorScheme.error
+                            }
+                        )
+                        HorizontalDivider()
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { viewModel.dismissBulkResults() }) { Text("Selesai") }
+        }
+    )
 }
 
 // ── Empty state box ──────────────────────────────────────────────────────────
 @Composable
-private fun EmptyStateBox(onSelectClicked: () -> Unit) {
+private fun EmptyStateBox(
+    onSelectClicked: () -> Unit,
+    onArchiveClicked: () -> Unit
+) {
     Box(
         modifier = Modifier
             .fillMaxWidth()
@@ -284,6 +581,20 @@ private fun EmptyStateBox(onSelectClicked: () -> Unit) {
                 )
                 Spacer(modifier = Modifier.width(8.dp))
                 Text("Pilih Gambar")
+            }
+
+            OutlinedButton(
+                onClick = onArchiveClicked,
+                modifier = Modifier.fillMaxWidth(0.75f),
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Archive,
+                    contentDescription = null,
+                    modifier = Modifier.size(18.dp)
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("Impor ZIP / RAR")
             }
         }
     }

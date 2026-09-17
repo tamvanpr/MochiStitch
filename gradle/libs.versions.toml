@@ -8,6 +8,7 @@ composeBom = "2024.10.01"
 datastore = "1.1.1"
 coil = "2.7.0"
 opencv = "4.9.0"
+junrar = "7.5.10"
 junit = "4.13.2"
 junitVersion = "1.2.1"
 espressoCore = "3.6.1"
@@ -27,6 +28,7 @@ androidx-material3 = { group = "androidx.compose.material3", name = "material3" 
 androidx-datastore-preferences = { group = "androidx.datastore", name = "datastore-preferences", version.ref = "datastore" }
 coil-compose = { group = "io.coil-kt", name = "coil-compose", version.ref = "coil" }
 opencv-android = { group = "org.opencv", name = "opencv", version.ref = "opencv" }
+junrar = { group = "com.github.junrar", name = "junrar", version.ref = "junrar" }
 
 junit = { group = "junit", name = "junit", version.ref = "junit" }
 androidx-junit = { group = "androidx.test.ext", name = "junit", version.ref = "junitVersion" }
