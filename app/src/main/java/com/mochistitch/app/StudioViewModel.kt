@@ -20,6 +20,8 @@ import com.mochistitch.core.settings.StitchSettingsRepository
 import com.mochistitch.core.ui.PageItem
 import com.mochistitch.core.ui.SliceInfo
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -68,6 +70,7 @@ class StudioViewModel : ViewModel() {
     val state: StateFlow<StudioState> = _state.asStateFlow()
 
     private var repo: StitchSettingsRepository? = null
+    private var settingsSaveJob: Job? = null
 
     fun boot(context: Context) {
         if (repo != null) return
@@ -84,8 +87,18 @@ class StudioViewModel : ViewModel() {
     }
 
     fun keepSettings(s: StitchSettings) {
+        // State langsung, simpan tunda 600ms: tanpa ini gema DataStore
+        // menimpa ketikan cepat (hapus teks mental-mental).
         _state.update { it.copy(settings = s) }
-        viewModelScope.launch { repo?.save(s) }
+        settingsSaveJob?.cancel()
+        settingsSaveJob = viewModelScope.launch {
+            delay(600)
+            try {
+                repo?.save(_state.value.settings)
+            } catch (t: Throwable) {
+                // Abaikan kegagalan simpan latar.
+            }
+        }
     }
 
     fun clearNotice() {
@@ -432,7 +445,7 @@ class StudioViewModel : ViewModel() {
                 if (useMedia) {
                     val uri = mediaPublish(context, tmp, name, mime, null)
                     try { tmp.delete() } catch (t: Throwable) { }
-                    OutInfo("Pictures/MochiStitch/$name", files.size, bytes, uri)
+                    OutInfo("Download/MochiStitch/$name", files.size, bytes, uri)
                 } else {
                     val pictures = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES)
                     val root = File(pictures, "MochiStitch").apply { mkdirs() }
@@ -478,10 +491,12 @@ class StudioViewModel : ViewModel() {
     /** Terbitkan satu file ke galeri via MediaStore (Android 10+). */
     private fun mediaPublish(context: Context, src: File, displayName: String, mime: String, subfolder: String?): Uri? {
         val resolver = context.contentResolver
+        // MediaStore.Files hanya mengizinkan Download/Documents — arsip ke Download.
+        val baseDir = if (mime.startsWith("image/")) "Pictures" else "Download"
         val values = android.content.ContentValues().apply {
             put(android.provider.MediaStore.MediaColumns.DISPLAY_NAME, displayName)
             put(android.provider.MediaStore.MediaColumns.MIME_TYPE, mime)
-            val rel = if (subfolder.isNullOrBlank()) "Pictures/MochiStitch" else "Pictures/MochiStitch/$subfolder"
+            val rel = if (subfolder.isNullOrBlank()) "$baseDir/MochiStitch" else "$baseDir/MochiStitch/$subfolder"
             put(android.provider.MediaStore.MediaColumns.RELATIVE_PATH, rel)
         }
         val collection = if (mime.startsWith("image/")) {

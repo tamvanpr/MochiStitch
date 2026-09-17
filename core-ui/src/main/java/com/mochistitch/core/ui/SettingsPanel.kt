@@ -34,6 +34,10 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
@@ -184,9 +188,18 @@ fun SettingsPanel(
                     )
                 }
                 if (settings.splitRule == SplitRule.PAGES_PER_PACK) {
+                    // State teks lokal agar kolom bisa dikosongkan total tanpa mental.
+                    var pagesText by remember(settings.pagesPerPack) {
+                        mutableStateOf(settings.pagesPerPack.toString())
+                    }
                     OutlinedTextField(
-                        value = settings.pagesPerPack.toString(),
-                        onValueChange = { v -> v.toIntOrNull()?.let { onChange(settings.copy(pagesPerPack = it.coerceIn(1, 200))) } },
+                        value = pagesText,
+                        onValueChange = { v ->
+                            pagesText = v.filter { it.isDigit() }.take(3)
+                            pagesText.toIntOrNull()?.let {
+                                onChange(settings.copy(pagesPerPack = it.coerceIn(1, 200)))
+                            }
+                        },
                         label = { Text("Halaman per berkas") },
                         singleLine = true,
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),

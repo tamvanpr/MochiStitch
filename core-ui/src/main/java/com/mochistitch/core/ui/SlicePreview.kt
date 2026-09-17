@@ -1,6 +1,7 @@
 package com.mochistitch.core.ui
 
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -13,7 +14,9 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Publish
@@ -32,6 +35,10 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import com.mochistitch.core.settings.PackFormat
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -51,6 +58,7 @@ fun SlicePreview(
     onBack: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    var zoomed by remember { mutableStateOf<SliceInfo?>(null) }
     Scaffold(
         topBar = {
             TopAppBar(
@@ -78,6 +86,7 @@ fun SlicePreview(
             LazyColumn(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 items(slices, key = { it.order }) { slice ->
                     Card(
+                        onClick = { zoomed = slice },
                         shape = RoundedCornerShape(16.dp),
                         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
                         modifier = Modifier.fillMaxWidth()
@@ -107,6 +116,11 @@ fun SlicePreview(
                                         .clip(RoundedCornerShape(10.dp))
                                 )
                             }
+                            Text(
+                                "Ketuk untuk lihat utuh",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.primary
+                            )
                             if (showFlags && slice.flagged) {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     Icon(Icons.Default.Report, contentDescription = null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(16.dp))
@@ -154,6 +168,40 @@ fun SlicePreview(
                         onClick = { onPackChange(option) },
                         label = { Text(label) }
                     )
+                }
+            }
+        }
+    }
+
+    // Tampil utuh satu gambar: dialog geser + cubit tidak didukung di sini,
+    // gambar tampil penuh proporsional dan bisa digulir.
+    val focus = zoomed
+    if (focus != null) {
+        androidx.compose.ui.window.Dialog(onDismissRequest = { zoomed = null }) {
+            Card(shape = RoundedCornerShape(16.dp)) {
+                Column(
+                    modifier = Modifier
+                        .verticalScroll(rememberScrollState())
+                        .padding(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text(focus.fileName, fontWeight = FontWeight.Bold, maxLines = 1)
+                    Text(
+                        "${focus.width}×${focus.height}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    focus.bitmap?.let { bmp ->
+                        Image(
+                            bitmap = bmp.asImageBitmap(),
+                            contentDescription = focus.fileName,
+                            contentScale = ContentScale.FillWidth,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+                    Button(onClick = { zoomed = null }, modifier = Modifier.fillMaxWidth()) {
+                        Text("Tutup")
+                    }
                 }
             }
         }
