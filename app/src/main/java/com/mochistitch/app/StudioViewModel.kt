@@ -331,13 +331,13 @@ class StudioViewModel : ViewModel() {
                 val info = writeOut(
                     context = context,
                     files = slices.map { it.fileName to it.cachePath?.let { path -> File(path) } },
-                    origin = _uiState.value.activeOrigin,
+                    origin = _state.value.activeOrigin,
                     pack = settings.packFormat,
                     width = slices.maxOfOrNull { it.width } ?: 0,
                     height = slices.sumOf { it.height },
                     onProgress = { p -> _state.update { it.copy(fraction = p) } }
                 )
-                _uiState.update {
+                _state.update {
                     it.copy(
                         busy = false,
                         published = PublishedFile(
@@ -390,7 +390,7 @@ class StudioViewModel : ViewModel() {
                     }
                     outcomes.add(PublishedFile(comic.origin, info.path, info.shareUri, info.packs, info.bytes))
                 } catch (e: Throwable) {
-                    outcomes.add(PublishedFile(comic.origin, null, 0, 0L, e.message ?: "Gagal."))
+                    outcomes.add(PublishedFile(comic.origin, null, null, 0, 0L, e.message ?: "Gagal."))
                 }
             }
             _state.update { it.copy(busy = false, fraction = 1f, batchOutcomes = outcomes) }
