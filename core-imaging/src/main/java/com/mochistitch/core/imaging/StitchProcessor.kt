@@ -117,8 +117,8 @@ class StitchProcessor(
                 val (startPos, endPos, needsReview, reviewReason) = interval
                 val sliceLen = endPos - startPos
 
-                val sliceWidth = if (isVertical) totalCanvasWidth else sliceLen
-                val sliceHeight = if (isVertical) sliceLen else totalCanvasHeight
+                val sliceWidth = totalCanvasWidth
+                val sliceHeight = sliceLen
 
                 // Buat bitmap potongan
                 val sliceBitmap = Bitmap.createBitmap(sliceWidth, sliceHeight, Bitmap.Config.RGB_565)
@@ -129,8 +129,8 @@ class StitchProcessor(
 
                 // Gambar item yang tumpang tindih dengan interval ini
                 for (item in placements) {
-                    val itemStart = if (isVertical) item.pageBox.top else item.pageBox.left
-                    val itemEnd = if (isVertical) item.pageBox.bottom else item.pageBox.right
+                    val itemStart = item.pageBox.top
+                    val itemEnd = item.pageBox.bottom
 
                     if (itemEnd > startPos && itemStart < endPos) {
                         val inputStream = openInputStream(item.uri) ?: continue
@@ -157,22 +157,13 @@ class StitchProcessor(
                                 min(item.srcRect.bottom / sampleSize, srcBitmap.height)
                             )
 
-                            // Sesuaikan dstRect relatif terhadap slice Canvas
-                            val dstRectInSlice = if (isVertical) {
-                                Rect(
-                                    item.dstRect.left,
-                                    item.dstRect.top - startPos,
-                                    item.dstRect.right,
-                                    item.dstRect.bottom - startPos
-                                )
-                            } else {
-                                Rect(
-                                    item.dstRect.left - startPos,
-                                    item.dstRect.top,
-                                    item.dstRect.right - startPos,
-                                    item.dstRect.bottom
-                                )
-                            }
+                            // Sesuaikan dstRect relatif terhadap slice Canvas (vertikal)
+                            val dstRectInSlice = Rect(
+                                item.dstRect.left,
+                                item.dstRect.top - startPos,
+                                item.dstRect.right,
+                                item.dstRect.bottom - startPos
+                            )
 
                             canvas.drawBitmap(srcBitmap, scaledSrcRect, dstRectInSlice, paint)
                             srcBitmap.recycle()
