@@ -684,6 +684,123 @@ object ContourDetector {
         return current
     }
 
+    /**
+     * Titik potong gutter-first (rombak total): urutan pencarian yang BARU —
+     * 1. Baris kertas murni dalam jendela toleransi → potong, tanpa review.
+     *    Dijamin tidak memotong balon/teks/SFX berdasarkan konstruksi.
+     * 2. Baris kertas murni di luar jendela (bila [allowExpand]) → potong
+     *    dengan review (ukuran menyimpang, posisi tetap aman).
+     * 3. Fallback penghindar-balon lama → hasil dijepit keluar balon paksa.
+     *
+     * Koordinat mengikuti [grid] (penuh atau pita/band — pemanggil yang memetakan).
+     */
+    fun findSplitPoint(
+        grid: GutterScanner.PixelGrid,
+        currentPos: Int,
+        targetPos: Int,
+        tolerance: Int,
+        protectedBoxes: List<BoundingBox>,
+        sfxBoxes: List<BoundingBox> = emptyList(),
+        allowExpand: Boolean = true,
+        paperTolerance: Float = 12f,
+        margins: Int = 0,
+        totalLength: Int = grid.height,
+        pageBoundaries: List<Int> = emptyList(),
+        allowExceedOnNoSafeGap: Boolean = true,
+        preferShorterOverLonger: Boolean = true,
+        selectBestInGap: ((minPos: Int, maxPos: Int) -> Int)? = null,
+        isVertical: Boolean = true
+    ): SmartSplitResult {
+        val clampedTarget = targetPos.coerceIn(currentPos + 1, totalLength - 1)
+        val window = tolerance.coerceAtLeast(0)
+        val protected = protectedBoxes.filter { it.isProtected }
+
+        val paper = GutterScanner.estimatePaperLuminance(grid)
+
+        // 1. Celah kertas dalam jendela → potong bersih.
+        GutterScanner.nearestPaperRow(
+            grid = grid,
+            targetY = clampedTarget,
+            window = window,
+            paperLuminance = paper,
+            paperTolerance = paperTolerance,
+            margins = margins
+        )?.let { pos ->
+            return SmartSplitResult(
+                splitPosition = pos.coerceIn(currentPos + 1, totalLength - 1),
+                needsManualReview = false
+            )
+        }
+
+        // 1b. Batas halaman yang berupa baris kertas dalam jendela →
+        // diutamakan (memotong tepat di sambungan halaman asli).
+        pageBoundaries
+            .filter { it in (clampedTarget - window)..(clampedTarget + window) }
+            .filter { GutterScanner.isPaperRow(grid, it, paper, paperTolerance, margins) }
+            .minByOrNull { abs(it - clampedTarget) }
+            ?.let { pos ->
+                return SmartSplitResult(
+                    splitPosition = pos.coerceIn(currentPos + 1, totalLength - 1),
+                    needsManualReview = false
+                )
+            }
+
+        // 2. Celah kertas di luar jendela → aman, tapi ukuran menyimpang.
+        if (allowExpand) {
+            GutterScanner.nearestPaperRow(
+                grid = grid,
+                targetY = clampedTarget,
+                window = maxOf(totalLength, 0),
+                paperLuminance = paper,
+                paperTolerance = paperTolerance,
+                margins = margins
+            )?.let { pos ->
+                val safePos = pos.coerceIn(currentPos + 1, totalLength - 1)
+                return SmartSplitResult(
+                    splitPosition = safePos,
+                    needsManualReview = true,
+                    reviewReason = "Melewati batas demi celah kertas kosong"
+                )
+            }
+        }
+
+        // 3. Tidak ada celah kertas sama sekali (full-bleed) → fallback lama.
+        val gaps = if (protected.isEmpty()) {
+            listOf(SafeGap(0, totalLength - 1))
+        } else {
+            ContourDetector.calculateSafeGaps(totalLength, protected, isVertical)
+        }
+        val fallback = ContourDetector.findSafeSplitPointDetailed(
+            totalLength = totalLength,
+            currentPos = currentPos,
+            targetPos = clampedTarget,
+            tolerance = window,
+            safeGaps = gaps,
+            allowExceedOnNoSafeGap = allowExceedOnNoSafeGap,
+            preferShorterOverLonger = preferShorterOverLonger,
+            sfxBoxes = sfxBoxes,
+            protectedBoxes = protected,
+            isVertical = isVertical,
+            selectBestInGap = selectBestInGap
+        )
+        val guarded = ContourDetector.clampOutsideProtected(
+            pos = fallback.splitPosition,
+            protectedBoxes = protected,
+            minPos = currentPos + 1,
+            maxPos = totalLength - 1,
+            isVertical = isVertical
+        )
+        return if (guarded != fallback.splitPosition) {
+            SmartSplitResult(
+                splitPosition = guarded,
+                needsManualReview = true,
+                reviewReason = "Digeser keluar area balon — periksa hasil"
+            )
+        } else {
+            fallback
+        }
+    }
+
     fun mergeUncontainedTextLines(boxes: List<BoundingBox>): List<BoundingBox> {
         if (boxes.isEmpty()) return emptyList()
 

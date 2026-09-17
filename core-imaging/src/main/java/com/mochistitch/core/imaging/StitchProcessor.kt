@@ -416,42 +416,30 @@ class StitchProcessor(
                         marginFactor = 1.25f
                     )
 
-                    val snappedBoundary = PageBoundarySnapping.findSnapBoundary(
-                        targetPos = candidate,
+                    val localCandidate = candidate - bandStart
+
+                    // Jalur gutter-first pada pita band (koordinat lokal band).
+                    val bandGrid = com.mochistitch.core.mochismart.GutterScanner.BitmapPixelGrid(bandBitmap)
+                    val splitRes = ContourDetector.findSplitPoint(
+                        grid = bandGrid,
+                        currentPos = 0,
+                        targetPos = localCandidate,
                         tolerance = finalTolerance,
-                        pageBoundaries = pageBoundaries,
-                        protectedBoxes = protectedBoxesCanvas,
-                        isVertical = isVertical
+                        protectedBoxes = boxes.filter { it.isProtected },
+                        sfxBoxes = boxes.filter { !it.isProtected },
+                        allowExpand = settings.allowExceedOnNoSafeGap,
+                        totalLength = bandLen,
+                        pageBoundaries = pageBoundaries
+                            .map { it - bandStart }
+                            .filter { it in 1 until bandLen },
+                        allowExceedOnNoSafeGap = settings.allowExceedOnNoSafeGap,
+                        preferShorterOverLonger = settings.preferShorterOverLonger,
+                        isVertical = true
                     )
 
-                    if (snappedBoundary != null) {
-                        safeSplit = snappedBoundary
-                        needsReview = false
-                        reviewReason = null
-                    } else {
-                        val localCandidate = candidate - bandStart
-
-                        val smartRes = ContourDetector.findSafeSplitPointDetailed(
-                            totalLength = bandLen,
-                            currentPos = 0,
-                            targetPos = localCandidate,
-                            tolerance = finalTolerance,
-                            safeGaps = ContourDetector.calculateSafeGaps(
-                                bandLen,
-                                boxes,
-                                isVertical
-                            ),
-                            allowExceedOnNoSafeGap = settings.allowExceedOnNoSafeGap,
-                            preferShorterOverLonger = settings.preferShorterOverLonger,
-                            sfxBoxes = boxes.filter { !it.isProtected },
-                            protectedBoxes = boxes.filter { it.isProtected },
-                            isVertical = isVertical
-                        )
-
-                        safeSplit = bandStart + smartRes.splitPosition
-                        needsReview = smartRes.needsManualReview
-                        reviewReason = smartRes.reviewReason
-                    }
+                    safeSplit = bandStart + splitRes.splitPosition
+                    needsReview = splitRes.needsManualReview
+                    reviewReason = splitRes.reviewReason
 
                     bandBitmap.recycle()
                 }

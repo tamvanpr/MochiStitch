@@ -87,17 +87,14 @@ object SplitEngine {
 
         // Gerbang ketat: Smart diminta tapi OpenCV tidak siap berarti detector
         // buta — semua potongan dari jalur ini WAJIB ditandai tinjauan manual.
+        // (Pemindai gutter tetap jalan karena murni piksel, tanpa OpenCV.)
         val smartBlind = mochiSmartEnabled && !ContourDetector.isReady()
         val blindReason = "Mochi Smart tidak aktif (OpenCV) — periksa potongan manual."
 
-        // 2. Calculate safe gaps along primary axis
-        val safeGaps = ContourDetector.calculateSafeGaps(
-            totalLength = totalLength,
-            boundingBoxes = boundingBoxes,
-            isVertical = isVertical
-        )
-
         val slices = mutableListOf<SlicedPiece>()
+
+        // Grid piksel untuk pemindai gutter (dibuat sekali per bitmap sumber).
+        val grid = com.mochistitch.core.mochismart.GutterScanner.BitmapPixelGrid(source)
 
         if (isVertical) {
             var currentY = 0
@@ -112,6 +109,7 @@ object SplitEngine {
                 val targetCutY = currentY + maxPixelLength
 
                 // Pixel comparison gutter selector within gap range
+                // (dipakai jalur fallback bila tidak ada celah kertas murni)
                 val selectBestInGap: ((Int, Int) -> Int)? = if (autoGutterDetectionEnabled) {
                     { gapStart: Int, gapEnd: Int ->
                         var bestY = (targetCutY).coerceIn(gapStart, gapEnd)
@@ -158,36 +156,29 @@ object SplitEngine {
                     targetPos = targetCutY
                 )
 
-                val snappedBoundaryY = PageBoundarySnapping.findSnapBoundary(
-                    targetPos = targetCutY,
-                    tolerance = adaptiveToleranceY,
-                    pageBoundaries = pageBoundaries,
-                    protectedBoxes = boundingBoxes.filter { it.isProtected },
-                    isVertical = true
-                )
-
-                val splitResult = if (snappedBoundaryY != null) {
-                    SmartSplitResult(snappedBoundaryY, needsManualReview = false)
-                } else if (mochiSmartEnabled || autoGutterDetectionEnabled) {
-                    ContourDetector.findSafeSplitPointDetailed(
-                        totalLength = totalLength,
+                // Jalur gutter-first: celah kertas murni > batas halaman >
+                // fallback penghindar-balon > jepit paksa keluar balon.
+                val splitResult = if (mochiSmartEnabled || autoGutterDetectionEnabled) {
+                    ContourDetector.findSplitPoint(
+                        grid = grid,
                         currentPos = currentY,
                         targetPos = targetCutY,
                         tolerance = adaptiveToleranceY,
-                        safeGaps = safeGaps,
+                        protectedBoxes = boundingBoxes.filter { it.isProtected },
+                        sfxBoxes = boundingBoxes.filter { !it.isProtected },
+                        allowExpand = allowExceedOnNoSafeGap,
+                        pageBoundaries = pageBoundaries,
                         allowExceedOnNoSafeGap = allowExceedOnNoSafeGap,
                         preferShorterOverLonger = preferShorterOverLonger,
-                        sfxBoxes = boundingBoxes.filter { !it.isProtected },
-                        protectedBoxes = boundingBoxes.filter { it.isProtected },
-                        isVertical = true,
-                        selectBestInGap = selectBestInGap
+                        selectBestInGap = selectBestInGap,
+                        isVertical = true
                     )
                 } else {
                     SmartSplitResult(targetCutY.coerceAtMost(totalLength - 1), needsManualReview = false)
                 }
 
                 val effectiveSplitPos = splitResult.splitPosition.coerceIn(currentY + 1, totalLength - 1)
-                // Pengaman keras: tidak boleh memotong di dalam balon.
+                // Pengaman ganda di sisi pemotong (dataran kedua setelah findSplitPoint).
                 val guardedSplitPos = ContourDetector.clampOutsideProtected(
                     pos = effectiveSplitPos,
                     protectedBoxes = boundingBoxes.filter { it.isProtected },
