@@ -17,7 +17,7 @@ class AppSettingsTest {
         assertEquals(90, settings.jpgQuality)
         assertEquals(90, settings.webpQuality)
         assertEquals(false, settings.webpLossless)
-        assertEquals(OutputWrapperFormat.LOOSE_FILES, settings.wrapperFormat)
+        assertEquals(OutputWrapperFormat.ZIP, settings.wrapperFormat)
         assertEquals("MochiStitch", settings.projectName)
         assertEquals("1", settings.chapterName)
         assertEquals("{project}_ch{chapter}_{index}", settings.filenameTemplate)

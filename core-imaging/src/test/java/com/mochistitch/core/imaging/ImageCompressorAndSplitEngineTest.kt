@@ -45,16 +45,17 @@ class ImageCompressorAndSplitEngineTest {
 
     @Test
     fun testMochiSmartSettingsDefaults() {
+        // Default diketatkan: sensitivitas HIGH, ambang gutter 0.65, langkah 3px.
         val settings = MochiStitchSettings()
         assertEquals(true, settings.mochiSmartEnabled)
         assertEquals(150, settings.mochiSmartTolerance)
-        assertEquals(DetectionSensitivity.MEDIUM, settings.mochiSmartSensitivity)
+        assertEquals(DetectionSensitivity.HIGH, settings.mochiSmartSensitivity)
         assertEquals(true, settings.showManualReviewMarkers)
         assertTrue(settings.autoGutterDetectionEnabled)
-        assertEquals(0.5f, settings.pixelComparisonSensitivity, 0.001f)
+        assertEquals(0.65f, settings.pixelComparisonSensitivity, 0.001f)
         assertEquals(0, settings.pixelComparisonMargins)
-        assertEquals(5, settings.pixelComparisonStep)
-        assertEquals(0.2f, settings.pixelComparisonMaxDeviationFactor, 0.001f)
+        assertEquals(3, settings.pixelComparisonStep)
+        assertEquals(0.15f, settings.pixelComparisonMaxDeviationFactor, 0.001f)
     }
 
     @Test

@@ -15,7 +15,11 @@ Purpose: Merger gambar komik dengan fitur Mochi Smart (OpenCV edge detection)
 
 ## Aturan Penting
 - Build hanya diverifikasi via GitHub Actions CI/CD
-- Default output format: JPG (bukan PNG)
+- Default format gambar: JPG (bukan PNG); default pembungkus output: ZIP
+- Merger hanya vertikal — tidak ada kode/UI horizontal di mana pun
+- Arsip input yang didukung: ZIP/CBZ/RAR/CBR/7Z (baca via core-archive)
+- Penamaan output arsip = basename input arsip (tanpa timestamp)
+- Mochi Smart berjalan dalam mode ketat (sensitivitas HIGH, toleransi dipersempit)
 - Bitmap config: RGB_565 (bukan ARGB_8888) — hemat memory
 - Jangan touch `core-imaging` native C++ kecuali diminta
 - Commit message dalam bahasa Indonesia

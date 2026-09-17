@@ -16,10 +16,9 @@ import kotlin.math.min
 import kotlin.math.roundToInt
 
 /**
- * MergeEngine — menggabungkan beberapa halaman komik menjadi satu canvas.
+ * MergeEngine — menggabungkan beberapa halaman komik menjadi satu canvas VERTIKAL.
  *
- * Mendukung:
- * - Vertical (webtoon), Horizontal LTR, Horizontal RTL
+ * Hanya mendukung arah vertikal (webtoon). Tidak ada mode horizontal.
  * - Alignment: RESIZE_PROPORTIONAL, CENTER_CROP, PADDING
  * - Output bitmap berukuran asli (tanpa scaling artifak MAX_CANVAS_DIM)
  */
@@ -63,19 +62,11 @@ class MergeEngine(
             // Step 2: Hitung penempatan setiap item
             val items = calculateItemPlacements(sizes, maxInputWidth, maxInputHeight, config)
 
-            // Step 3: Hitung dimensi canvas akhir
-            val canvasWidth = if (config.direction == MergeDirection.VERTICAL) {
-                maxInputWidth
-            } else {
-                // Horizontal: jumlahkan semua pageBox.right (posisi absolut di canvas)
-                items.maxOfOrNull { it.pageBox.right } ?: maxInputWidth
-            }
+            // Step 3: Hitung dimensi canvas akhir (vertikal: lebar = input terlebar,
+            // tinggi = jumlah semua tinggi halaman)
+            val canvasWidth = maxInputWidth
 
-            val canvasHeight = if (config.direction == MergeDirection.VERTICAL) {
-                items.maxOfOrNull { it.pageBox.bottom } ?: maxInputHeight
-            } else {
-                maxInputHeight
-            }
+            val canvasHeight = items.maxOfOrNull { it.pageBox.bottom } ?: maxInputHeight
 
             // Fallback: pastikan dimensi minimal1
             val finalWidth = max(1, canvasWidth)
@@ -209,7 +200,7 @@ class MergeEngine(
     }
 
     /**
-     * Menghitung posisi penempatan untuk semua item berdasarkan arah dan alignment.
+     * Menghitung posisi penempatan untuk semua item — selalu vertikal.
      */
     private fun calculateItemPlacements(
         sizes: List<ImageSize>,
@@ -217,11 +208,7 @@ class MergeEngine(
         refHeight: Int,
         config: MergeConfig
     ): List<ItemPlacement> {
-        return when (config.direction) {
-            MergeDirection.VERTICAL -> calculateVerticalPlacements(sizes, refWidth, refHeight, config)
-            MergeDirection.HORIZONTAL_LTR -> calculateHorizontalPlacements(sizes, refWidth, refHeight, config, leftToRight = true)
-            MergeDirection.HORIZONTAL_RTL -> calculateHorizontalPlacements(sizes, refWidth, refHeight, config, leftToRight = false)
-        }
+        return calculateVerticalPlacements(sizes, refWidth, refHeight, config)
     }
 
     private fun calculateVerticalPlacements(
@@ -234,7 +221,7 @@ class MergeEngine(
         var currentY = 0
 
         for (item in sizes) {
-            val placement = computePlacement(item.width, item.height, refWidth, refHeight, config.alignmentMode, isVertical = true)
+            val placement = computePlacement(item.width, item.height, refWidth, refHeight, config.alignmentMode)
             val pageBox = Rect(0, currentY, refWidth, currentY + placement.pageH)
             val adjustedDst = Rect(
                 placement.dstRect.left,
@@ -249,87 +236,27 @@ class MergeEngine(
         return placements
     }
 
-    private fun calculateHorizontalPlacements(
-        sizes: List<ImageSize>,
-        refWidth: Int,
-        refHeight: Int,
-        config: MergeConfig,
-        leftToRight: Boolean
-    ): List<ItemPlacement> {
-        val placements = mutableListOf<ItemPlacement>()
-
-        if (leftToRight) {
-            var currentX = 0
-            for (item in sizes) {
-                val placement = computePlacement(item.width, item.height, refWidth, refHeight, config.alignmentMode, isVertical = false)
-                val pageBox = Rect(currentX, 0, currentX + placement.pageW, refHeight)
-                val adjustedDst = Rect(
-                    currentX + placement.dstRect.left,
-                    placement.dstRect.top,
-                    currentX + placement.dstRect.right,
-                    placement.dstRect.bottom
-                )
-                placements.add(ItemPlacement(item.uri, placement.srcRect, adjustedDst, pageBox))
-                currentX += placement.pageW
-            }
-        } else {
-            // RTL: hitung semua placement dulu, lalu susun dari kanan ke kiri
-            val computed = sizes.map { item ->
-                computePlacement(item.width, item.height, refWidth, refHeight, config.alignmentMode, isVertical = false)
-            }
-            val totalWidth = computed.sumOf { it.pageW }
-            var currentX = totalWidth
-
-            for ((index, item) in sizes.withIndex()) {
-                val placement = computed[index]
-                val itemStartX = currentX - placement.pageW
-                val pageBox = Rect(itemStartX, 0, itemStartX + placement.pageW, refHeight)
-                val adjustedDst = Rect(
-                    itemStartX + placement.dstRect.left,
-                    placement.dstRect.top,
-                    itemStartX + placement.dstRect.right,
-                    placement.dstRect.bottom
-                )
-                placements.add(ItemPlacement(item.uri, placement.srcRect, adjustedDst, pageBox))
-                currentX -= placement.pageW
-            }
-        }
-
-        return placements
-    }
-
     /**
-     * Menghitung srcRect, dstRect, dan dimensi page untuk satu item.
+     * Menghitung srcRect, dstRect, dan dimensi page untuk satu item (vertikal:
+     * lebar diskala ke lebar referensi, tinggi proporsional).
      */
     private fun computePlacement(
         itemWidth: Int,
         itemHeight: Int,
         refWidth: Int,
         refHeight: Int,
-        alignmentMode: AlignmentMode,
-        isVertical: Boolean
+        alignmentMode: AlignmentMode
     ): PlacementSpec {
         return when (alignmentMode) {
             AlignmentMode.RESIZE_PROPORTIONAL -> {
-                if (isVertical) {
-                    // Scale width ke refWidth, hitung height proporsional
-                    val dstW = refWidth
-                    val dstH = (itemHeight.toFloat() * refWidth / itemWidth).roundToInt().coerceAtLeast(1)
-                    PlacementSpec(
-                        pageW = refWidth, pageH = dstH,
-                        srcRect = Rect(0, 0, itemWidth, itemHeight),
-                        dstRect = Rect(0, 0, dstW, dstH)
-                    )
-                } else {
-                    // Scale height ke refHeight, hitung width proporsional
-                    val dstH = refHeight
-                    val dstW = (itemWidth.toFloat() * refHeight / itemHeight).roundToInt().coerceAtLeast(1)
-                    PlacementSpec(
-                        pageW = dstW, pageH = refHeight,
-                        srcRect = Rect(0, 0, itemWidth, itemHeight),
-                        dstRect = Rect(0, 0, dstW, dstH)
-                    )
-                }
+                // Scale width ke refWidth, hitung height proporsional
+                val dstW = refWidth
+                val dstH = (itemHeight.toFloat() * refWidth / itemWidth).roundToInt().coerceAtLeast(1)
+                PlacementSpec(
+                    pageW = refWidth, pageH = dstH,
+                    srcRect = Rect(0, 0, itemWidth, itemHeight),
+                    dstRect = Rect(0, 0, dstW, dstH)
+                )
             }
 
             AlignmentMode.PADDING -> {

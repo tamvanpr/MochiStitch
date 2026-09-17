@@ -71,6 +71,13 @@ object ContourDetector {
         return isOpenCVInitialized
     }
 
+    /**
+     * True bila native OpenCV siap dipakai. Dipakai sebagai gerbang ketat:
+     * bila Mochi Smart diminta tapi OpenCV tidak siap, pemotong WAJIB
+     * menandai hasilnya perlu tinjauan manual alih-alih diam-diam lolos.
+     */
+    fun isReady(): Boolean = isOpenCVInitialized
+
     fun detectBoundingBoxes(
         bitmap: Bitmap,
         sensitivity: DetectionSensitivity = DetectionSensitivity.MEDIUM,
@@ -373,11 +380,13 @@ object ContourDetector {
         canvasWidth: Int,
         canvasLength: Int,
         nearestProtectedBoxHeight: Int,
-        marginFactor: Float = 1.0f
+        marginFactor: Float = 1.25f
     ): Int {
+        // Diketatkan: ekspansi maksimum 2x (dulu 3x) dan maksimal 15%
+        // panjang canvas (dulu 20%) agar titik potong tidak meleset jauh.
         val effectiveBaseTolerance = (baseTolerance * (canvasWidth / 1000f)).toInt()
         val expandedTolerance = maxOf(effectiveBaseTolerance, (nearestProtectedBoxHeight * marginFactor).toInt())
-        val maxExpandedTolerance = minOf(effectiveBaseTolerance * 3, (canvasLength * 0.20f).toInt())
+        val maxExpandedTolerance = minOf(effectiveBaseTolerance * 2, (canvasLength * 0.15f).toInt())
         return expandedTolerance.coerceAtMost(maxExpandedTolerance)
     }
 
@@ -388,7 +397,7 @@ object ContourDetector {
         protectedBoxes: List<BoundingBox>,
         isVertical: Boolean,
         targetPos: Int,
-        marginFactor: Float = 1.0f
+        marginFactor: Float = 1.25f
     ): Int {
         val nearestProtectedBox = protectedBoxes.filter { it.isProtected }.minByOrNull { box ->
             val center = if (isVertical) (box.top + box.bottom) / 2 else (box.left + box.right) / 2
