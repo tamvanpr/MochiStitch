@@ -411,7 +411,7 @@ class StitchProcessor(
                         canvasWidth = crossAxisDim,
                         canvasLength = totalLength,
                         nearestProtectedBoxHeight = nearestHeight,
-                        marginFactor = 1.0f
+                        marginFactor = 1.25f
                     )
 
                     val snappedBoundary = PageBoundarySnapping.findSnapBoundary(
@@ -464,6 +464,21 @@ class StitchProcessor(
 
             if (totalLength - effectiveSplit < minTailLength) {
                 effectiveSplit = totalLength
+            }
+
+            // Pengaman keras: coerce di atas bisa menggeser titik ke dalam
+            // balon — jepit keluar. Bila bergeser, tandai review.
+            val guardedSplit = ContourDetector.clampOutsideProtected(
+                pos = effectiveSplit,
+                protectedBoxes = protectedBoxesCanvas,
+                minPos = currentPos + 1,
+                maxPos = totalLength,
+                isVertical = true
+            )
+            if (guardedSplit != effectiveSplit) {
+                effectiveSplit = guardedSplit
+                needsReview = true
+                reviewReason = "Titik potong digeser keluar area balon — periksa hasil"
             }
 
             intervals.add(

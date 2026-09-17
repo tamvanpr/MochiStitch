@@ -536,7 +536,9 @@ object ContourDetector {
             for (gap in gapsInTolerance) {
                 for (pos in gap.start..gap.end) {
                     val (distToBox, boxHeight) = findDistanceToNearestProtectedBoundary(pos)
-                    val minSafeMargin = boxHeight * 0.1f
+                    // Diketatkan: margin aman 20% tinggi balon agar potongan
+                    // tidak menyerempet tepi balon.
+                    val minSafeMargin = boxHeight * 0.2f
                     if (distToBox >= minSafeMargin) {
                         val distToTarget = abs(pos - clampedTarget)
                         if (distToTarget < p1MinDist || (distToTarget == p1MinDist && preferShorterOverLonger && pos <= clampedTarget)) {
@@ -557,7 +559,7 @@ object ContourDetector {
                 } else p1BestPos
 
                 val (finalDistToBox, finalBoxHeight) = findDistanceToNearestProtectedBoundary(finalPos)
-                val finalMinMargin = finalBoxHeight * 0.1f
+                val finalMinMargin = finalBoxHeight * 0.2f
                 val isP1 = finalDistToBox >= finalMinMargin
 
                 return SmartSplitResult(
@@ -638,6 +640,48 @@ object ContourDetector {
             needsManualReview = true,
             reviewReason = "Dipotong paksa di tepi balon / balon raksasa"
         )
+    }
+
+    /**
+     * Pengaman keras: tidak boleh ada titik potong di dalam balon yang dilindungi.
+     *
+     * Bila [pos] jatuh di dalam salah satu [protectedBoxes], kembalikan tepi
+     * aman terdekat (sebelum/sesudah balon, yang paling dekat posisi semula;
+     * seri dimenangkan tepi sebelum agar potongan lebih pendek). Hasil selalu
+     * dijepit ke [minPos]..[maxPos]. Bila tidak ada tepi aman dalam rentang
+     * (balon menutup seluruh rentang), kembalikan posisi semula — pemanggil
+     * WAJIB menandai hasil perlu tinjauan manual.
+     */
+    fun clampOutsideProtected(
+        pos: Int,
+        protectedBoxes: List<BoundingBox>,
+        minPos: Int,
+        maxPos: Int,
+        isVertical: Boolean = true
+    ): Int {
+        if (maxPos <= minPos) return minPos
+        var current = pos.coerceIn(minPos, maxPos)
+        val boxes = protectedBoxes.filter { it.isProtected }
+        repeat(boxes.size + 1) {
+            val hit = boxes.firstOrNull { box ->
+                if (isVertical) current in box.top..box.bottom else current in box.left..box.right
+            } ?: return current
+            val before = (if (isVertical) hit.top - 1 else hit.left - 1)
+            val after = (if (isVertical) hit.bottom + 1 else hit.right + 1)
+            val beforeOk = before in minPos..maxPos
+            val afterOk = after in minPos..maxPos
+            current = when {
+                beforeOk && afterOk -> {
+                    val distBefore = current - before
+                    val distAfter = after - current
+                    if (distBefore <= distAfter) before else after
+                }
+                beforeOk -> before
+                afterOk -> after
+                else -> return current
+            }
+        }
+        return current
     }
 
     fun mergeUncontainedTextLines(boxes: List<BoundingBox>): List<BoundingBox> {

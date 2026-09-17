@@ -401,4 +401,42 @@ class ContourDetectorTest {
         assertTrue(result.needsManualReview)
         assertTrue(result.splitPosition <= 799 || result.splitPosition >= 1200)
     }
+
+    @Test
+    fun testClampOutsideProtected_movesOutOfBalloon() {
+        val box = BoundingBox(left = 0, top = 800, right = 200, bottom = 1200, type = BoundingBoxType.PROTECTED_BALLOON)
+        // Tepat di dalam balon, tepi terdekat (atas, seri dimenangkan sisi sebelum).
+        assertEquals(
+            799,
+            ContourDetector.clampOutsideProtected(1000, listOf(box), 1, 1999, isVertical = true)
+        )
+        // Dekat tepi bawah.
+        assertEquals(
+            1201,
+            ContourDetector.clampOutsideProtected(1100, listOf(box), 1, 1999, isVertical = true)
+        )
+        // Sudah aman: tidak berubah.
+        assertEquals(
+            500,
+            ContourDetector.clampOutsideProtected(500, listOf(box), 1, 1999, isVertical = true)
+        )
+    }
+
+    @Test
+    fun testClampOutsideProtected_fullCover_returnsClamped() {
+        val box = BoundingBox(left = 0, top = 0, right = 200, bottom = 1999, type = BoundingBoxType.PROTECTED_BALLOON)
+        // Tidak ada tepi aman dalam rentang: kembalikan posisi terjepit apa adanya.
+        assertEquals(
+            1000,
+            ContourDetector.clampOutsideProtected(1000, listOf(box), 1, 1999, isVertical = true)
+        )
+    }
+
+    @Test
+    fun testClampOutsideProtected_noBoxes_unchanged() {
+        assertEquals(
+            1000,
+            ContourDetector.clampOutsideProtected(1000, emptyList(), 1, 1999, isVertical = true)
+        )
+    }
 }

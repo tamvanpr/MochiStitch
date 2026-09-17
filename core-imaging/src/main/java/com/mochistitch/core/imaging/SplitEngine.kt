@@ -187,7 +187,15 @@ object SplitEngine {
                 }
 
                 val effectiveSplitPos = splitResult.splitPosition.coerceIn(currentY + 1, totalLength - 1)
-                val sliceHeight = (effectiveSplitPos - currentY).coerceIn(1, remaining)
+                // Pengaman keras: tidak boleh memotong di dalam balon.
+                val guardedSplitPos = ContourDetector.clampOutsideProtected(
+                    pos = effectiveSplitPos,
+                    protectedBoxes = boundingBoxes.filter { it.isProtected },
+                    minPos = currentY + 1,
+                    maxPos = totalLength - 1,
+                    isVertical = true
+                )
+                val sliceHeight = (guardedSplitPos - currentY).coerceIn(1, remaining)
                 val slice = createIndependentSlice(source, 0, currentY, source.width, sliceHeight)
                 slices.add(
                     SlicedPiece(
