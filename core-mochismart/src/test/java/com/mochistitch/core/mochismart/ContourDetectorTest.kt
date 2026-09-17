@@ -57,7 +57,9 @@ class ContourDetectorTest {
     fun testFindSafeSplitPointExpandsRangeForLargeBalloon() {
         val totalLength = 2000
         val candidate = 1000
-        val tolerance = 100
+        // Basis 150: efektif = min(max(150, 400*1.25), min(300, 300)) = 300,
+        // jendela [700..1300] menjangkau tepi balon [800..1200].
+        val tolerance = 150
         val boundingBoxes = listOf(BoundingBox(0, 800, 300, 1200, BoundingBoxType.PROTECTED_BALLOON))
 
         val result = ContourDetector.findSafeSplitPoint(
@@ -296,7 +298,7 @@ class ContourDetectorTest {
     @Test
     fun testCalculateAdaptiveToleranceAutoDefault() {
         // Default: base 150, width 1000 => effBase 150; box 400px * 1.25 = 500;
-        // cap = min(300, 450) = 450 => hasil 450.
+        // cap = min(150*2, 3000*0.15) = min(300, 450) = 300 => hasil 300.
         val box = BoundingBox(left = 0, top = 400, right = 200, bottom = 800, type = BoundingBoxType.PROTECTED_BALLOON)
         val tol = ContourDetector.calculateAdaptiveTolerance(
             canvasWidth = 1000,
@@ -305,7 +307,7 @@ class ContourDetectorTest {
             isVertical = true,
             targetPos = 500
         )
-        assertEquals(450, tol)
+        assertEquals(300, tol)
     }
 
     @Test
