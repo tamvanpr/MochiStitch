@@ -59,6 +59,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
+import com.mochistitch.app.StudioScreen
 import com.mochistitch.app.StudioViewModel
 import com.mochistitch.core.common.ComicProject
 
@@ -77,7 +78,12 @@ fun LibraryHome(viewModel: StudioViewModel, modifier: Modifier = Modifier) {
     var sheet by remember { mutableStateOf(false) }
 
     val pickPages = rememberLauncherForActivityResult(ActivityResultContracts.PickMultipleVisualMedia()) { uris ->
-        if (uris.isNotEmpty()) viewModel.takeImages(uris.distinctBy { it.toString() }, context)
+        if (uris.isNotEmpty()) {
+            viewModel.takeImages(uris.distinctBy { it.toString() }, context)
+            // Langsung ke meja rakit agar gambar terlihat; kalau tidak,
+            // gambar nyangkut tak terlihat lalu dikira duplikat.
+            viewModel.travel(StudioScreen.STUDIO)
+        }
     }
     val pickPack = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) viewModel.takeArchive(uri, context)
@@ -138,6 +144,15 @@ fun LibraryHome(viewModel: StudioViewModel, modifier: Modifier = Modifier) {
                     textAlign = TextAlign.Center
                 )
                 Spacer(modifier = Modifier.height(16.dp))
+                if (state.pages.isNotEmpty()) {
+                    Button(
+                        onClick = { viewModel.travel(StudioScreen.STUDIO) },
+                        modifier = Modifier.fillMaxWidth(0.75f)
+                    ) {
+                        Text("Lanjut ke Meja Rakit (${state.pages.size})")
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                }
                 Button(
                     onClick = { pickPages.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) },
                     modifier = Modifier.fillMaxWidth(0.75f)
