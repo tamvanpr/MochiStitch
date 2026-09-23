@@ -35,7 +35,7 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-enum class StudioScreen { INPUT, SETUP, RESULT, QUEUE }
+enum class StudioScreen { INPUT, RESULT, QUEUE, SETTINGS }
 
 data class PublishedFile(
     val projectTitle: String,

@@ -15,7 +15,7 @@ One structural invariant defines the engine: **no code ever crops inside a page*
 - **Archive output**: ZIP/CBZ packaging with MediaStore delivery (Download folder on Android 10+, FileProvider share on older devices).
 - **Batch queue**: import several comics, set a packaging format per title, and process them all in one run.
 - **Memory conscious**: RGB_565 bitmaps, bounded decode sampling, and small on-screen previews instead of full-height strips held in RAM.
-- **Material 3 UI**: 3-step wizard (Input → Setup → Result) plus a batch queue screen, with light/dark/system theming.
+- **Material 3 UI**: 2-step flow (Input → Result) with settings behind a gear icon, plus a batch queue screen, with light/dark/system theming.
 
 ---
 
@@ -23,7 +23,7 @@ One structural invariant defines the engine: **no code ever crops inside a page*
 
 ```text
 MochiStitch
- ├── :app            # 3-step wizard + queue shell, ViewModel, publishing
+ ├── :app            # 2-step wizard (Input → Result) + queue shell + settings screen, ViewModel, publishing
  ├── :core-common    # ComicProject batch model
  ├── :core-imaging   # StripRenderer, PageGrouper, StripBuilder, FileNamer
  ├── :core-archive   # ZIP/CBZ/RAR/CBR/7Z read + ZIP/CBZ write
@@ -65,6 +65,8 @@ MochiStitch
    ```
 
 Builds are verified by GitHub Actions CI (`./gradlew test assembleDebug`) on every push and pull request.
+
+Setiap build menghasilkan 5 APK: `universal`, `armeabi-v7a`, `arm64-v8a`, `x86`, dan `x86_64` — unduh yang sesuai perangkatmu dari artefak Actions atau rilis GitHub.
 
 ---
 

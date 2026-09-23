@@ -26,6 +26,7 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Unarchive
 import androidx.compose.material3.AlertDialog
@@ -64,9 +65,9 @@ import com.mochistitch.core.ui.SettingsPanel
 import com.mochistitch.core.ui.SlicePreview
 
 /**
- * v4: wizard 3 langkah — Masukkan -> Atur -> Hasil — plus layar Antrean.
+ * v4: alur Masukkan -> Hasil; antrean batch + layar Setelan (ikon gir).
  * Satu bilah atas untuk seluruh aplikasi (tanpa Scaffold bersarang),
- * tombol kembali sistem mengikuti alur langkah.
+ * tombol kembali sistem mengikuti alur layar.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -75,11 +76,14 @@ fun StudioApp(viewModel: StudioViewModel, onExitApp: () -> Unit) {
     val state by viewModel.state.collectAsState()
     val settings = state.settings
 
-    // Tombol kembali sistem: Hasil -> Atur -> Masukkan -> keluar.
+    // Setelan dibuka dari ikon gir; tombol kembali mengembalikan ke layar asal.
+    var settingsFrom by remember { mutableStateOf(StudioScreen.INPUT) }
+
+    // Tombol kembali sistem: Hasil -> Masukkan -> keluar; Setelan -> layar asal.
     BackHandler(enabled = state.screen != StudioScreen.INPUT) {
         when (state.screen) {
-            StudioScreen.RESULT -> viewModel.travel(StudioScreen.SETUP)
-            StudioScreen.QUEUE -> viewModel.travel(StudioScreen.INPUT)
+            StudioScreen.RESULT -> viewModel.travel(StudioScreen.INPUT)
+            StudioScreen.SETTINGS -> viewModel.travel(settingsFrom)
             else -> viewModel.travel(StudioScreen.INPUT)
         }
     }
@@ -110,8 +114,8 @@ fun StudioApp(viewModel: StudioViewModel, onExitApp: () -> Unit) {
     }
 
     fun previousStep(): StudioScreen = when (state.screen) {
-        StudioScreen.RESULT -> StudioScreen.SETUP
-        StudioScreen.SETUP -> StudioScreen.INPUT
+        StudioScreen.RESULT -> StudioScreen.INPUT
+        StudioScreen.SETTINGS -> settingsFrom
         StudioScreen.QUEUE -> StudioScreen.INPUT
         StudioScreen.INPUT -> StudioScreen.INPUT
     }
@@ -124,10 +128,10 @@ fun StudioApp(viewModel: StudioViewModel, onExitApp: () -> Unit) {
                         Text("MochiStitch", fontWeight = FontWeight.Bold)
                         Text(
                             when (state.screen) {
-                                StudioScreen.INPUT -> "Langkah 1 dari 3 · Masukkan halaman"
-                                StudioScreen.SETUP -> "Langkah 2 dari 3 · Atur & rakit"
-                                StudioScreen.RESULT -> "Langkah 3 dari 3 · Hasil"
+                                StudioScreen.INPUT -> "Langkah 1 dari 2 · Masukkan halaman"
+                                StudioScreen.RESULT -> "Langkah 2 dari 2 · Hasil rakitan"
                                 StudioScreen.QUEUE -> "Antrean batch"
+                                StudioScreen.SETTINGS -> "Setelan"
                             },
                             style = MaterialTheme.typography.labelMedium,
                             color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f)
@@ -146,6 +150,14 @@ fun StudioApp(viewModel: StudioViewModel, onExitApp: () -> Unit) {
                     }
                 },
                 actions = {
+                    if (state.screen != StudioScreen.SETTINGS) {
+                        IconButton(onClick = {
+                            settingsFrom = state.screen
+                            viewModel.travel(StudioScreen.SETTINGS)
+                        }) {
+                            Icon(Icons.Default.Settings, contentDescription = "Setelan")
+                        }
+                    }
                     TextButton(
                         onClick = { viewModel.travel(StudioScreen.QUEUE) },
                         enabled = state.screen != StudioScreen.QUEUE
@@ -165,20 +177,11 @@ fun StudioApp(viewModel: StudioViewModel, onExitApp: () -> Unit) {
                 viewModel = viewModel,
                 modifier = Modifier.padding(inner).fillMaxSize()
             )
-            StudioScreen.SETUP -> Column(modifier = Modifier.padding(inner).fillMaxSize()) {
-                SettingsPanel(
-                    settings = settings,
-                    onChange = viewModel::keepSettings,
-                    modifier = Modifier.weight(1f)
-                )
-                Button(
-                    onClick = { viewModel.assemble(ctx) },
-                    enabled = !state.busy && state.pages.isNotEmpty(),
-                    modifier = Modifier.fillMaxWidth().padding(16.dp)
-                ) {
-                    Text("Rakit ${state.pages.size} halaman")
-                }
-            }
+            StudioScreen.SETTINGS -> SettingsPanel(
+                settings = settings,
+                onChange = viewModel::keepSettings,
+                modifier = Modifier.padding(inner).fillMaxSize()
+            )
             StudioScreen.RESULT -> Column(modifier = Modifier.padding(inner).fillMaxSize()) {
                 SlicePreview(
                     slices = state.slices,
@@ -316,10 +319,10 @@ private fun InputStep(viewModel: StudioViewModel, modifier: Modifier = Modifier)
             }
             Spacer(modifier = Modifier.weight(1f))
             Button(
-                onClick = { viewModel.travel(StudioScreen.SETUP) },
-                enabled = state.pages.isNotEmpty()
+                onClick = { viewModel.assemble(ctx) },
+                enabled = state.pages.isNotEmpty() && !state.busy
             ) {
-                Text("Lanjut")
+                Text("Rakit ${state.pages.size} halaman")
                 Spacer(modifier = Modifier.size(8.dp))
                 Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = null, modifier = Modifier.size(18.dp))
             }

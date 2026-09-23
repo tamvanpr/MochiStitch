@@ -11,8 +11,9 @@ halaman dalam keadaan apa pun. Pemotongan output HANYA tepat di batas
 halaman (PageGrouper). Halaman tunggal melebihi batas dibiarkan utuh +
 flag tinjau manual. Tidak ada OpenCV, deteksi, tebakan, atau mode crop.
 
-- `app/` — wizard 3 langkah (INPUT -> SETUP -> RESULT) + QUEUE; edge-to-edge;
-  satu Scaffold bersarang; tombol kembali sistem mengikuti alur langkah;
+- `app/` — alur 2 langkah (INPUT -> RESULT) + QUEUE + SETTINGS (ikon gir,
+  kembali ke layar asal); edge-to-edge; satu Scaffold bersarang;
+  tombol kembali sistem mengikuti alur layar;
   izin tulis API <= 28 dipinta sebelum terbit; share via FileProvider (API < 29)
 - `core-imaging/` — StripRenderer (gambar utuh, drawBitmap penuh), PageGrouper,
   StripBuilder, FileNamer. Tanpa PageFit/CROP. Preview hasil diskalakan ke

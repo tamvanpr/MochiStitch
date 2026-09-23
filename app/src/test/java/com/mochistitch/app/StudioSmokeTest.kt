@@ -12,7 +12,7 @@ class StudioSmokeTest {
     @Test
     fun testScreenOrder() {
         assertEquals(
-            listOf("INPUT", "SETUP", "RESULT", "QUEUE"),
+            listOf("INPUT", "RESULT", "QUEUE", "SETTINGS"),
             StudioScreen.entries.map { it.name }
         )
     }
