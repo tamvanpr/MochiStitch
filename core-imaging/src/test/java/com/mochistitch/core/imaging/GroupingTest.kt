@@ -38,6 +38,41 @@ class GroupingTest {
     }
 
     @Test
+    fun testLinkedSheetsStayTogether() {
+        val groups = PageGrouper.group(
+            sheets(400, 400, 400, 400), SplitRule.MAX_HEIGHT, 1000, 10,
+            linked = { a, b -> a == 1 && b == 2 }, hardCap = 2000
+        )
+        assertEquals(2, groups.size)
+        assertEquals(listOf(0, 1, 2), groups[0].sheets.map { it.order })
+        assertEquals(listOf(3), groups[1].sheets.map { it.order })
+        assertFalse(groups[0].seamCut)
+        assertFalse(groups[1].seamCut)
+    }
+
+    @Test
+    fun testForcedBreakAtLinkedBoundaryFlagsSeam() {
+        val groups = PageGrouper.group(
+            sheets(600, 600, 600), SplitRule.MAX_HEIGHT, 1000, 10,
+            linked = { a, b -> a == 0 && b == 1 }, hardCap = 1100
+        )
+        assertEquals(3, groups.size)
+        assertFalse(groups[0].seamCut)
+        assertTrue(groups[1].seamCut)
+        assertFalse(groups[2].seamCut)
+    }
+
+    @Test
+    fun testNoLinkInfoBehavesAsBefore() {
+        val groups = PageGrouper.group(
+            sheets(400, 400, 300, 500), SplitRule.MAX_HEIGHT, 1000, 10, null, 0
+        )
+        assertEquals(2, groups.size)
+        assertEquals(listOf(0, 1), groups[0].sheets.map { it.order })
+        assertEquals(listOf(2, 3), groups[1].sheets.map { it.order })
+    }
+
+    @Test
     fun testCountRule() {
         val groups = PageGrouper.group(sheets(50, 50, 50, 50, 50), SplitRule.PAGES_PER_PACK, 100000, 2)
         assertEquals(3, groups.size)

@@ -23,13 +23,17 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Collections
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.FormatListBulleted
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Unarchive
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Badge
+import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -40,6 +44,8 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -65,9 +71,9 @@ import com.mochistitch.core.ui.SettingsPanel
 import com.mochistitch.core.ui.SlicePreview
 
 /**
- * v4: alur Masukkan -> Hasil; antrean batch + layar Setelan (ikon gir).
- * Satu bilah atas untuk seluruh aplikasi (tanpa Scaffold bersarang),
- * tombol kembali sistem mengikuti alur layar.
+ * v5: empat tab bawah — Masukkan, Hasil, Antrean, Setelan.
+ * Satu bilah atas + satu bilah bawah untuk seluruh aplikasi
+ * (tanpa Scaffold bersarang), tombol kembali ke tab Masukkan.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -76,16 +82,9 @@ fun StudioApp(viewModel: StudioViewModel, onExitApp: () -> Unit) {
     val state by viewModel.state.collectAsState()
     val settings = state.settings
 
-    // Setelan dibuka dari ikon gir; tombol kembali mengembalikan ke layar asal.
-    var settingsFrom by remember { mutableStateOf(StudioScreen.INPUT) }
-
-    // Tombol kembali sistem: Hasil -> Masukkan -> keluar; Setelan -> layar asal.
+    // Tombol kembali sistem dari tab mana pun kembali ke Masukkan.
     BackHandler(enabled = state.screen != StudioScreen.INPUT) {
-        when (state.screen) {
-            StudioScreen.RESULT -> viewModel.travel(StudioScreen.INPUT)
-            StudioScreen.SETTINGS -> viewModel.travel(settingsFrom)
-            else -> viewModel.travel(StudioScreen.INPUT)
-        }
+        viewModel.travel(StudioScreen.INPUT)
     }
 
     // Izin tulis untuk Android 7-9 (API <= 28); Q+ pakai MediaStore.
@@ -113,14 +112,53 @@ fun StudioApp(viewModel: StudioViewModel, onExitApp: () -> Unit) {
         }
     }
 
-    fun previousStep(): StudioScreen = when (state.screen) {
-        StudioScreen.RESULT -> StudioScreen.INPUT
-        StudioScreen.SETTINGS -> settingsFrom
-        StudioScreen.QUEUE -> StudioScreen.INPUT
-        StudioScreen.INPUT -> StudioScreen.INPUT
-    }
-
     Scaffold(
+        bottomBar = {
+            NavigationBar {
+                NavigationBarItem(
+                    selected = state.screen == StudioScreen.INPUT,
+                    onClick = { viewModel.travel(StudioScreen.INPUT) },
+                    icon = { Icon(Icons.Default.Image, contentDescription = null) },
+                    label = { Text("Masuk") }
+                )
+                NavigationBarItem(
+                    selected = state.screen == StudioScreen.RESULT,
+                    onClick = { viewModel.travel(StudioScreen.RESULT) },
+                    icon = {
+                        val n = state.slices.size
+                        if (n > 0) {
+                            BadgedBox(badge = { Badge { Text("$n") } }) {
+                                Icon(Icons.Default.Collections, contentDescription = null)
+                            }
+                        } else {
+                            Icon(Icons.Default.Collections, contentDescription = null)
+                        }
+                    },
+                    label = { Text("Hasil") }
+                )
+                NavigationBarItem(
+                    selected = state.screen == StudioScreen.QUEUE,
+                    onClick = { viewModel.travel(StudioScreen.QUEUE) },
+                    icon = {
+                        val n = state.comics.size
+                        if (n > 0) {
+                            BadgedBox(badge = { Badge { Text("$n") } }) {
+                                Icon(Icons.Default.FormatListBulleted, contentDescription = null)
+                            }
+                        } else {
+                            Icon(Icons.Default.FormatListBulleted, contentDescription = null)
+                        }
+                    },
+                    label = { Text("Antrean") }
+                )
+                NavigationBarItem(
+                    selected = state.screen == StudioScreen.SETTINGS,
+                    onClick = { viewModel.travel(StudioScreen.SETTINGS) },
+                    icon = { Icon(Icons.Default.Settings, contentDescription = null) },
+                    label = { Text("Setelan") }
+                )
+            }
+        },
         topBar = {
             TopAppBar(
                 title = {
@@ -128,8 +166,8 @@ fun StudioApp(viewModel: StudioViewModel, onExitApp: () -> Unit) {
                         Text("MochiStitch", fontWeight = FontWeight.Bold)
                         Text(
                             when (state.screen) {
-                                StudioScreen.INPUT -> "Langkah 1 dari 2 · Masukkan halaman"
-                                StudioScreen.RESULT -> "Langkah 2 dari 2 · Hasil rakitan"
+                                StudioScreen.INPUT -> "Masukkan halaman"
+                                StudioScreen.RESULT -> "Hasil rakitan"
                                 StudioScreen.QUEUE -> "Antrean batch"
                                 StudioScreen.SETTINGS -> "Setelan"
                             },
@@ -144,25 +182,9 @@ fun StudioApp(viewModel: StudioViewModel, onExitApp: () -> Unit) {
                             Icon(Icons.Default.Close, contentDescription = "Tutup")
                         }
                     } else {
-                        IconButton(onClick = { viewModel.travel(previousStep()) }) {
+                        IconButton(onClick = { viewModel.travel(StudioScreen.INPUT) }) {
                             Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Kembali")
                         }
-                    }
-                },
-                actions = {
-                    if (state.screen != StudioScreen.SETTINGS) {
-                        IconButton(onClick = {
-                            settingsFrom = state.screen
-                            viewModel.travel(StudioScreen.SETTINGS)
-                        }) {
-                            Icon(Icons.Default.Settings, contentDescription = "Setelan")
-                        }
-                    }
-                    TextButton(
-                        onClick = { viewModel.travel(StudioScreen.QUEUE) },
-                        enabled = state.screen != StudioScreen.QUEUE
-                    ) {
-                        Text("Antrean (${state.comics.size})")
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -182,7 +204,20 @@ fun StudioApp(viewModel: StudioViewModel, onExitApp: () -> Unit) {
                 onChange = viewModel::keepSettings,
                 modifier = Modifier.padding(inner).fillMaxSize()
             )
-            StudioScreen.RESULT -> Column(modifier = Modifier.padding(inner).fillMaxSize()) {
+            StudioScreen.RESULT -> if (state.slices.isEmpty()) {
+                Column(modifier = Modifier.padding(inner).fillMaxSize().padding(16.dp)) {
+                    Card(
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(
+                            "Belum ada hasil rakitan. Pilih halaman di tab Masukkan lalu tekan Rakit.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            modifier = Modifier.padding(20.dp)
+                        )
+                    }
+                }
+            } else Column(modifier = Modifier.padding(inner).fillMaxSize()) {
                 SlicePreview(
                     slices = state.slices,
                     showFlags = settings.showReviewFlags,

@@ -1,26 +1,30 @@
 # MochiStitch — Agent Context
 
-Proyek: MochiStitch (`com.mochistitch.app`) v4 — rombak total.
+Proyek: MochiStitch (`com.mochistitch.app`) v5 — rombak total.
 Platform: Android native, Kotlin + Jetpack Compose
 Purpose: Penggabung halaman komik vertikal (strip webtoon).
 
-## Arsitektur v4 (tidak ada piksel sumber yang dibuang)
+## Arsitektur v5 (potong hanya di tempat aman)
 
-Satu invarian struktural: tidak ada kode yang memotong/meng-crop di dalam
-halaman dalam keadaan apa pun. Pemotongan output HANYA tepat di batas
-halaman (PageGrouper). Halaman tunggal melebihi batas dibiarkan utuh +
-flag tinjau manual. Tidak ada OpenCV, deteksi, tebakan, atau mode crop.
+Satu prinsip mesin: garis potong tidak pernah melintasi tinta (balon,
+panel, teks). Halaman raksasa dipotong HANYA di pusat pita baris
+bebas-tepi (SeamScan, Kotlin murni — tanpa OpenCV/ML). Batas antar-berkas
+output diusahakan tidak jatuh di pasangan halaman yang bersambung piksel
+(pinning sampai batas keras); batas yang terpaksa jatuh di sambungan, dan
+halaman yang tak punya celah aman, ditandai sebagai flag tinjau.
 
-- `app/` — alur 2 langkah (INPUT -> RESULT) + QUEUE + SETTINGS (ikon gir,
-  kembali ke layar asal); edge-to-edge; satu Scaffold bersarang;
-  tombol kembali sistem mengikuti alur layar;
-  izin tulis API <= 28 dipinta sebelum terbit; share via FileProvider (API < 29)
-- `core-imaging/` — StripRenderer (gambar utuh, drawBitmap penuh), PageGrouper,
-  StripBuilder, FileNamer. Tanpa PageFit/CROP. Preview hasil diskalakan ke
-  <=2048px agar tidak memegang strip raksasa di RAM.
-- `core-settings/` — DataStore; tanpa smartCut/strictness/paper/fit (mati v4)
-- `core-ui/` — tema M3, PageStrip (thumb Fit), SettingsPanel inline (tanpa
-  Scaffold sendiri), SlicePreview (kemasan dipilih sebelum tombol Terbitkan)
+- `app/` — 4 tab bawah (Masuk, Hasil, Antrean, Setelan); edge-to-edge;
+  satu Scaffold (TopAppBar + NavigationBar); tombol kembali ke tab Masuk;
+  badge jumlah di tab Hasil/Antrean; izin tulis API <= 28 dipinta sebelum
+  terbit; share via FileProvider (API < 29)
+- `core-imaging/` — SeamScan (rowIsSafe/findBands/planCuts/rowsContinue,
+  murni array, unit-testable), PageGrouper (pinning + hardCap + seamCut),
+  StripRenderer (Placement src-rect; decodeSampled; edgeStrip region),
+  StripBuilder (segmentasi aman + continuityMap), FileNamer.
+  Preview hasil diskalakan ke <=2048px.
+- `core-settings/` — DataStore; tanpa smartCut/strictness/paper/fit
+- `core-ui/` — tema M3, PageStrip (thumb Fit), SettingsPanel,
+  SlicePreview (kemasan dipilih sebelum tombol Terbitkan)
 - `core-archive/` — baca ZIP/CBZ (java.util.zip), RAR/CBR (junrar),
   7Z/CB7 (commons-compress + xz); tulis ZIP/CBZ; `unpackTo` streaming
   ke disk, satu folder unik per impor
@@ -28,9 +32,11 @@ flag tinjau manual. Tidak ada OpenCV, deteksi, tebakan, atau mode crop.
 
 ## Aturan Penting
 - Build hanya diverifikasi via GitHub Actions CI/CD (`./gradlew test assembleDebug`)
+- API baru WAJIB diverifikasi via Context7 sebelum dipakai (jangan dari ingatan)
 - Format gambar default: JPG; pembungkus default: ZIP
-- Tidak ada kode/UI horizontal di mana pun (tidak ada enum arah)
+- Tidak ada UI horizontal di mana pun
 - Input arsip: ZIP/CBZ/RAR/CBR/7Z/CB7 via core-archive
 - Output arsip dari sumber arsip = basename SAMA (tanpa timestamp)
 - Bitmap config: RGB_565 — hemat memory
+- Tiap build menghasilkan 5 APK: universal, armeabi-v7a, arm64-v8a, x86, x86_64
 - Commit message dalam bahasa Indonesia

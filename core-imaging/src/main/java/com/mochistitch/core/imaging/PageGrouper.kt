@@ -3,21 +3,49 @@ package com.mochistitch.core.imaging
 import com.mochistitch.core.settings.SplitRule
 
 /**
- * Pengelompok halaman sadar-batas: tiap berkas output berisi halaman UTUH
- * yang berurutan. Potongan tidak pernah jatuh di tengah halaman.
+ * Pengelompok halaman sadar-sambungan: tiap berkas output berisi halaman
+ * (atau segmen halaman) UTUH yang berurutan.
+ *
+ * - Potongan dalam halaman hanya terjadi di celah yang sudah direncanakan
+ *   aman oleh pemanggil (baris bebas-tepi); grouper tidak pernah memotong
+ *   sendiri.
+ * - Batas antar-berkas diusahakan tidak jatuh di pasangan lembar yang
+ *   bersambung piksel ([linked]); pasangan bersambung digabung sampai batas
+ *   lunak terlampaui atau batas keras [hardCap] tercapai. Batas yang
+ *   terpaksa jatuh di sambungan ditandai [Bundle.seamCut] agar tampil
+ *   sebagai flag tinjau di pratinjau.
  */
 object PageGrouper {
 
-    /** [renderedHeight] = tinggi halaman setelah diskala ke lebar strip. */
+    /** [renderedHeight] = tinggi lembar setelah diskala ke lebar strip. */
     data class Sheet(val order: Int, val renderedHeight: Int)
 
-    data class Bundle(val sheets: List<Sheet>, val tallSingle: Boolean = false)
+    data class Bundle(
+        val sheets: List<Sheet>,
+        val tallSingle: Boolean = false,
+        val seamCut: Boolean = false
+    )
 
     fun group(
         sheets: List<Sheet>,
         rule: SplitRule,
         maxStripHeight: Int,
         pagesPerPack: Int
+    ): List<Bundle> = group(sheets, rule, maxStripHeight, pagesPerPack, null, 0)
+
+    /**
+     * @param linked (a, b) true bila lembar order-a bersambung piksel dengan
+     *   order-b. null = tanpa informasi sambungan (perilaku lama).
+     * @param hardCap tinggi maksimum mutlak satu berkas saat menahan
+     *   pasangan bersambung (0 = tanpa penahanan).
+     */
+    fun group(
+        sheets: List<Sheet>,
+        rule: SplitRule,
+        maxStripHeight: Int,
+        pagesPerPack: Int,
+        linked: ((Int, Int) -> Boolean)?,
+        hardCap: Int
     ): List<Bundle> {
         if (sheets.isEmpty()) return emptyList()
         return when (rule) {
@@ -25,34 +53,54 @@ object PageGrouper {
             SplitRule.PAGES_PER_PACK -> sheets.chunked(pagesPerPack.coerceAtLeast(1)) { chunk ->
                 Bundle(chunk, tallSingle = maxStripHeight > 0 && chunk.any { it.renderedHeight > maxStripHeight })
             }
-            SplitRule.MAX_HEIGHT -> groupByHeight(sheets, maxStripHeight)
+            SplitRule.MAX_HEIGHT -> groupByHeight(sheets, maxStripHeight, linked, hardCap)
         }
     }
 
-    private fun groupByHeight(sheets: List<Sheet>, limit: Int): List<Bundle> {
+    private fun groupByHeight(
+        sheets: List<Sheet>,
+        limit: Int,
+        linked: ((Int, Int) -> Boolean)?,
+        hardCap: Int
+    ): List<Bundle> {
         if (limit <= 0) return listOf(Bundle(sheets))
+        val cap = if (hardCap > limit) hardCap else limit
+        val canHold = linked != null && hardCap > limit
         val out = mutableListOf<Bundle>()
         var current = mutableListOf<Sheet>()
         var height = 0
+        var seamCut = false
         for (sheet in sheets) {
             if (sheet.renderedHeight > limit) {
                 if (current.isNotEmpty()) {
-                    out.add(Bundle(current))
+                    out.add(Bundle(current, seamCut = seamCut))
                     current = mutableListOf()
                     height = 0
+                    seamCut = false
                 }
                 out.add(Bundle(listOf(sheet), tallSingle = true))
                 continue
             }
             if (current.isNotEmpty() && height + sheet.renderedHeight > limit) {
-                out.add(Bundle(current))
-                current = mutableListOf()
-                height = 0
+                val prev = current.last()
+                val pairLinked = linked?.invoke(prev.order, sheet.order) == true
+                if (pairLinked && canHold && height + sheet.renderedHeight <= cap) {
+                    // Tahan: gabung pasangan bersambung walau melewati batas lunak.
+                    current.add(sheet)
+                    height += sheet.renderedHeight
+                } else {
+                    out.add(Bundle(current, seamCut = seamCut))
+                    current = mutableListOf(sheet)
+                    height = sheet.renderedHeight
+                    // Batas antar-berkas jatuh tepat di sambungan: tandai berkas baru.
+                    seamCut = pairLinked
+                }
+            } else {
+                current.add(sheet)
+                height += sheet.renderedHeight
             }
-            current.add(sheet)
-            height += sheet.renderedHeight
         }
-        if (current.isNotEmpty()) out.add(Bundle(current))
+        if (current.isNotEmpty()) out.add(Bundle(current, seamCut = seamCut))
         return out
     }
 }

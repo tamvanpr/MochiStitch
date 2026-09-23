@@ -2,20 +2,20 @@
 
 **MochiStitch** (`com.mochistitch.app`) is an Android native app that merges comic or webtoon pages into continuous vertical long-strip images. Built with Kotlin, Jetpack Compose, and Material 3.
 
-One structural invariant defines the engine: **no code ever crops inside a page**. Output slicing happens only at page boundaries; a single page that exceeds the height limit is kept whole and flagged for manual review. No OpenCV, no detection, no guessing.
+One engine principle defines the build: **a cut line never crosses ink** (balloons, panels, text). Oversized pages are split only at the center of edge-free row bands (pure-Kotlin scan, no OpenCV/ML); output-file boundaries avoid pixel-continuous page pairs; forced seam cuts and gapless pages are flagged for review in the preview.
 
 ---
 
 ## ✨ Features
 
 - **Vertical stitching**: stack full pages vertically, scaled proportionally to the strip width — zero source pixels are discarded.
-- **Page-boundary splitting**: split the output into multiple files at exact page boundaries (`WHOLE`, `MAX_HEIGHT`, or `PAGES_PER_PACK` rules).
-- **Giant-page review flags**: an over-limit page is never cut; it is kept intact and marked in the result preview.
+- **Safe splitting**: oversized pages are cut only through edge-free rows (never through balloons), and continuous page pairs are kept in the same output file; risky seams are flagged in the preview.
+- **Page-boundary splitting**: split the output into multiple files (`WHOLE`, `MAX_HEIGHT`, or `PAGES_PER_PACK` rules).
 - **Archive input**: open `.zip`, `.cbz`, `.rar`, `.cbr`, `.7z`, and `.cb7` directly — pages stream to disk so large archives stay memory-safe.
 - **Archive output**: ZIP/CBZ packaging with MediaStore delivery (Download folder on Android 10+, FileProvider share on older devices).
 - **Batch queue**: import several comics, set a packaging format per title, and process them all in one run.
-- **Memory conscious**: RGB_565 bitmaps, bounded decode sampling, and small on-screen previews instead of full-height strips held in RAM.
-- **Material 3 UI**: 2-step flow (Input → Result) with settings behind a gear icon, plus a batch queue screen, with light/dark/system theming.
+- **Memory conscious**: RGB_565 bitmaps, bounded decode sampling, region-decode edge checks, and small on-screen previews instead of full-height strips held in RAM.
+- **Material 3 UI**: four bottom tabs (Input, Result, Queue, Settings) with count badges, light/dark/system theming.
 
 ---
 
@@ -23,9 +23,9 @@ One structural invariant defines the engine: **no code ever crops inside a page*
 
 ```text
 MochiStitch
- ├── :app            # 2-step wizard (Input → Result) + queue shell + settings screen, ViewModel, publishing
+ ├── :app            # 4-tab shell (Input/Result/Queue/Settings), ViewModel, publishing
  ├── :core-common    # ComicProject batch model
- ├── :core-imaging   # StripRenderer, PageGrouper, StripBuilder, FileNamer
+ ├── :core-imaging   # SeamScan, PageGrouper, StripRenderer, StripBuilder, FileNamer
  ├── :core-archive   # ZIP/CBZ/RAR/CBR/7Z read + ZIP/CBZ write
  ├── :core-settings  # DataStore-backed StitchSettings
  └── :core-ui        # M3 theme, PageStrip, SettingsPanel, SlicePreview
