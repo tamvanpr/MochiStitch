@@ -1,7 +1,6 @@
 package com.mochistitch.core.ui
 
 import androidx.compose.foundation.Image
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -18,7 +17,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Publish
 import androidx.compose.material.icons.filled.Report
 import androidx.compose.material3.Button
@@ -27,13 +25,8 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
-import com.mochistitch.core.settings.PackFormat
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -46,7 +39,13 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.mochistitch.core.settings.PackFormat
 
+/**
+ * Langkah Hasil: daftar strip + pilih kemasan + tombol terbit.
+ * Bukan layar tersendiri — tanpa Scaffold/TopAppBar; shell wizard
+ * yang menyediakan bilah atas dan navigasi.
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SlicePreview(
@@ -55,126 +54,115 @@ fun SlicePreview(
     pack: PackFormat,
     onPackChange: (PackFormat) -> Unit,
     onPublish: () -> Unit,
-    onBack: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     var zoomed by remember { mutableStateOf<SliceInfo?>(null) }
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("Hasil Rakitan (${slices.size})", fontWeight = FontWeight.Bold) },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Kembali")
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.primaryContainer,
-                    titleContentColor = MaterialTheme.colorScheme.onPrimaryContainer
-                )
-            )
-        },
-        modifier = modifier
-    ) { inner ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(inner)
-                .padding(12.dp),
+    val totalBytes = slices.sumOf { it.bytes }
+
+    Column(modifier = modifier.fillMaxSize()) {
+        Text(
+            "${slices.size} strip · ${totalBytes / 1024} KB",
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(bottom = 8.dp)
+        )
+        LazyColumn(
+            modifier = Modifier.weight(1f).fillMaxWidth(),
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            LazyColumn(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                items(slices, key = { it.order }) { slice ->
-                    Card(
-                        onClick = { zoomed = slice },
-                        shape = RoundedCornerShape(16.dp),
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text(
-                                    slice.fileName,
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    fontWeight = FontWeight.Bold,
-                                    modifier = Modifier.weight(1f)
-                                )
-                                Text(
-                                    "${slice.width}×${slice.height}",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                            slice.bitmap?.let { bmp ->
-                                Image(
-                                    bitmap = bmp.asImageBitmap(),
-                                    contentDescription = slice.fileName,
-                                    contentScale = ContentScale.FillWidth,
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .height(240.dp)
-                                        .clip(RoundedCornerShape(10.dp))
-                                )
-                            }
+            items(slices, key = { it.order }) { slice ->
+                Card(
+                    onClick = { zoomed = slice },
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(
-                                "Ketuk untuk lihat utuh",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.primary
+                                slice.fileName,
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.weight(1f)
                             )
-                            if (showFlags && slice.flagged) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(Icons.Default.Report, contentDescription = null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(16.dp))
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Text(
-                                        slice.flagReason ?: "Perlu ditinjau",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.error
-                                    )
-                                }
+                            Text(
+                                "${slice.width}×${slice.height}",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        slice.bitmap?.let { bmp ->
+                            Image(
+                                bitmap = bmp.asImageBitmap(),
+                                contentDescription = slice.fileName,
+                                contentScale = ContentScale.Fit,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(240.dp)
+                                    .clip(RoundedCornerShape(10.dp))
+                            )
+                        }
+                        Text(
+                            "Ketuk untuk lihat utuh",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        if (showFlags && slice.flagged) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Default.Report, contentDescription = null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    slice.flagReason ?: "Perlu ditinjau",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.error
+                                )
                             }
                         }
                     }
                 }
             }
-            Button(
-                onClick = onPublish,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(52.dp),
-                shape = RoundedCornerShape(14.dp)
-            ) {
-                Icon(Icons.Default.Publish, contentDescription = null, modifier = Modifier.size(18.dp))
-                Spacer(modifier = Modifier.width(8.dp))
-                Text("Terbitkan", fontWeight = FontWeight.Bold)
-            }
-            Text(
-                "Kemas sebagai:",
-                style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                PackFormat.entries.forEach { option ->
-                    val label = when (option) {
-                        PackFormat.FILES -> "Lepas"
-                        PackFormat.CBZ -> "CBZ"
-                        PackFormat.ZIP -> "ZIP"
-                    }
-                    FilterChip(
-                        selected = pack == option,
-                        onClick = { onPackChange(option) },
-                        label = { Text(label) }
-                    )
+        }
+
+        // Kemasan dipilih SEBELUM terbit, bukan setelah tombolnya.
+        Text(
+            "Kemas sebagai:",
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(top = 8.dp)
+        )
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            PackFormat.entries.forEach { option ->
+                val label = when (option) {
+                    PackFormat.FILES -> "Lepas"
+                    PackFormat.CBZ -> "CBZ"
+                    PackFormat.ZIP -> "ZIP"
                 }
+                FilterChip(
+                    selected = pack == option,
+                    onClick = { onPackChange(option) },
+                    label = { Text(label) }
+                )
             }
+        }
+        Button(
+            onClick = onPublish,
+            enabled = slices.isNotEmpty(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(52.dp)
+                .padding(top = 4.dp),
+            shape = RoundedCornerShape(14.dp)
+        ) {
+            Icon(Icons.Default.Publish, contentDescription = null, modifier = Modifier.size(18.dp))
+            Spacer(modifier = Modifier.width(8.dp))
+            Text("Terbitkan", fontWeight = FontWeight.Bold)
         }
     }
 
-    // Tampil utuh satu gambar: dialog geser + cubit tidak didukung di sini,
-    // gambar tampil penuh proporsional dan bisa digulir.
     val focus = zoomed
     if (focus != null) {
         androidx.compose.ui.window.Dialog(onDismissRequest = { zoomed = null }) {

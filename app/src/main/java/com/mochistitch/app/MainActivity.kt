@@ -7,6 +7,7 @@ import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Surface
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -20,13 +21,14 @@ import com.mochistitch.core.ui.StudioTheme
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        // Gambar di belakang bilah sistem; bilah dibuat transparan agar
-        // selalu menyatu dengan tema, bukan blok warna yang salah.
+        // Gambar di belakang bilah sistem; enableEdgeToEdge membuat bilah
+        // transparan agar selalu menyatu dengan tema.
         enableEdgeToEdge()
         setContent {
             val vm: StudioViewModel = viewModel()
             val state by vm.state.collectAsState()
-            vm.boot(this)
+            // Boot DataStore sekali — bukan sebagai efek samping komposisi.
+            LaunchedEffect(Unit) { vm.boot(applicationContext) }
             val dark = when (state.settings.themeMode) {
                 ThemeMode.LIGHT -> false
                 ThemeMode.DARK -> true
@@ -35,10 +37,7 @@ class MainActivity : ComponentActivity() {
             StudioTheme(mode = state.settings.themeMode) {
                 val view = LocalView.current
                 SideEffect {
-                    val window = this.window
-                    window.statusBarColor = android.graphics.Color.TRANSPARENT
-                    window.navigationBarColor = android.graphics.Color.TRANSPARENT
-                    val controller = WindowCompat.getInsetsController(window, view)
+                    val controller = WindowCompat.getInsetsController(this@MainActivity.window, view)
                     controller.isAppearanceLightStatusBars = !dark
                     controller.isAppearanceLightNavigationBars = !dark
                 }

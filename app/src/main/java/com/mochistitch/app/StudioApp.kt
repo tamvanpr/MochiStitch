@@ -1,5 +1,9 @@
 package com.mochistitch.app
 
+import android.Manifest
+import android.content.pm.PackageManager
+import android.os.Build
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
@@ -15,6 +19,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
@@ -42,12 +47,16 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
+import androidx.core.content.ContextCompat
 import com.mochistitch.core.settings.PackFormat
 import com.mochistitch.core.ui.PageStrip
 import com.mochistitch.core.ui.SettingsPanel
@@ -55,8 +64,8 @@ import com.mochistitch.core.ui.SlicePreview
 
 /**
  * v4: wizard 3 langkah — Masukkan -> Atur -> Hasil — plus layar Antrean.
- * Tanpa bottom-nav, tanpa layar setelan terpisah: semua setelan inline
- * di langkah Atur, semua aksi dalam satu alur maju yang jelas.
+ * Satu bilah atas untuk seluruh aplikasi (tanpa Scaffold bersarang),
+ * tombol kembali sistem mengikuti alur langkah.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -64,6 +73,47 @@ fun StudioApp(viewModel: StudioViewModel, onExitApp: () -> Unit) {
     val ctx = LocalContext.current
     val state by viewModel.state.collectAsState()
     val settings = state.settings
+
+    // Tombol kembali sistem: Hasil -> Atur -> Masukkan -> keluar.
+    BackHandler(enabled = state.screen != StudioScreen.INPUT) {
+        when (state.screen) {
+            StudioScreen.RESULT -> viewModel.travel(StudioScreen.SETUP)
+            StudioScreen.QUEUE -> viewModel.travel(StudioScreen.INPUT)
+            else -> viewModel.travel(StudioScreen.INPUT)
+        }
+    }
+
+    // Izin tulis untuk Android 7-9 (API <= 28); Q+ pakai MediaStore.
+    var pendingWrite by remember { mutableStateOf<(() -> Unit)?>(null) }
+    val writePermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        val action = pendingWrite
+        pendingWrite = null
+        if (granted) {
+            action?.invoke()
+        } else {
+            viewModel.notify("Izin penyimpanan ditolak — hasil tidak dapat disimpan.")
+        }
+    }
+    val gatedWrite: (() -> Unit) -> Unit = { action ->
+        val needsPermission = Build.VERSION.SDK_INT <= Build.VERSION_CODES.P &&
+            ContextCompat.checkSelfPermission(ctx, Manifest.permission.WRITE_EXTERNAL_STORAGE) !=
+            PackageManager.PERMISSION_GRANTED
+        if (needsPermission) {
+            pendingWrite = action
+            writePermissionLauncher.launch(Manifest.permission.WRITE_EXTERNAL_STORAGE)
+        } else {
+            action()
+        }
+    }
+
+    fun previousStep(): StudioScreen = when (state.screen) {
+        StudioScreen.RESULT -> StudioScreen.SETUP
+        StudioScreen.SETUP -> StudioScreen.INPUT
+        StudioScreen.QUEUE -> StudioScreen.INPUT
+        StudioScreen.INPUT -> StudioScreen.INPUT
+    }
 
     Scaffold(
         topBar = {
@@ -84,8 +134,14 @@ fun StudioApp(viewModel: StudioViewModel, onExitApp: () -> Unit) {
                     }
                 },
                 navigationIcon = {
-                    IconButton(onClick = onExitApp) {
-                        Icon(Icons.Default.Close, contentDescription = "Tutup")
+                    if (state.screen == StudioScreen.INPUT) {
+                        IconButton(onClick = onExitApp) {
+                            Icon(Icons.Default.Close, contentDescription = "Tutup")
+                        }
+                    } else {
+                        IconButton(onClick = { viewModel.travel(previousStep()) }) {
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Kembali")
+                        }
                     }
                 },
                 actions = {
@@ -112,7 +168,6 @@ fun StudioApp(viewModel: StudioViewModel, onExitApp: () -> Unit) {
                 SettingsPanel(
                     settings = settings,
                     onChange = viewModel::keepSettings,
-                    onBack = { viewModel.travel(StudioScreen.INPUT) },
                     modifier = Modifier.weight(1f)
                 )
                 Button(
@@ -129,9 +184,8 @@ fun StudioApp(viewModel: StudioViewModel, onExitApp: () -> Unit) {
                     showFlags = settings.showReviewFlags,
                     pack = settings.packFormat,
                     onPackChange = { viewModel.keepSettings(settings.copy(packFormat = it)) },
-                    onPublish = { viewModel.publish(ctx) },
-                    onBack = { viewModel.travel(StudioScreen.SETUP) },
-                    modifier = Modifier.weight(1f)
+                    onPublish = { gatedWrite { viewModel.publish(ctx) } },
+                    modifier = Modifier.weight(1f).padding(horizontal = 16.dp)
                 )
                 if (state.published?.shareUri != null) {
                     OutlinedButton(
@@ -146,6 +200,7 @@ fun StudioApp(viewModel: StudioViewModel, onExitApp: () -> Unit) {
             }
             StudioScreen.QUEUE -> QueueStep(
                 viewModel = viewModel,
+                onRunBatch = { gatedWrite { viewModel.runBatch(ctx) } },
                 modifier = Modifier.padding(inner).fillMaxSize()
             )
         }
@@ -271,9 +326,13 @@ private fun InputStep(viewModel: StudioViewModel, modifier: Modifier = Modifier)
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun QueueStep(viewModel: StudioViewModel, modifier: Modifier = Modifier) {
-    val ctx = LocalContext.current
+private fun QueueStep(
+    viewModel: StudioViewModel,
+    onRunBatch: () -> Unit,
+    modifier: Modifier = Modifier
+) {
     val state by viewModel.state.collectAsState()
     Column(
         modifier = modifier.padding(16.dp),
@@ -359,7 +418,7 @@ private fun QueueStep(viewModel: StudioViewModel, modifier: Modifier = Modifier)
             }
             Spacer(modifier = Modifier.weight(1f))
             Button(
-                onClick = { viewModel.runBatch(ctx) },
+                onClick = onRunBatch,
                 enabled = !state.busy && state.comics.isNotEmpty()
             ) {
                 Icon(Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.size(18.dp))

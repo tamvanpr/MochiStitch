@@ -1,33 +1,34 @@
 # MochiStitch 🍡
 
-**MochiStitch** (`com.mochistitch.app`) is a modern, high-performance Android native comic merger app designed for manga, webtoon, and comic readers and creators. Built with Kotlin, Jetpack Compose, Material 3, and OpenCV.
+**MochiStitch** (`com.mochistitch.app`) is an Android native app that merges comic or webtoon pages into continuous vertical long-strip images. Built with Kotlin, Jetpack Compose, and Material 3.
+
+One structural invariant defines the engine: **no code ever crops inside a page**. Output slicing happens only at page boundaries; a single page that exceeds the height limit is kept whole and flagged for manual review. No OpenCV, no detection, no guessing.
 
 ---
 
 ## ✨ Features
 
-- **Comic Stitching & Merging**: Merge multiple comic or manga page images vertically or horizontally into continuous long-strip images.
-- **MochiSmart (OpenCV Integration)**: Intelligent seam detection and edge analysis powered by native OpenCV (`org.opencv:opencv`) to automatically identify optimal split and join points across panels.
-- **Archive Support**: Direct extraction and reading from `.cbz`, `.zip`, and custom image folders without manual unpacking.
-- **Memory & OOM Optimized**: High-performance streaming image pipeline utilizing downsampling (`inSampleSize`) and explicit bitmap lifecycle management to handle high-resolution image batches safely on mobile devices.
-- **Customizable Output**: Adjust stitch direction, gaps, background colors, and export formats (JPEG, PNG, WEBP) with customizable quality settings.
-- **Modern Material 3 UI**: Clean, adaptive user interface with support for dark mode, custom adaptive launcher icons, and smooth Compose transitions.
+- **Vertical stitching**: stack full pages vertically, scaled proportionally to the strip width — zero source pixels are discarded.
+- **Page-boundary splitting**: split the output into multiple files at exact page boundaries (`WHOLE`, `MAX_HEIGHT`, or `PAGES_PER_PACK` rules).
+- **Giant-page review flags**: an over-limit page is never cut; it is kept intact and marked in the result preview.
+- **Archive input**: open `.zip`, `.cbz`, `.rar`, `.cbr`, `.7z`, and `.cb7` directly — pages stream to disk so large archives stay memory-safe.
+- **Archive output**: ZIP/CBZ packaging with MediaStore delivery (Download folder on Android 10+, FileProvider share on older devices).
+- **Batch queue**: import several comics, set a packaging format per title, and process them all in one run.
+- **Memory conscious**: RGB_565 bitmaps, bounded decode sampling, and small on-screen previews instead of full-height strips held in RAM.
+- **Material 3 UI**: 3-step wizard (Input → Setup → Result) plus a batch queue screen, with light/dark/system theming.
 
 ---
 
 ## 🏗️ Architecture
 
-MochiStitch uses a modular architecture separating concerns into focused core modules:
-
 ```text
 MochiStitch
- ├── :app              # Application entry point, navigation, and activity setup
- ├── :core-common      # Models, extensions, and common utility functions
- ├── :core-imaging     # Stitching engine, bitmap processing pipeline, downsampling & canvas rendering
- ├── :core-mochismart  # OpenCV native wrapper for seam detection and smart contour analysis
- ├── :core-archive    # CBZ/ZIP archive parser and streaming file reader
- ├── :core-settings   # Jetpack DataStore preferences for persistent user settings
- └── :core-ui         # Material 3 design system, Compose theme, and shared UI components
+ ├── :app            # 3-step wizard + queue shell, ViewModel, publishing
+ ├── :core-common    # ComicProject batch model
+ ├── :core-imaging   # StripRenderer, PageGrouper, StripBuilder, FileNamer
+ ├── :core-archive   # ZIP/CBZ/RAR/CBR/7Z read + ZIP/CBZ write
+ ├── :core-settings  # DataStore-backed StitchSettings
+ └── :core-ui        # M3 theme, PageStrip, SettingsPanel, SlicePreview
 ```
 
 ---
@@ -38,14 +39,14 @@ MochiStitch
 
 - **JDK**: Java 17
 - **Android SDK**: Compile SDK 35, Min SDK 24
-- **Gradle**: 8.x (using Gradle Wrapper `./gradlew`)
+- **Gradle**: 8.x (via the Gradle Wrapper `./gradlew`)
 
 ### Building the Project
 
 1. **Clone the repository**:
    ```bash
-   git clone https://github.com/mochistitch/mochistitch.git
-   cd mochistitch
+   git clone https://github.com/tamvanpr/MochiStitch.git
+   cd MochiStitch
    ```
 
 2. **Build Debug APK**:
@@ -62,6 +63,8 @@ MochiStitch
    ```bash
    ./gradlew clean assembleDebug test --no-daemon
    ```
+
+Builds are verified by GitHub Actions CI (`./gradlew test assembleDebug`) on every push and pull request.
 
 ---
 
@@ -88,5 +91,3 @@ export KEY_PASSWORD="your_key_password"
 ## 📄 License
 
 MochiStitch is released under open-source standards. See project repository details for licensing terms.
-
-

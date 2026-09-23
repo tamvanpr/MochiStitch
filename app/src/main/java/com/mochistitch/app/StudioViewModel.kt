@@ -12,6 +12,7 @@ import com.mochistitch.core.archive.ArchiveItem
 import com.mochistitch.core.archive.ArchiveKit
 import com.mochistitch.core.common.ComicProject
 import com.mochistitch.core.imaging.BuildPhase
+import com.mochistitch.core.imaging.BuiltStrip
 import com.mochistitch.core.imaging.FileNamer
 import com.mochistitch.core.imaging.StripBuilder
 import com.mochistitch.core.settings.PackFormat
@@ -101,6 +102,10 @@ class StudioViewModel : ViewModel() {
         }
     }
 
+    fun notify(msg: String) {
+        _state.update { it.copy(notice = msg) }
+    }
+
     fun clearNotice() {
         _state.update { it.copy(notice = null) }
     }
@@ -117,7 +122,7 @@ class StudioViewModel : ViewModel() {
         _state.update { it.copy(batchOutcomes = emptyList()) }
     }
 
-    // ── Pustaka ──────────────────────────────────────────────────────
+    // ── Antrean ─────────────────────────────────────────────────────
 
     fun openComic(id: String) {
         val comic = _state.value.comics.find { it.id == id } ?: return
@@ -159,6 +164,25 @@ class StudioViewModel : ViewModel() {
         }
     }
 
+    /** Samakan halaman meja kerja ke komik aktif agar antrean tidak basi. */
+    private fun syncActiveComic() {
+        _state.update { s ->
+            val id = s.activeComicId ?: return@update s
+            s.copy(
+                comics = s.comics.map { comic ->
+                    if (comic.id == id) {
+                        comic.copy(
+                            pageUris = s.pages.map { it.uri },
+                            pageNames = s.pages.map { it.title }
+                        )
+                    } else {
+                        comic
+                    }
+                }
+            )
+        }
+    }
+
     // ── Impor ────────────────────────────────────────────────────────
 
     fun takeImages(uris: List<Uri>, context: Context) {
@@ -175,7 +199,7 @@ class StudioViewModel : ViewModel() {
                 try {
                     context.contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
                 } catch (e: SecurityException) {
-                    // Abaikan.
+                    // Photo picker tidak memberi izin persisten — abaikan.
                 }
                 PageItem(uri = uri, title = readName(context, uri) ?: uri.lastPathSegment ?: "Gambar")
             }
@@ -205,17 +229,19 @@ class StudioViewModel : ViewModel() {
                 }
                 val stream = context.contentResolver.openInputStream(uri)
                     ?: throw IllegalStateException("Tidak dapat membuka: $name")
-                val unpacked = stream.use { ArchiveKit.unpack(it, name) }
+                // Streaming ke disk, satu folder unik per impor: arsip besar
+                // tidak membebani RAM dan komik lama di antrean tidak rusak.
+                val stem = ArchiveKit.sanitizeName(ArchiveKit.baseNameOf(name).ifBlank { "arsip" })
+                val unique = "${stem}_${System.currentTimeMillis()}"
+                val dir = File(File(context.cacheDir, "studio_import"), unique).apply { mkdirs() }
+                val unpacked = stream.use { ArchiveKit.unpackTo(it, name, dir) }
                 if (unpacked.isEmpty()) {
+                    try { dir.deleteRecursively() } catch (t: Throwable) { }
                     _state.update { it.copy(busy = false, failure = "Arsip kosong: $name") }
                     return@launch
                 }
-                val stem = ArchiveKit.baseNameOf(name).ifBlank { "arsip" }
-                val dir = File(File(context.cacheDir, "studio_import"), stem).apply { mkdirs() }
-                val items = unpacked.mapIndexed { i, page ->
-                    val dest = File(dir, "%03d_%s".format(i + 1, page.name.ifBlank { "halaman.png" }))
-                    dest.outputStream().use { out -> out.write(page.bytes) }
-                    PageItem(uri = Uri.fromFile(dest), title = page.name)
+                val items = unpacked.map { page ->
+                    PageItem(uri = Uri.fromFile(page.file), title = page.name)
                 }
                 shelve(name, items)
                 _state.update { s ->
@@ -227,7 +253,7 @@ class StudioViewModel : ViewModel() {
         }
     }
 
-    // ── Studio ───────────────────────────────────────────────────────
+    // ── Meja kerja ──────────────────────────────────────────────────
 
     fun shiftEarlier(index: Int) {
         if (index <= 0) return
@@ -259,7 +285,7 @@ class StudioViewModel : ViewModel() {
 
     fun wipePages() {
         dropSlices()
-        _state.update { it.copy(pages = emptyList(), activeOrigin = null) }
+        _state.update { it.copy(pages = emptyList(), activeOrigin = null, activeComicId = null) }
     }
 
     fun dropSlices() {
@@ -277,9 +303,12 @@ class StudioViewModel : ViewModel() {
             _state.update { it.copy(failure = "Studio kosong — impor halaman dulu.") }
             return
         }
-        // Otomatis jadikan komik agar masuk Pustaka + Batch.
+        // Komik aktif diperbarui; belum ada -> jadikan komik baru agar
+        // masuk antrean batch dengan daftar halaman terkini.
         if (_state.value.activeComicId == null) {
             shelve(_state.value.activeOrigin ?: "Rakitan", _state.value.pages)
+        } else {
+            syncActiveComic()
         }
         dropSlices()
         _state.update { it.copy(busy = true, phase = "Menata halaman", fraction = 0f, failure = null, published = null) }
@@ -346,8 +375,6 @@ class StudioViewModel : ViewModel() {
                     files = slices.map { it.fileName to it.cachePath?.let { path -> File(path) } },
                     origin = _state.value.activeOrigin,
                     pack = settings.packFormat,
-                    width = slices.maxOfOrNull { it.width } ?: 0,
-                    height = slices.sumOf { it.height },
                     onProgress = { p -> _state.update { it.copy(fraction = p) } }
                 )
                 _state.update {
@@ -384,26 +411,27 @@ class StudioViewModel : ViewModel() {
                     s.copy(phase = "${comic.origin} (${pi + 1}/${comics.size})", fraction = pi.toFloat() / comics.size.toFloat())
                 }
                 val pack = comic.packFor(base.packFormat)
+                var built: List<BuiltStrip> = emptyList()
                 try {
-                    val done = StripBuilder(context).build(
+                    built = StripBuilder(context).build(
                         uris = comic.pageUris,
                         settings = base,
                         onProgress = { _, p -> _state.update { it.copy(fraction = (pi + p) / comics.size.toFloat()) } }
                     ).getOrThrow()
                     val info = writeOut(
                         context = context,
-                        files = done.map { it.fileName to it.file },
+                        files = built.map { it.fileName to it.file },
                         origin = comic.origin,
-                        pack = pack,
-                        width = done.maxOfOrNull { it.width } ?: 0,
-                        height = done.sumOf { it.height }
+                        pack = pack
                     )
-                    done.forEach { strip ->
-                        try { strip.file.delete() } catch (t: Throwable) { }
-                    }
                     outcomes.add(PublishedFile(comic.origin, info.path, info.shareUri, info.packs, info.bytes))
                 } catch (e: Throwable) {
                     outcomes.add(PublishedFile(comic.origin, null, null, 0, 0L, e.message ?: "Gagal."))
+                } finally {
+                    // Berkas sementara selalu dibuang, termasuk saat gagal.
+                    built.forEach { strip ->
+                        try { strip.file.delete() } catch (t: Throwable) { }
+                    }
                 }
             }
             _state.update { it.copy(busy = false, fraction = 1f, batchOutcomes = outcomes) }
@@ -415,45 +443,46 @@ class StudioViewModel : ViewModel() {
         files: List<Pair<String, File?>>,
         origin: String?,
         pack: PackFormat,
-        width: Int = 0,
-        height: Int = 0,
         onProgress: suspend (Float) -> Unit = {}
     ): OutInfo = withContext(Dispatchers.IO) {
         val useMedia = android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q
         val stamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
 
         if (pack == PackFormat.CBZ || pack == PackFormat.ZIP) {
-            val name = if (origin != null && ArchiveKit.canOpen(origin)) {
-                FileNamer.packName(origin, pack)
-            } else {
-                FileNamer.packName(defaultFileName(), pack, stamp)
+            val name = when {
+                origin != null && ArchiveKit.canOpen(origin) -> FileNamer.packName(origin, pack)
+                origin != null && origin.isNotBlank() -> FileNamer.packName(origin, pack, stamp)
+                else -> FileNamer.packName(defaultFileName(), pack, stamp)
             }
             val mime = if (pack == PackFormat.CBZ) "application/x-cbz" else "application/zip"
             // Rakit dulu ke cache, lalu terbitkan via MediaStore (wajib di Android 10+).
-            var bytes = 0L
-            files.forEachIndexed { i, _ -> onProgress((i + 1).toFloat() / files.size.toFloat()) }
-            val tmp = File.createTempFile("mochi_out", ".tmp", files.firstOrNull()?.second?.parentFile)
+            onProgress(0.3f)
+            val tmp = File.createTempFile("mochi_out", ".tmp", context.cacheDir)
             try {
+                var written = 0L
                 tmp.outputStream().use { out ->
                     val entries = files.map { (entryName, src) ->
                         ArchiveItem(entryName) { o ->
                             if (src != null && src.exists()) src.inputStream().use { it.copyTo(o) }
                         }
                     }
-                    bytes = ArchiveKit.pack(entries, out)
+                    written = ArchiveKit.pack(entries, out)
                 }
+                onProgress(0.8f)
+                val size = if (tmp.exists()) tmp.length() else written
                 if (useMedia) {
                     val uri = mediaPublish(context, tmp, name, mime, null)
                     try { tmp.delete() } catch (t: Throwable) { }
-                    OutInfo("Download/MochiStitch/$name", files.size, bytes, uri)
+                    onProgress(1f)
+                    // Satu arsip = satu berkas keluaran.
+                    OutInfo("Download/MochiStitch/$name", 1, size, uri)
                 } else {
-                    val pictures = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES)
-                    val root = File(pictures, "MochiStitch").apply { mkdirs() }
-                    val dest = File(root, name)
-                    if (dest.exists()) dest.delete()
+                    val dest = uniqueDestination(File(picturesRoot(), "MochiStitch"), name)
+                    dest.parentFile?.mkdirs()
                     tmp.copyTo(dest, overwrite = true)
                     tmp.delete()
-                    OutInfo(dest.absolutePath, files.size, bytes, null)
+                    onProgress(1f)
+                    OutInfo(dest.absolutePath, 1, size, shareUriFor(context, dest))
                 }
             } catch (e: Throwable) {
                 try { tmp.delete() } catch (t: Throwable) { }
@@ -464,28 +493,52 @@ class StudioViewModel : ViewModel() {
             var bytes = 0L
             var firstUri: Uri? = null
             var firstPath: String? = null
+            var firstFile: File? = null
             files.forEachIndexed { i, (entryName, src) ->
                 onProgress((i + 1).toFloat() / files.size.toFloat())
                 if (src != null && src.exists()) {
                     if (useMedia) {
                         val uri = mediaPublish(context, src, entryName, FileNamer.mimeOf(_state.value.settings.imageFormat), folderName)
-                        if (firstUri == null) {
-                            firstUri = uri
-                            firstPath = "Pictures/MochiStitch/$folderName/$entryName"
-                        }
+                        if (firstUri == null) firstUri = uri
+                        if (firstPath == null) firstPath = "Pictures/MochiStitch/$folderName/$entryName"
                         bytes += src.length()
                     } else {
-                        val pictures = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES)
-                        val folder = File(File(pictures, "MochiStitch"), folderName).apply { mkdirs() }
+                        val folder = File(picturesRoot(), "MochiStitch/$folderName").apply { mkdirs() }
                         val dest = File(folder, entryName)
                         src.copyTo(dest, overwrite = true)
                         bytes += dest.length()
-                        if (firstPath == null) firstPath = dest.absolutePath
+                        if (firstPath == null) {
+                            firstPath = dest.absolutePath
+                            firstFile = dest
+                        }
                     }
                 }
             }
-            OutInfo(firstPath ?: "Pictures/MochiStitch/$folderName", files.size, bytes, firstUri)
+            val share = if (!useMedia) firstFile?.let { shareUriFor(context, it) } else firstUri
+            OutInfo(firstPath ?: "Pictures/MochiStitch/$folderName", files.size, bytes, share)
         }
+    }
+
+    private fun picturesRoot(): File =
+        Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES)
+
+    /** Hindari menimpa berkas yang sudah ada di penyimpanan lama (API < 29). */
+    private fun uniqueDestination(dir: File, name: String): File {
+        var dest = File(dir, name)
+        if (!dest.exists()) return dest
+        val stem = name.substringBeforeLast('.')
+        val ext = name.substringAfterLast('.', "")
+        var n = 1
+        while (dest.exists()) {
+            dest = if (ext.isEmpty()) File(dir, "${stem}_${n++}") else File(dir, "${stem}_${n++}.$ext")
+        }
+        return dest
+    }
+
+    private fun shareUriFor(context: Context, file: File): Uri? = try {
+        FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
+    } catch (t: Throwable) {
+        null
     }
 
     /** Terbitkan satu file ke galeri via MediaStore (Android 10+). */

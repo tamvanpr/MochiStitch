@@ -2,6 +2,7 @@ package com.mochistitch.core.imaging
 
 import android.graphics.Bitmap
 import android.graphics.Color
+import com.mochistitch.core.settings.ImageFormat
 import com.mochistitch.core.settings.MatteColor
 import com.mochistitch.core.settings.StitchSettings
 
@@ -20,14 +21,20 @@ data class StripConfig(
     companion object {
         fun fromSettings(s: StitchSettings): StripConfig {
             val fmt = when (s.imageFormat) {
-                com.mochistitch.core.settings.ImageFormat.JPG -> Bitmap.CompressFormat.JPEG
-                com.mochistitch.core.settings.ImageFormat.PNG -> Bitmap.CompressFormat.PNG
-                com.mochistitch.core.settings.ImageFormat.WEBP -> Bitmap.CompressFormat.WEBP_LOSSY
+                ImageFormat.JPG -> Bitmap.CompressFormat.JPEG
+                ImageFormat.PNG -> Bitmap.CompressFormat.PNG
+                // WEBP_LOSSY hanya ada di API 30+; perangkat lama pakai WEBP.
+                ImageFormat.WEBP -> if (android.os.Build.VERSION.SDK_INT >= 30) {
+                    Bitmap.CompressFormat.WEBP_LOSSY
+                } else {
+                    @Suppress("DEPRECATION")
+                    Bitmap.CompressFormat.WEBP
+                }
             }
             val q = when (s.imageFormat) {
-                com.mochistitch.core.settings.ImageFormat.JPG -> s.jpgQuality.coerceIn(10, 100)
-                com.mochistitch.core.settings.ImageFormat.WEBP -> s.webpQuality.coerceIn(10, 100)
-                com.mochistitch.core.settings.ImageFormat.PNG -> 100
+                ImageFormat.JPG -> s.jpgQuality.coerceIn(10, 100)
+                ImageFormat.WEBP -> s.webpQuality.coerceIn(10, 100)
+                ImageFormat.PNG -> 100
             }
             return StripConfig(
                 matte = when (s.matteColor) {
@@ -40,9 +47,4 @@ data class StripConfig(
             )
         }
     }
-}
-
-sealed interface StripOutcome {
-    data class Done(val width: Int, val height: Int, val bytes: Long) : StripOutcome
-    data class Failed(val message: String, val cause: Throwable? = null) : StripOutcome
 }

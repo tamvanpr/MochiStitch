@@ -16,23 +16,17 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -52,200 +46,185 @@ import com.mochistitch.core.settings.StitchSettings
 import com.mochistitch.core.settings.ThemeMode
 import kotlin.math.roundToInt
 
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
+/**
+ * Panel setelan langkah Atur. Bukan layar tersendiri: tanpa Scaffold
+ * atau TopAppBar — bilah atas sudah disediakan shell wizard, panel ini
+ * hanya isi yang bisa digulir.
+ */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun SettingsPanel(
     settings: StitchSettings,
     onChange: (StitchSettings) -> Unit,
-    onBack: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("Setelan Studio", fontWeight = FontWeight.Bold) },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Kembali")
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.primaryContainer,
-                    titleContentColor = MaterialTheme.colorScheme.onPrimaryContainer
-                )
-            )
-        },
+    Column(
         modifier = modifier
-    ) { inner ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(inner)
-                .verticalScroll(rememberScrollState())
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp)
-        ) {
-            Group("Kemasan & Gambar") {
-                SubLabel("Kemasan default: ZIP")
-                ChipRow {
-                    PackFormat.entries.forEach { pack ->
-                        OptionChip(
-                            active = settings.packFormat == pack,
-                            onTap = { onChange(settings.copy(packFormat = pack)) },
-                            text = when (pack) {
-                                PackFormat.ZIP -> "ZIP"
-                                PackFormat.CBZ -> "CBZ"
-                                PackFormat.FILES -> "Lepas"
-                            }
-                        )
-                    }
-                }
-                SubLabel("Gambar potongan")
-                ChipRow {
-                    ImageFormat.entries.forEach { fmt ->
-                        OptionChip(
-                            active = settings.imageFormat == fmt,
-                            onTap = { onChange(settings.copy(imageFormat = fmt)) },
-                            text = fmt.name
-                        )
-                    }
-                }
-                if (settings.imageFormat == ImageFormat.JPG) {
-                    Text("Mutu JPG ${settings.jpgQuality}%", style = MaterialTheme.typography.bodySmall)
-                    Slider(
-                        value = settings.jpgQuality.toFloat(),
-                        onValueChange = { onChange(settings.copy(jpgQuality = it.roundToInt())) },
-                        valueRange = 10f..100f
-                    )
-                }
-                if (settings.imageFormat == ImageFormat.WEBP) {
-                    Text("Mutu WEBP ${settings.webpQuality}%", style = MaterialTheme.typography.bodySmall)
-                    Slider(
-                        value = settings.webpQuality.toFloat(),
-                        onValueChange = { onChange(settings.copy(webpQuality = it.roundToInt())) },
-                        valueRange = 10f..100f
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp)
+    ) {
+        Group("Kemasan & Gambar") {
+            SubLabel("Kemasan default: ZIP")
+            ChipRow {
+                PackFormat.entries.forEach { pack ->
+                    OptionChip(
+                        active = settings.packFormat == pack,
+                        onTap = { onChange(settings.copy(packFormat = pack)) },
+                        text = when (pack) {
+                            PackFormat.ZIP -> "ZIP"
+                            PackFormat.CBZ -> "CBZ"
+                            PackFormat.FILES -> "Lepas"
+                        }
                     )
                 }
             }
+            SubLabel("Gambar potongan")
+            ChipRow {
+                ImageFormat.entries.forEach { fmt ->
+                    OptionChip(
+                        active = settings.imageFormat == fmt,
+                        onTap = { onChange(settings.copy(imageFormat = fmt)) },
+                        text = fmt.name
+                    )
+                }
+            }
+            if (settings.imageFormat == ImageFormat.JPG) {
+                Text("Mutu JPG ${settings.jpgQuality}%", style = MaterialTheme.typography.bodySmall)
+                Slider(
+                    value = settings.jpgQuality.toFloat(),
+                    onValueChange = { onChange(settings.copy(jpgQuality = it.roundToInt())) },
+                    valueRange = 10f..100f
+                )
+            }
+            if (settings.imageFormat == ImageFormat.WEBP) {
+                Text("Mutu WEBP ${settings.webpQuality}%", style = MaterialTheme.typography.bodySmall)
+                Slider(
+                    value = settings.webpQuality.toFloat(),
+                    onValueChange = { onChange(settings.copy(webpQuality = it.roundToInt())) },
+                    valueRange = 10f..100f
+                )
+            }
+        }
 
-            Group("Nama Berkas") {
+        Group("Nama Berkas") {
+            OutlinedTextField(
+                value = settings.seriesTitle,
+                onValueChange = { onChange(settings.copy(seriesTitle = it)) },
+                label = { Text("Judul seri") },
+                singleLine = true,
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier.fillMaxWidth()
+            )
+            OutlinedTextField(
+                value = settings.chapterLabel,
+                onValueChange = { onChange(settings.copy(chapterLabel = it)) },
+                label = { Text("Chapter") },
+                singleLine = true,
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier.fillMaxWidth()
+            )
+            OutlinedTextField(
+                value = settings.namePattern,
+                onValueChange = { onChange(settings.copy(namePattern = it)) },
+                label = { Text("Pola nama") },
+                supportingText = { Text("{series} {chapter} {n}") },
+                singleLine = true,
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier.fillMaxWidth()
+            )
+            val sample = FileNamer.numbered(
+                settings.namePattern, settings.seriesTitle, settings.chapterLabel,
+                1, settings.numberWidth, settings.imageFormat
+            ) + ".${settings.imageFormat.name.lowercase()}"
+            Text("Contoh: $sample", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
+            Note("Arsip dari arsip: nama output SAMA dengan nama input.")
+        }
+
+        Group("Bagi Strip") {
+            SubLabel("Aturan bagi (selalu di batas halaman)")
+            ChipRow {
+                SplitRule.entries.forEach { rule ->
+                    OptionChip(
+                        active = settings.splitRule == rule,
+                        onTap = { onChange(settings.copy(splitRule = rule)) },
+                        text = when (rule) {
+                            SplitRule.WHOLE -> "Utuh"
+                            SplitRule.MAX_HEIGHT -> "Tinggi maks"
+                            SplitRule.PAGES_PER_PACK -> "Per halaman"
+                        }
+                    )
+                }
+            }
+            if (settings.splitRule == SplitRule.MAX_HEIGHT) {
+                Text("Tinggi maks ${settings.maxStripHeight}px", style = MaterialTheme.typography.bodySmall)
+                Slider(
+                    value = settings.maxStripHeight.toFloat(),
+                    onValueChange = { onChange(settings.copy(maxStripHeight = it.roundToInt())) },
+                    valueRange = 2000f..30000f
+                )
+            }
+            if (settings.splitRule == SplitRule.PAGES_PER_PACK) {
+                // State teks lokal agar kolom bisa dikosongkan total tanpa mental.
+                var pagesText by remember(settings.pagesPerPack) {
+                    mutableStateOf(settings.pagesPerPack.toString())
+                }
                 OutlinedTextField(
-                    value = settings.seriesTitle,
-                    onValueChange = { onChange(settings.copy(seriesTitle = it)) },
-                    label = { Text("Judul seri") },
+                    value = pagesText,
+                    onValueChange = { v ->
+                        pagesText = v.filter { it.isDigit() }.take(3)
+                        pagesText.toIntOrNull()?.let {
+                            onChange(settings.copy(pagesPerPack = it.coerceIn(1, 200)))
+                        }
+                    },
+                    label = { Text("Halaman per berkas") },
                     singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     shape = RoundedCornerShape(12.dp),
                     modifier = Modifier.fillMaxWidth()
                 )
-                OutlinedTextField(
-                    value = settings.chapterLabel,
-                    onValueChange = { onChange(settings.copy(chapterLabel = it)) },
-                    label = { Text("Chapter") },
-                    singleLine = true,
-                    shape = RoundedCornerShape(12.dp),
-                    modifier = Modifier.fillMaxWidth()
-                )
-                OutlinedTextField(
-                    value = settings.namePattern,
-                    onValueChange = { onChange(settings.copy(namePattern = it)) },
-                    label = { Text("Pola nama") },
-                    supportingText = { Text("{series} {chapter} {n}") },
-                    singleLine = true,
-                    shape = RoundedCornerShape(12.dp),
-                    modifier = Modifier.fillMaxWidth()
-                )
-                val sample = FileNamer.numbered(
-                    settings.namePattern, settings.seriesTitle, settings.chapterLabel,
-                    1, settings.numberWidth, settings.imageFormat
-                ) + ".${settings.imageFormat.name.lowercase()}"
-                Text("Contoh: $sample", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
-                Note("Arsip dari arsip: nama output SAMA dengan nama input.")
             }
+        }
 
-            Group("Bagi Strip") {
-                SubLabel("Aturan bagi (selalu di batas halaman)")
-                ChipRow {
-                    SplitRule.entries.forEach { rule ->
-                        OptionChip(
-                            active = settings.splitRule == rule,
-                            onTap = { onChange(settings.copy(splitRule = rule)) },
-                            text = when (rule) {
-                                SplitRule.WHOLE -> "Utuh"
-                                SplitRule.MAX_HEIGHT -> "Tinggi maks"
-                                SplitRule.PAGES_PER_PACK -> "Per halaman"
-                            }
-                        )
-                    }
-                }
-                if (settings.splitRule == SplitRule.MAX_HEIGHT) {
-                    Text("Tinggi maks ${settings.maxStripHeight}px", style = MaterialTheme.typography.bodySmall)
-                    Slider(
-                        value = settings.maxStripHeight.toFloat(),
-                        onValueChange = { onChange(settings.copy(maxStripHeight = it.roundToInt())) },
-                        valueRange = 2000f..30000f
-                    )
-                }
-                if (settings.splitRule == SplitRule.PAGES_PER_PACK) {
-                    // State teks lokal agar kolom bisa dikosongkan total tanpa mental.
-                    var pagesText by remember(settings.pagesPerPack) {
-                        mutableStateOf(settings.pagesPerPack.toString())
-                    }
-                    OutlinedTextField(
-                        value = pagesText,
-                        onValueChange = { v ->
-                            pagesText = v.filter { it.isDigit() }.take(3)
-                            pagesText.toIntOrNull()?.let {
-                                onChange(settings.copy(pagesPerPack = it.coerceIn(1, 200)))
-                            }
-                        },
-                        label = { Text("Halaman per berkas") },
-                        singleLine = true,
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                        shape = RoundedCornerShape(12.dp),
-                        modifier = Modifier.fillMaxWidth()
+        Group("Halaman Raksasa") {
+            ToggleRow(
+                title = "Penanda tinjau manual",
+                desc = "Halaman yang melebihi batas dibiarkan utuh dan ditandai di pratinjau.",
+                checked = settings.showReviewFlags,
+                onFlip = { onChange(settings.copy(showReviewFlags = it)) }
+            )
+        }
+
+        Group("Tampilan Strip") {
+            SubLabel("Warna bingkai")
+            ChipRow {
+                MatteColor.entries.forEach { matte ->
+                    OptionChip(
+                        active = settings.matteColor == matte,
+                        onTap = { onChange(settings.copy(matteColor = matte)) },
+                        text = when (matte) {
+                            MatteColor.WHITE -> "Putih"
+                            MatteColor.BLACK -> "Hitam"
+                            MatteColor.CLEAR -> "Bening"
+                        }
                     )
                 }
             }
+        }
 
-            Group("Halaman Raksasa") {
-                ToggleRow(
-                    title = "Penanda tinjau manual",
-                    desc = "Halaman yang melebihi batas dibiarkan utuh dan ditandai di pratinjau.",
-                    checked = settings.showReviewFlags,
-                    onFlip = { onChange(settings.copy(showReviewFlags = it)) }
-                )
-            }
-
-            Group("Tampilan Strip") {
-                SubLabel("Warna bingkai")
-                ChipRow {
-                    MatteColor.entries.forEach { matte ->
-                        OptionChip(
-                            active = settings.matteColor == matte,
-                            onTap = { onChange(settings.copy(matteColor = matte)) },
-                            text = when (matte) {
-                                MatteColor.WHITE -> "Putih"
-                                MatteColor.BLACK -> "Hitam"
-                                MatteColor.CLEAR -> "Benar"
-                            }
-                        )
-                    }
-                }
-            }
-
-            Group("Tema Aplikasi") {
-                ChipRow {
-                    ThemeMode.entries.forEach { mode ->
-                        OptionChip(
-                            active = settings.themeMode == mode,
-                            onTap = { onChange(settings.copy(themeMode = mode)) },
-                            text = when (mode) {
-                                ThemeMode.SYSTEM -> "Sistem"
-                                ThemeMode.LIGHT -> "Terang"
-                                ThemeMode.DARK -> "Gelap"
-                            }
-                        )
-                    }
+        Group("Tema Aplikasi") {
+            ChipRow {
+                ThemeMode.entries.forEach { mode ->
+                    OptionChip(
+                        active = settings.themeMode == mode,
+                        onTap = { onChange(settings.copy(themeMode = mode)) },
+                        text = when (mode) {
+                            ThemeMode.SYSTEM -> "Sistem"
+                            ThemeMode.LIGHT -> "Terang"
+                            ThemeMode.DARK -> "Gelap"
+                        }
+                    )
                 }
             }
         }

@@ -6,6 +6,14 @@ import org.junit.Test
 class StudioSmokeTest {
     @Test
     fun testScreensExist() {
-        assertEquals(5, StudioScreen.entries.size)
+        assertEquals(4, StudioScreen.entries.size)
+    }
+
+    @Test
+    fun testScreenOrder() {
+        assertEquals(
+            listOf("INPUT", "SETUP", "RESULT", "QUEUE"),
+            StudioScreen.entries.map { it.name }
+        )
     }
 }

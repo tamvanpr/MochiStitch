@@ -28,11 +28,14 @@ class StripRenderer(private val openStream: (Uri) -> InputStream?) {
 
     fun measure(uri: Uri): Pair<Int, Int> {
         return try {
-            val stream = openStream(uri) ?: return Pair(0, 0)
             val opts = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-            BitmapFactory.decodeStream(stream, null, opts)
-            stream.close()
-            Pair(opts.outWidth, opts.outHeight)
+            val stream = openStream(uri)
+            if (stream == null) {
+                Pair(0, 0)
+            } else {
+                stream.use { BitmapFactory.decodeStream(it, null, opts) }
+                Pair(opts.outWidth, opts.outHeight)
+            }
         } catch (e: Exception) {
             Pair(0, 0)
         }
@@ -75,14 +78,13 @@ class StripRenderer(private val openStream: (Uri) -> InputStream?) {
             val paint = Paint(Paint.FILTER_BITMAP_FLAG or Paint.ANTI_ALIAS_FLAG)
 
             placed.forEachIndexed { i, item ->
-                val stream = openStream(item.uri)
-                    ?: return@withContext Result.failure(IllegalStateException("Tidak dapat membuka: ${item.uri}"))
                 val opts = BitmapFactory.Options().apply {
                     inPreferredConfig = Bitmap.Config.RGB_565
                     inSampleSize = budgetSample(item.dst.width(), item.dst.height())
                 }
-                val src = BitmapFactory.decodeStream(stream, null, opts)
-                stream.close()
+                val src = openStream(item.uri)?.use { stream ->
+                    BitmapFactory.decodeStream(stream, null, opts)
+                }
                 if (src == null) {
                     strip.recycle()
                     return@withContext Result.failure(IllegalStateException("Gagal decode: ${item.uri}"))

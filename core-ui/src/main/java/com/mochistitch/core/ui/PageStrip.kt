@@ -1,6 +1,7 @@
 package com.mochistitch.core.ui
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -11,9 +12,9 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ChevronLeft
-import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
@@ -32,8 +33,8 @@ import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 
 /**
- * Daftar halaman vertikal bernomor dengan kontrol susun ulang.
- * Beda dari daftar lama: nomor urut lingkaran + thumbnail besar.
+ * Daftar halaman vertikal bernomor dengan kontrol susun ulang:
+ * nomor urut lingkaran, thumbnail Fit, panah naik/turun, buang.
  */
 @Composable
 fun PageStrip(
@@ -62,7 +63,7 @@ fun PageStrip(
                         color = MaterialTheme.colorScheme.primary,
                         modifier = Modifier.size(30.dp)
                     ) {
-                        androidx.compose.foundation.layout.Box(contentAlignment = Alignment.Center) {
+                        Box(contentAlignment = Alignment.Center) {
                             Text(
                                 "${index + 1}",
                                 color = MaterialTheme.colorScheme.onPrimary,
@@ -88,15 +89,19 @@ fun PageStrip(
                         modifier = Modifier.weight(1f)
                     )
                     Column {
-                        IconButton(onClick = { onShiftUp(index) }, enabled = index > 0, modifier = Modifier.size(36.dp)) {
-                            Icon(Icons.Default.ChevronLeft, contentDescription = "Naik")
+                        IconButton(
+                            onClick = { onShiftUp(index) },
+                            enabled = index > 0,
+                            modifier = Modifier.size(36.dp)
+                        ) {
+                            Icon(Icons.Default.KeyboardArrowUp, contentDescription = "Naik")
                         }
                         IconButton(
                             onClick = { onShiftDown(index) },
                             enabled = index < pages.size - 1,
                             modifier = Modifier.size(36.dp)
                         ) {
-                            Icon(Icons.Default.ChevronRight, contentDescription = "Turun")
+                            Icon(Icons.Default.KeyboardArrowDown, contentDescription = "Turun")
                         }
                     }
                     IconButton(onClick = { onDrop(index) }, modifier = Modifier.size(36.dp)) {

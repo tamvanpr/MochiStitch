@@ -26,5 +26,7 @@ dependencies {
     implementation(project(":core-common"))
     implementation(libs.androidx.core.ktx)
     implementation(libs.junrar)
+    implementation(libs.commons.compress)
+    implementation(libs.xz)
     testImplementation(libs.junit)
 }

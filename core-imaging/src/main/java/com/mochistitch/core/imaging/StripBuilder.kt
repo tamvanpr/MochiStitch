@@ -8,6 +8,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.InputStream
+import kotlin.math.max
+import kotlin.math.roundToInt
 
 /** Satu berkas strip hasil rakitan. */
 data class BuiltStrip(
@@ -24,8 +26,7 @@ data class BuiltStrip(
 
 enum class BuildPhase(val label: String) {
     MEASURING("Mengukur halaman"),
-    ASSEMBLING("Merakit strip vertikal"),
-    WRITING("Menulis berkas")
+    ASSEMBLING("Merakit strip vertikal")
 }
 
 /**
@@ -85,7 +86,7 @@ class StripBuilder(
                     strips.add(
                         store(
                             bitmap = whole, number = number++, series = series, chapter = chapter,
-                            settings = settings, flagged = true,
+                            settings = settings, config = config, flagged = true,
                             flagReason = "Melebihi batas ${settings.maxStripHeight}px — dibiarkan utuh, tangani manual"
                         )
                     )
@@ -93,7 +94,7 @@ class StripBuilder(
                     strips.add(
                         store(
                             bitmap = whole, number = number++, series = series, chapter = chapter,
-                            settings = settings, flagged = false, flagReason = null
+                            settings = settings, config = config, flagged = false, flagReason = null
                         )
                     )
                 }
@@ -111,6 +112,7 @@ class StripBuilder(
         series: String,
         chapter: String,
         settings: StitchSettings,
+        config: StripConfig,
         flagged: Boolean,
         flagReason: String?
     ): BuiltStrip {
@@ -119,21 +121,43 @@ class StripBuilder(
         val dir = File(scratchDir, "mochi_strips").apply { mkdirs() }
         val tmp = File(dir, "$stem.$ext-${System.nanoTime()}.tmp")
         tmp.outputStream().use { out ->
-            bitmap.compress(StripConfig.fromSettings(settings).compressFormat, StripConfig.fromSettings(settings).quality, out)
+            bitmap.compress(config.compressFormat, config.quality, out)
         }
         val final = File(dir, "$stem.$ext")
         if (final.exists()) final.delete()
         tmp.renameTo(final)
+
+        // Pratinjau kecil: cukup untuk kartu hasil, tidak memegang strip
+        // raksasa penuh di RAM. Bitmap asli dilepas setelah dikompres;
+        // lebar/tinggi yang dicatat tetap dimensi berkas output asli.
+        val fullWidth = bitmap.width
+        val fullHeight = bitmap.height
+        val preview = scaleForPreview(bitmap, PREVIEW_CAP)
+        if (preview !== bitmap) bitmap.recycle()
+
         return BuiltStrip(
             order = number,
             fileName = "$stem.$ext",
-            preview = bitmap,
+            preview = preview,
             file = final,
-            width = bitmap.width,
-            height = bitmap.height,
+            width = fullWidth,
+            height = fullHeight,
             flagged = flagged,
             flagReason = flagReason,
             bytes = final.length()
         )
+    }
+
+    private companion object {
+        const val PREVIEW_CAP = 2048
+    }
+
+    private fun scaleForPreview(src: Bitmap, cap: Int): Bitmap {
+        val longest = max(src.width, src.height)
+        if (longest <= cap) return src
+        val scale = cap.toFloat() / longest
+        val w = (src.width * scale).roundToInt().coerceAtLeast(1)
+        val h = (src.height * scale).roundToInt().coerceAtLeast(1)
+        return Bitmap.createScaledBitmap(src, w, h, true)
     }
 }

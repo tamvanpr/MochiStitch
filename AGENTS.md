@@ -11,19 +11,25 @@ halaman dalam keadaan apa pun. Pemotongan output HANYA tepat di batas
 halaman (PageGrouper). Halaman tunggal melebihi batas dibiarkan utuh +
 flag tinjau manual. Tidak ada OpenCV, deteksi, tebakan, atau mode crop.
 
-- `app/` — wizard 3 langkah (INPUT -> SETUP -> RESULT) + QUEUE; edge-to-edge
+- `app/` — wizard 3 langkah (INPUT -> SETUP -> RESULT) + QUEUE; edge-to-edge;
+  satu Scaffold bersarang; tombol kembali sistem mengikuti alur langkah;
+  izin tulis API <= 28 dipinta sebelum terbit; share via FileProvider (API < 29)
 - `core-imaging/` — StripRenderer (gambar utuh, drawBitmap penuh), PageGrouper,
-  StripBuilder, FileNamer. Tanpa PageFit/CROP.
+  StripBuilder, FileNamer. Tanpa PageFit/CROP. Preview hasil diskalakan ke
+  <=2048px agar tidak memegang strip raksasa di RAM.
 - `core-settings/` — DataStore; tanpa smartCut/strictness/paper/fit (mati v4)
-- `core-ui/` — tema M3, PageStrip (thumb Fit), SettingsPanel inline, SlicePreview
-- `core-archive/` — tulis/baca ZIP/CBZ/RAR/CBR/7Z (junrar)
-- `core-common/` — ComicProject (antrean batch)
+- `core-ui/` — tema M3, PageStrip (thumb Fit), SettingsPanel inline (tanpa
+  Scaffold sendiri), SlicePreview (kemasan dipilih sebelum tombol Terbitkan)
+- `core-archive/` — baca ZIP/CBZ (java.util.zip), RAR/CBR (junrar),
+  7Z/CB7 (commons-compress + xz); tulis ZIP/CBZ; `unpackTo` streaming
+  ke disk, satu folder unik per impor
+- `core-common/` — ComicProject (antrean batch; halaman disinkronkan saat rakit)
 
 ## Aturan Penting
 - Build hanya diverifikasi via GitHub Actions CI/CD (`./gradlew test assembleDebug`)
 - Format gambar default: JPG; pembungkus default: ZIP
 - Tidak ada kode/UI horizontal di mana pun (tidak ada enum arah)
-- Input arsip: ZIP/CBZ/RAR/CBR/7Z via core-archive
+- Input arsip: ZIP/CBZ/RAR/CBR/7Z/CB7 via core-archive
 - Output arsip dari sumber arsip = basename SAMA (tanpa timestamp)
 - Bitmap config: RGB_565 — hemat memory
 - Commit message dalam bahasa Indonesia
