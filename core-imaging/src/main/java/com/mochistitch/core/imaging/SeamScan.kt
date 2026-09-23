@@ -80,9 +80,9 @@ object SeamScan {
 
     /**
      * Rencana potongan untuk [safe] sepanjang [safe.size] baris dengan batas
-     * tinggi [limit]. Potongan dipilih sebagai pusat celah terdekat ke batas,
-     * dalam jendela [minChunk, limit] — tidak pernah di luar batas, tidak
-     * pernah di baris bertepi.
+     * tinggi [limit]. Potongan dipilih sebagai titik di dalam celah yang
+     * terdekat ke batas, dalam jendela [minChunk, limit] — tidak pernah di
+     * luar batas, tidak pernah di baris bertepi.
      */
     fun planCuts(
         safe: BooleanArray,
@@ -92,19 +92,31 @@ object SeamScan {
     ): CutPlan {
         if (limit <= 0 || safe.size <= limit) return CutPlan(emptyList(), true)
         val minC = minChunk.coerceAtLeast(1)
-        val centers = findBands(safe, minBand).map { (it.first + it.last) / 2 }
+        val bands = findBands(safe, minBand)
         val cuts = mutableListOf<Int>()
         var y = 0
         while (safe.size - y > limit) {
             val lo = y + minC
             val hi = y + limit
-            val c = centers.asSequence()
-                .filter { it in lo..hi }
-                .minByOrNull { absI(it - hi) }
-            if (c == null) return CutPlan(cuts, tailSafe = false)
-            cuts.add(c)
-            y = c
+            var best: Int? = null
+            var bestDist = Int.MAX_VALUE
+            for (band in bands) {
+                val oLo = maxOf(lo, band.first)
+                val oHi = minOf(hi, band.last)
+                if (oLo > oHi) continue
+                val cand = hi.coerceIn(oLo, oHi)
+                val dist = absI(cand - hi)
+                if (dist < bestDist) {
+                    bestDist = dist
+                    best = cand
+                }
+            }
+            if (best == null) return CutPlan(cuts, tailSafe = false)
+            cuts.add(best)
+            y = best
         }
+        return CutPlan(cuts, tailSafe = true)
+    }
         return CutPlan(cuts, tailSafe = true)
     }
 
