@@ -117,8 +117,6 @@ object SeamScan {
         }
         return CutPlan(cuts, tailSafe = true)
     }
-        return CutPlan(cuts, tailSafe = true)
-    }
 
     /**
      * true bila deret piksel [a] (tepi bawah halaman atas) bersambung mulus
