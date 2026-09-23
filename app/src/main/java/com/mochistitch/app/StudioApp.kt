@@ -5,6 +5,7 @@ import android.content.pm.PackageManager
 import android.os.Build
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -267,7 +268,7 @@ private fun InputStep(viewModel: StudioViewModel, modifier: Modifier = Modifier)
             Button(
                 onClick = {
                     pickImages.launch(
-                        ActivityResultContracts.PickVisualMediaRequest(
+                        PickVisualMediaRequest(
                             ActivityResultContracts.PickVisualMedia.ImageOnly
                         )
                     )
