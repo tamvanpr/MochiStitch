@@ -76,7 +76,7 @@ class StripRenderer(private val openStream: (Uri) -> InputStream?) {
         if (width <= 0 || bottom <= top) return null
         return try {
             openStream(uri)?.use { stream ->
-                val dec = BitmapRegionDecoder.newInstance(stream, false)
+                val dec = BitmapRegionDecoder.newInstance(stream, false) ?: return null
                 try {
                     val rect = Rect(0, max(0, top), width, bottom)
                     val opts = BitmapFactory.Options().apply {
