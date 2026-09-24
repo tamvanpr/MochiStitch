@@ -46,11 +46,12 @@ flag tinjau.
   PageGrouper (pinning + hardCap + seamCut), StripRenderer (Placement
   src-rect; decodeSampled; edgePatch region; renderStrip region-decode),
   StripBuilder (pindai vertikal + continuityMap seam + partisi eksak +
-  crop banner dua lapis: template-match NCC murni terhadap 4 banner di
-  aset (per halaman, tanpa butuh halaman lain) + gerbang konsistensi
-  BannerGate sebagai pendamping banner belum dikenal; selalu ada catatan
-  keputusan), BannerGate, BannerTemplate, FileNamer.
-  Preview hasil diskalakan ke <=2048px.
+  crop banner dua lapis: template-match OpenCV (port setia bannercut2:
+  resize+equalize+Canny+dark-mask, 5 sinyal terbobot, ambang web) per
+  halaman + NCC murni sebagai fallback bila native gagal + gerbang
+  konsistensi BannerGate sebagai pendamping; selalu ada catatan
+  keputusan), BannerGate, BannerTemplate, BannerOcv (opencv:4.5.3),
+  FileNamer. Preview hasil diskalakan ke <=2048px.
 - `core-settings/` — DataStore; tanpa smartCut/strictness/paper/fit
 - `core-ui/` — tema M3, PageStrip (thumb Fit), SettingsPanel,
   SlicePreview (kemasan dipilih sebelum tombol Terbitkan)

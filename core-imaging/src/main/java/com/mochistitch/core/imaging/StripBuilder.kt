@@ -73,7 +73,7 @@ class StripBuilder(
         settings: StitchSettings,
         onProgress: (BuildPhase, Float) -> Unit = { _, _ -> },
         banner: BannerPolicy? = null,
-        bannerTemplates: List<BannerTemplate.Sig> = emptyList()
+        bannerTemplateBitmaps: List<Bitmap> = emptyList()
     ): Result<BuildOutput> = withContext(Dispatchers.IO) {
         if (uris.isEmpty()) return@withContext Result.failure(IllegalArgumentException("Tidak ada gambar."))
         try {
@@ -93,7 +93,7 @@ class StripBuilder(
             // 0) Banner situs (mis. baozimh 200px): crop HANYA bila strip
             // atas/bawah terbukti identik antar-halaman (gerbang BannerGate).
             // Selalu ada catatan keputusan (null = kebijakan tak dipakai).
-            val bannerResult = bannerCrops(measured, banner, bannerTemplates)
+            val bannerResult = bannerCrops(measured, banner, bannerTemplateBitmaps)
             val bannerCrops = bannerResult.crops
 
             // 1) Halaman raksasa -> segmen di celah aman (v6: vertikal+paper+tengah).
@@ -172,10 +172,10 @@ class StripBuilder(
     private fun bannerCrops(
         measured: List<StripRenderer.Measured>,
         policy: BannerPolicy?,
-        templates: List<BannerTemplate.Sig>
+        templateBitmaps: List<Bitmap>
     ): BannerResult {
         if (measured.isEmpty()) return BannerResult(emptyMap(), null)
-        if (policy == null && templates.isEmpty()) return BannerResult(emptyMap(), null)
+        if (policy == null && templateBitmaps.isEmpty()) return BannerResult(emptyMap(), null)
         val stripH = (policy?.stripPx ?: 200).coerceIn(1, 400)
         val minH = max(policy?.minPageH ?: 600, stripH * 2 + 100)
         val tallIdx = measured.indices.filter { i -> measured[i].height >= minH }
@@ -201,24 +201,87 @@ class StripBuilder(
         if (tops.isEmpty() && bots.isEmpty()) {
             return BannerResult(emptyMap(), "Banner: strip gagal dibaca — dilewati.")
         }
-        // Lapis 1 — template (per halaman, tanpa butuh halaman lain).
+        // Lapis 1 — template OpenCV (per halaman); fallback NCC murni bila
+        // native tak tersedia. Tanpa bitmap template, lapis ini dilewati.
         var viaTemplate = 0
         val strongTop = mutableSetOf<Int>()
         val strongBot = mutableSetOf<Int>()
         val medTop = mutableSetOf<Int>()
         val medBot = mutableSetOf<Int>()
-        if (templates.isNotEmpty()) {
-            for ((i, s) in tops) {
-                val g = BannerTemplate.downscale(s.px, s.w, s.h)
-                val sc = BannerTemplate.bestScore(g, templates)
-                if (sc >= BannerTemplate.STRONG) strongTop.add(i)
-                else if (sc >= BannerTemplate.MEDIUM) medTop.add(i)
-            }
-            for ((i, s) in bots) {
-                val g = BannerTemplate.downscale(s.px, s.w, s.h)
-                val sc = BannerTemplate.bestScore(g, templates)
-                if (sc >= BannerTemplate.STRONG) strongBot.add(i)
-                else if (sc >= BannerTemplate.MEDIUM) medBot.add(i)
+        var ocvUsed = false
+        if (templateBitmaps.isNotEmpty()) {
+            if (BannerOcv.isAvailable()) {
+                ocvUsed = true
+                val tmpls = templateBitmaps.mapIndexedNotNull { idx, bmp ->
+                    try {
+                        BannerOcv.preprocessTemplate("t$idx", bmp)
+                    } catch (t: Throwable) {
+                        null
+                    }
+                }
+                try {
+                    for ((i, s) in tops) {
+                        var bmp: Bitmap? = null
+                        var region: BannerOcv.Region? = null
+                        try {
+                            bmp = BannerOcv.bitmapOf(s.px, s.w, s.h)
+                            region = BannerOcv.preprocessRegion(bmp)
+                            if (region == null) continue
+                            val (hit, score, _) = BannerOcv.check(region, tmpls)
+                            if (hit) strongTop.add(i)
+                            else if (score >= BannerTemplate.MEDIUM) medTop.add(i)
+                        } catch (t: Throwable) {
+                            // Strip rusak: lewati, jangan gagalkan chapter.
+                        } finally {
+                            region?.let { BannerOcv.releaseRegion(it) }
+                            bmp?.recycle()
+                        }
+                    }
+                    for ((i, s) in bots) {
+                        var bmp: Bitmap? = null
+                        var region: BannerOcv.Region? = null
+                        try {
+                            bmp = BannerOcv.bitmapOf(s.px, s.w, s.h)
+                            region = BannerOcv.preprocessRegion(bmp)
+                            if (region == null) continue
+                            val (hit, score, _) = BannerOcv.check(region, tmpls)
+                            if (hit) strongBot.add(i)
+                            else if (score >= BannerTemplate.MEDIUM) medBot.add(i)
+                        } catch (t: Throwable) {
+                        } finally {
+                            region?.let { BannerOcv.releaseRegion(it) }
+                            bmp?.recycle()
+                        }
+                    }
+                } finally {
+                    tmpls.forEach { BannerOcv.releaseTemplate(it) }
+                }
+            } else {
+                // Fallback NCC murni: signature dari bitmap template.
+                val sigs = templateBitmaps.mapNotNull { bmp ->
+                    try {
+                        if (bmp.width <= 0 || bmp.height <= 0) return@mapNotNull null
+                        val px = IntArray(bmp.width * bmp.height)
+                        bmp.getPixels(px, 0, bmp.width, 0, 0, bmp.width, bmp.height)
+                        BannerTemplate.Sig(BannerTemplate.downscale(px, bmp.width, bmp.height))
+                    } catch (t: Throwable) {
+                        null
+                    }
+                }
+                if (sigs.isNotEmpty()) {
+                    for ((i, s) in tops) {
+                        val g = BannerTemplate.downscale(s.px, s.w, s.h)
+                        val sc = BannerTemplate.bestScore(g, sigs)
+                        if (sc >= BannerTemplate.STRONG) strongTop.add(i)
+                        else if (sc >= BannerTemplate.MEDIUM) medTop.add(i)
+                    }
+                    for ((i, s) in bots) {
+                        val g = BannerTemplate.downscale(s.px, s.w, s.h)
+                        val sc = BannerTemplate.bestScore(g, sigs)
+                        if (sc >= BannerTemplate.STRONG) strongBot.add(i)
+                        else if (sc >= BannerTemplate.MEDIUM) medBot.add(i)
+                    }
+                }
             }
         }
         // Lapis 2 — gerbang konsistensi (banner belum dikenal; butuh policy).
@@ -292,7 +355,7 @@ class StripBuilder(
             if (b > 0) "bawah $b" else null
         ).filterNotNull().joinToString(" + ")
         val how = listOf(
-            if (viaTemplate > 0) "$viaTemplate template" else null,
+            if (viaTemplate > 0) "$viaTemplate ${if (ocvUsed) "template-opencv" else "template-ncc"}" else null,
             if (viaGate > 0) "$viaGate konsistensi" else null
         ).filterNotNull().joinToString(" + ")
         return BannerResult(out, "Banner: dicrop $where (${out.size} halaman via $how).")

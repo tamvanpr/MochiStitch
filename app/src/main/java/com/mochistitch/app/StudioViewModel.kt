@@ -21,7 +21,6 @@ import com.mochistitch.core.download.RawSources
 import com.mochistitch.core.download.UrlKind
 import com.mochistitch.core.download.WorkerDownloadApi
 import com.mochistitch.core.imaging.BuildPhase
-import com.mochistitch.core.imaging.BannerTemplate
 import com.mochistitch.core.imaging.BuiltStrip
 import com.mochistitch.core.imaging.FileNamer
 import com.mochistitch.core.imaging.StripBuilder
@@ -87,12 +86,12 @@ class StudioViewModel : ViewModel() {
     private var repo: StitchSettingsRepository? = null
     private var settingsSaveJob: Job? = null
 
-    /** Signature template banner (aset), dimuat malas sekali per proses. */
-    private var bannerSigs: List<BannerTemplate.Sig>? = null
+    /** Bitmap template banner (aset), dimuat malas sekali per proses. */
+    private var bannerBitmaps: List<android.graphics.Bitmap>? = null
 
-    private fun bannerTemplates(context: Context): List<BannerTemplate.Sig> {
-        bannerSigs?.let { return it }
-        val out = mutableListOf<BannerTemplate.Sig>()
+    private fun bannerTemplateBitmaps(context: Context): List<android.graphics.Bitmap> {
+        bannerBitmaps?.let { return it }
+        val out = mutableListOf<android.graphics.Bitmap>()
         try {
             val names = context.assets.list("banners").orEmpty()
                 .filter { it.endsWith(".jpg", ignoreCase = true) || it.endsWith(".png", ignoreCase = true) }
@@ -102,13 +101,9 @@ class StudioViewModel : ViewModel() {
                     context.assets.open("banners/$name").use { inp ->
                         val bmp = BitmapFactory.decodeStream(inp)
                         if (bmp != null) {
-                            try {
-                                if (bmp.width > 0 && bmp.height > 0) {
-                                    val px = IntArray(bmp.width * bmp.height)
-                                    bmp.getPixels(px, 0, bmp.width, 0, 0, bmp.width, bmp.height)
-                                    out.add(BannerTemplate.Sig(BannerTemplate.downscale(px, bmp.width, bmp.height)))
-                                }
-                            } finally {
+                            // OpenCV butuh bitmap mutable untuk bitmapToMat.
+                            out.add(bmp.copy(Bitmap.Config.ARGB_8888, true) ?: bmp)
+                            if (out.last() !== bmp) {
                                 try { bmp.recycle() } catch (t: Throwable) { }
                             }
                         }
@@ -116,7 +111,7 @@ class StudioViewModel : ViewModel() {
                 } catch (t: Throwable) { /* satu template rusak: lewati */ }
             }
         } catch (t: Throwable) { /* folder aset hilang: tanpa template */ }
-        bannerSigs = out
+        bannerBitmaps = out
         return out
     }
 
@@ -481,7 +476,7 @@ class StudioViewModel : ViewModel() {
                     settings = settings,
                     onProgress = { phase, p -> _state.update { it.copy(phase = phase.label, fraction = p) } },
                     banner = banner,
-                    bannerTemplates = bannerTemplates(context)
+                    bannerTemplateBitmaps = bannerTemplateBitmaps(context)
                 ).getOrThrow()
                 val done = out.strips
                 val slices = done.map { strip ->
@@ -590,7 +585,7 @@ class StudioViewModel : ViewModel() {
                         settings = base,
                         onProgress = { _, p -> _state.update { it.copy(fraction = (pi + p) / comics.size.toFloat()) } },
                         banner = banner,
-                        bannerTemplates = bannerTemplates(context)
+                        bannerTemplateBitmaps = bannerTemplateBitmaps(context)
                     ).getOrThrow().strips
                     val info = writeOut(
                         context = context,
