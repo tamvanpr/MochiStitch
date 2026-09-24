@@ -53,6 +53,13 @@ flag tinjau.
 - `core-archive/` — baca ZIP/CBZ (java.util.zip), RAR/CBR (junrar),
   7Z/CB7 (commons-compress + xz); tulis ZIP/CBZ; `unpackTo` streaming
   ke disk, satu folder unik per impor
+- `core-download/` — unduhan mentah fase 1 via worker Trial Fetch (tanpa
+  dependensi baru; HttpURLConnection + parser JSON mini): RawSources
+  (7 sumber ID + classifier series/chapter), RawContract (3 bentuk JSON:
+  search/chapters/images, kontrak minimal page+url), WorkerDownloadApi,
+  PageDownloader (streaming, konkurensi 3, retry 2x, Referer = chapter).
+  Bytes langsung dari CDN (hemat rate limit worker); hasil otomatis
+  shelve() ke antrean. Butuh izin INTERNET + workerUrl di Setelan.
 - `core-common/` — ComicProject (antrean batch; halaman disinkronkan saat rakit)
 
 ## Aturan Penting

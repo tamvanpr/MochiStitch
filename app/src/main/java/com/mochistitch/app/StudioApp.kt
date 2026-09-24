@@ -16,8 +16,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.LazyColumnimport androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -25,6 +24,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Collections
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.FormatListBulleted
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.PlayArrow
@@ -47,6 +47,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -292,6 +293,8 @@ fun StudioApp(viewModel: StudioViewModel, onExitApp: () -> Unit) {
 private fun InputStep(viewModel: StudioViewModel, modifier: Modifier = Modifier) {
     val ctx = LocalContext.current
     val state by viewModel.state.collectAsState()
+    var showUrlDialog by remember { mutableStateOf(false) }
+    var urlText by remember { mutableStateOf("") }
     val pickImages = rememberLauncherForActivityResult(ActivityResultContracts.PickMultipleVisualMedia()) { uris ->
         if (uris.isNotEmpty()) viewModel.takeImages(uris, ctx)
     }
@@ -302,7 +305,7 @@ private fun InputStep(viewModel: StudioViewModel, modifier: Modifier = Modifier)
         modifier = modifier.padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
             Button(
                 onClick = {
                     pickImages.launch(
@@ -314,7 +317,7 @@ private fun InputStep(viewModel: StudioViewModel, modifier: Modifier = Modifier)
                 modifier = Modifier.weight(1f)
             ) {
                 Icon(Icons.Default.Image, contentDescription = null, modifier = Modifier.size(18.dp))
-                Spacer(modifier = Modifier.size(8.dp))
+                Spacer(modifier = Modifier.size(6.dp))
                 Text("Gambar")
             }
             Button(
@@ -322,8 +325,16 @@ private fun InputStep(viewModel: StudioViewModel, modifier: Modifier = Modifier)
                 modifier = Modifier.weight(1f)
             ) {
                 Icon(Icons.Default.Unarchive, contentDescription = null, modifier = Modifier.size(18.dp))
-                Spacer(modifier = Modifier.size(8.dp))
+                Spacer(modifier = Modifier.size(6.dp))
                 Text("Arsip")
+            }
+            Button(
+                onClick = { urlText = ""; showUrlDialog = true },
+                modifier = Modifier.weight(1f)
+            ) {
+                Icon(Icons.Default.Download, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(modifier = Modifier.size(6.dp))
+                Text("Unduh")
             }
         }
         if (state.pages.isEmpty()) {
@@ -362,6 +373,65 @@ private fun InputStep(viewModel: StudioViewModel, modifier: Modifier = Modifier)
                 Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = null, modifier = Modifier.size(18.dp))
             }
         }
+    }
+
+    if (showUrlDialog) {
+        AlertDialog(
+            onDismissRequest = { showUrlDialog = false },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showUrlDialog = false
+                        if (urlText.isNotBlank()) viewModel.fetchRaw(urlText, ctx)
+                    }
+                ) { Text("Lanjut") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showUrlDialog = false }) { Text("Batal") }
+            },
+            title = { Text("Unduh mentah") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        "Tempel URL chapter atau series (baozimh, wmanhua, jjabtoon, koudaimh, jjaptoon, goodtoon, manwa). Hasil otomatis masuk antrean.",
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                    OutlinedTextField(
+                        value = urlText,
+                        onValueChange = { urlText = it },
+                        label = { Text("URL") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            }
+        )
+    }
+
+    if (state.rawChapters.isNotEmpty()) {
+        AlertDialog(
+            onDismissRequest = viewModel::clearRawChapters,
+            confirmButton = {
+                TextButton(onClick = viewModel::clearRawChapters) { Text("Tutup") }
+            },
+            title = { Text("Pilih chapter${state.rawSourceLabel?.let { " ($it)" } ?: ""}") },
+            text = {
+                LazyColumn(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    items(state.rawChapters) { ch ->
+                        TextButton(
+                            onClick = { viewModel.fetchChapterPick(ch, ctx) },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(
+                                ch.title,
+                                modifier = Modifier.fillMaxWidth(),
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+                        }
+                    }
+                }
+            }
+        )
     }
 }
 

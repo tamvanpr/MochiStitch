@@ -28,5 +28,7 @@ data class StitchSettings(
     val pagesPerPack: Int = 10,
     val showReviewFlags: Boolean = true,
     val matteColor: MatteColor = MatteColor.WHITE,
-    val themeMode: ThemeMode = ThemeMode.SYSTEM
+    val themeMode: ThemeMode = ThemeMode.SYSTEM,
+    /** Basis URL worker Trial Fetch (fase 1: sumber ID). Kosong = unduhan nonaktif. */
+    val workerUrl: String = ""
 )

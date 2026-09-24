@@ -11,6 +11,12 @@ import androidx.lifecycle.viewModelScope
 import com.mochistitch.core.archive.ArchiveItem
 import com.mochistitch.core.archive.ArchiveKit
 import com.mochistitch.core.common.ComicProject
+import com.mochistitch.core.download.ChapterHit
+import com.mochistitch.core.download.PageDownloader
+import com.mochistitch.core.download.RawApiException
+import com.mochistitch.core.download.RawSources
+import com.mochistitch.core.download.UrlKind
+import com.mochistitch.core.download.WorkerDownloadApi
 import com.mochistitch.core.imaging.BuildPhase
 import com.mochistitch.core.imaging.BuiltStrip
 import com.mochistitch.core.imaging.FileNamer
@@ -62,7 +68,10 @@ data class StudioState(
     val comics: List<ComicProject> = emptyList(),
     val activeComicId: String? = null,
     val activeOrigin: String? = null,
-    val batchOutcomes: List<PublishedFile> = emptyList()
+    val batchOutcomes: List<PublishedFile> = emptyList(),
+    /** Hasil resolve series mentah: dipilih chapter-nya sebelum diunduh. */
+    val rawChapters: List<ChapterHit> = emptyList(),
+    val rawSourceLabel: String? = null
 )
 
 class StudioViewModel : ViewModel() {
@@ -120,6 +129,10 @@ class StudioViewModel : ViewModel() {
 
     fun clearBatchOutcomes() {
         _state.update { it.copy(batchOutcomes = emptyList()) }
+    }
+
+    fun clearRawChapters() {
+        _state.update { it.copy(rawChapters = emptyList(), rawSourceLabel = null) }
     }
 
     // ── Antrean ─────────────────────────────────────────────────────
@@ -251,6 +264,105 @@ class StudioViewModel : ViewModel() {
                 _state.update { it.copy(busy = false, failure = e.message ?: "Gagal impor arsip.") }
             }
         }
+    }
+
+    // ── Unduhan mentah (fase 1: tempel URL chapter/series) ──────────
+
+    private fun workerApiOrNull(): WorkerDownloadApi? {
+        val base = _state.value.settings.workerUrl.trim().trimEnd('/')
+        if (base.isEmpty()) return null
+        return WorkerDownloadApi(base)
+    }
+
+    /** Tempel URL chapter atau series -> resolve; series membuka pemilih chapter. */
+    fun fetchRaw(rawUrl: String, context: Context) {
+        boot(context)
+        val url = rawUrl.trim()
+        val (source, kind) = RawSources.classify(url)
+        if (source == null || kind == UrlKind.UNKNOWN) {
+            _state.update { it.copy(failure = "URL tidak dikenali. Mendukung: baozimh, wmanhua, jjabtoon, koudaimh, jjaptoon, goodtoon, manwa.") }
+            return
+        }
+        val api = workerApiOrNull()
+        if (api == null) {
+            _state.update { it.copy(failure = "Isi URL worker dulu di Setelan → Unduhan Mentah.") }
+            return
+        }
+        if (kind == UrlKind.CHAPTER) {
+            fetchChapterPick(ChapterHit(id = url, title = url, url = url), context)
+            return
+        }
+        _state.update { it.copy(busy = true, phase = "Memuat daftar chapter (${source.label})", fraction = 0f, failure = null) }
+        viewModelScope.launch {
+            try {
+                val chapters = api.chapters(url)
+                if (chapters.isEmpty()) {
+                    _state.update { it.copy(busy = false, failure = "Tidak ada chapter di: $url") }
+                } else {
+                    _state.update { it.copy(busy = false, rawChapters = chapters, rawSourceLabel = source.label) }
+                }
+            } catch (e: Throwable) {
+                _state.update { it.copy(busy = false, failure = dlMessage(e)) }
+            }
+        }
+    }
+
+    /** Unduh satu chapter terpilih lalu masukkan ke antrean otomatis. */
+    fun fetchChapterPick(chapter: ChapterHit, context: Context) {
+        boot(context)
+        val api = workerApiOrNull()
+        if (api == null) {
+            _state.update { it.copy(failure = "Isi URL worker dulu di Setelan → Unduhan Mentah.") }
+            return
+        }
+        clearRawChapters()
+        dropSlices()
+        _state.update { it.copy(busy = true, phase = "Mengambil daftar gambar", fraction = 0f, failure = null) }
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val resolved = api.pages(chapter.url)
+                if (resolved.pages.isEmpty()) {
+                    _state.update { it.copy(busy = false, failure = "Tidak ada gambar di chapter ini.") }
+                    return@launch
+                }
+                val title = resolved.title.ifBlank { chapter.title }.ifBlank { "Unduhan" }
+                val stem = ArchiveKit.sanitizeName(title.ifBlank { "unduhan" }.take(60))
+                val dir = File(File(context.cacheDir, "studio_import"), "${stem}_${System.currentTimeMillis()}").apply { mkdirs() }
+                // Referer = halaman chapter: lolos proteksi hotlink di
+                // banyak sumber tanpa membebani rate limit worker.
+                val out = PageDownloader().fetchAll(
+                    pages = resolved.pages,
+                    destDir = dir,
+                    headersFor = { mapOf("Referer" to chapter.url) },
+                    onProgress = { p ->
+                        _state.update {
+                            it.copy(
+                                phase = "Mengunduh ${p.done}/${p.total}",
+                                fraction = 0.1f + 0.8f * (p.done.toFloat() / p.total.toFloat().coerceAtLeast(1f))
+                            )
+                        }
+                    }
+                )
+                if (out.ok.isEmpty()) {
+                    try { dir.deleteRecursively() } catch (t: Throwable) { }
+                    _state.update { it.copy(busy = false, failure = "Semua ${out.failed.size} gambar gagal diunduh.") }
+                    return@launch
+                }
+                val items = out.ok.map { file -> PageItem(uri = Uri.fromFile(file), title = file.name) }
+                shelve(title, items)
+                val warn = if (out.failed.isEmpty()) "" else " (${out.failed.size} gagal)"
+                _state.update { s ->
+                    s.copy(busy = false, pages = items, screen = StudioScreen.INPUT, notice = "$title: ${items.size} halaman diunduh$warn, masuk antrean.")
+                }
+            } catch (e: Throwable) {
+                _state.update { it.copy(busy = false, failure = dlMessage(e)) }
+            }
+        }
+    }
+
+    private fun dlMessage(e: Throwable): String = when (e) {
+        is RawApiException -> e.message ?: "Gagal mengunduh."
+        else -> e.message ?: "Gagal mengunduh."
     }
 
     // ── Meja kerja ──────────────────────────────────────────────────

@@ -213,8 +213,20 @@ fun SettingsPanel(
             }
         }
 
-        Group("Tema Aplikasi") {
-            ChipRow {
+        Group("Unduhan Mentah") {
+            OutlinedTextField(
+                value = settings.workerUrl,
+                onValueChange = { onChange(settings.copy(workerUrl = it.trim())) },
+                label = { Text("URL worker Trial Fetch") },
+                placeholder = { Text("https://worker-kamu.workers.dev") },
+                supportingText = { Text("Kosong = fitur Unduh nonaktif. Sumber ID: baozimh, wmanhua, jjabtoon, koudaimh, jjaptoon, goodtoon, manwa.") },
+                singleLine = true,
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier.fillMaxWidth()
+            )
+        }
+
+        Group("Tema Aplikasi") {            ChipRow {
                 ThemeMode.entries.forEach { mode ->
                     OptionChip(
                         active = settings.themeMode == mode,

@@ -12,8 +12,8 @@ android {
         applicationId = "com.mochistitch.app"
         minSdk = 24
         targetSdk = 35
-        versionCode = 5
-        versionName = "5.0.0"
+        versionCode = 6
+        versionName = "6.0.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -95,6 +95,7 @@ dependencies {
     implementation(project(":core-archive"))
     implementation(project(":core-settings"))
     implementation(project(":core-ui"))
+    implementation(project(":core-download"))
 
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)

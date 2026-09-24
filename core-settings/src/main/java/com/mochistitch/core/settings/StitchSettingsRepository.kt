@@ -32,6 +32,7 @@ class StitchSettingsRepository(private val dataStore: DataStore<Preferences>) {
         val K_FLAGS = booleanPreferencesKey("flags")
         val K_MATTE = stringPreferencesKey("matte")
         val K_THEME = stringPreferencesKey("theme")
+        val K_WORKER = stringPreferencesKey("worker_url")
     }
 
     val flow: Flow<StitchSettings> = dataStore.data.map { p ->
@@ -49,7 +50,8 @@ class StitchSettingsRepository(private val dataStore: DataStore<Preferences>) {
             pagesPerPack = p[K_PPP] ?: 10,
             showReviewFlags = p[K_FLAGS] ?: true,
             matteColor = p[K_MATTE]?.let { runCatching { MatteColor.valueOf(it) }.getOrNull() } ?: MatteColor.WHITE,
-            themeMode = p[K_THEME]?.let { runCatching { ThemeMode.valueOf(it) }.getOrNull() } ?: ThemeMode.SYSTEM
+            themeMode = p[K_THEME]?.let { runCatching { ThemeMode.valueOf(it) }.getOrNull() } ?: ThemeMode.SYSTEM,
+            workerUrl = p[K_WORKER] ?: ""
         )
     }
 
@@ -69,6 +71,7 @@ class StitchSettingsRepository(private val dataStore: DataStore<Preferences>) {
             p[K_FLAGS] = s.showReviewFlags
             p[K_MATTE] = s.matteColor.name
             p[K_THEME] = s.themeMode.name
+            p[K_WORKER] = s.workerUrl
         }
     }
 }
