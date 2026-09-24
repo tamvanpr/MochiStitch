@@ -116,19 +116,25 @@ object DirectResolvers {
         val m = Regex("""(?:twmanga\.com|baozimh\.com)/(?:comic/chapter|baozimhapp/comic/chapter)/([^/]+)/([^/?#]+)\.html""")
             .find(url) ?: throw RawApiException("URL baozimh tidak valid.")
         val (slug, file) = m.destructured
-        // Urutan worker: baozimh.com dulu (sertifikat bzmgapp rusak).
-        val hosts = listOf("baozimh.com", "bzmgapp.com").flatMap { d -> (1..3).map { n -> "appgb$n.$d" } }
-        var lastErr: Exception? = null
+        // Urutan: host kanonis dulu (appgb/app tanpa nomor — sertifikatnya
+        // valid), baru bernomor sebagai fallback. Catatan worker: host
+        // appgb*.bzmgapp.com menyajikan CN *.baozimh.com sehingga validator
+        // strict (termasuk Android) menolaknya; host baozimh.com dulu.
+        val hosts = listOf("appgb.baozimh.com", "app.baozimh.com") +
+            listOf("baozimh.com", "bzmgapp.com").flatMap { d -> (1..3).map { n -> "appgb$n.$d" } }
+        val failures = mutableListOf<String>()
         var html: String? = null
         for (h in hosts) {
             try {
                 html = DirectHttp.getText("https://$h/baozimhapp/comic/chapter/$slug/$file.html", baoziHeaders())
                 break
             } catch (e: Exception) {
-                lastErr = e as? Exception ?: Exception("gagal")
+                failures.add("$h: ${e.message}")
             }
         }
-        return parseBaozimhChapter(html ?: throw RawApiException("Semua host app Baozi gagal: ${lastErr?.message}"))
+        return parseBaozimhChapter(
+            html ?: throw RawApiException("Semua host app Baozi gagal:\n" + failures.take(4).joinToString("\n"))
+        )
     }
 
     fun parseBaozimhChapter(html: String): ChapterPages {
