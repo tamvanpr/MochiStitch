@@ -17,7 +17,8 @@ import com.mochistitch.core.download.DirectDownloadApi
 import com.mochistitch.core.download.PageDownloader
 import com.mochistitch.core.download.RawApiException
 import com.mochistitch.core.download.RawCrypto
-import com.mochistitch.core.download.RawSourcesimport com.mochistitch.core.download.UrlKind
+import com.mochistitch.core.download.RawSources
+import com.mochistitch.core.download.UrlKind
 import com.mochistitch.core.download.WorkerDownloadApi
 import com.mochistitch.core.imaging.BuildPhase
 import com.mochistitch.core.imaging.BannerTemplate
