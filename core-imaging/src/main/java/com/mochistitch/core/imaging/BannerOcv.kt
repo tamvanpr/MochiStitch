@@ -34,7 +34,9 @@ object BannerOcv {
     fun isAvailable(): Boolean {
         available?.let { return it }
         val ok = try {
-            OpenCVLoader.initLocal()
+            // Artefak 4.5.3 (2021) belum punya initLocal(); initDebug()
+            // memuat .so yang dibundel AAR — API yang tepat untuk versi ini.
+            OpenCVLoader.initDebug()
         } catch (t: Throwable) {
             false
         }
