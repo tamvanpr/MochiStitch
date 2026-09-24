@@ -475,7 +475,7 @@ class StudioViewModel : ViewModel() {
                     try { tmp.delete() } catch (t: Throwable) { }
                     onProgress(1f)
                     // Satu arsip = satu berkas keluaran.
-                    OutInfo("Download/MochiStitch/$name", 1, size, uri)
+                    OutInfo("Pictures/MochiStitch/$name", 1, size, uri)
                 } else {
                     val dest = uniqueDestination(File(picturesRoot(), "MochiStitch"), name)
                     dest.parentFile?.mkdirs()
@@ -544,12 +544,12 @@ class StudioViewModel : ViewModel() {
     /** Terbitkan satu file ke galeri via MediaStore (Android 10+). */
     private fun mediaPublish(context: Context, src: File, displayName: String, mime: String, subfolder: String?): Uri? {
         val resolver = context.contentResolver
-        // MediaStore.Files hanya mengizinkan Download/Documents — arsip ke Download.
-        val baseDir = if (mime.startsWith("image/")) "Pictures" else "Download"
+        // Semua hasil (gambar maupun arsip) ke Pictures/MochiStitch.
+        // Arsip lewat koleksi Files: tak tampil di galeri, tapi ada di app Files.
         val values = android.content.ContentValues().apply {
             put(android.provider.MediaStore.MediaColumns.DISPLAY_NAME, displayName)
             put(android.provider.MediaStore.MediaColumns.MIME_TYPE, mime)
-            val rel = if (subfolder.isNullOrBlank()) "$baseDir/MochiStitch" else "$baseDir/MochiStitch/$subfolder"
+            val rel = if (subfolder.isNullOrBlank()) "Pictures/MochiStitch" else "Pictures/MochiStitch/$subfolder"
             put(android.provider.MediaStore.MediaColumns.RELATIVE_PATH, rel)
         }
         val collection = if (mime.startsWith("image/")) {

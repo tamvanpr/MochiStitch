@@ -12,7 +12,7 @@ One engine principle defines the build: **a cut line never crosses ink** (balloo
 - **Safe splitting**: oversized pages are cut only through edge-free rows (never through balloons), and continuous page pairs are kept in the same output file; risky seams are flagged in the preview.
 - **Page-boundary splitting**: split the output into multiple files (`WHOLE`, `MAX_HEIGHT`, or `PAGES_PER_PACK` rules).
 - **Archive input**: open `.zip`, `.cbz`, `.rar`, `.cbr`, `.7z`, and `.cb7` directly — pages stream to disk so large archives stay memory-safe.
-- **Archive output**: ZIP/CBZ packaging with MediaStore delivery (Download folder on Android 10+, FileProvider share on older devices).
+- **Archive output**: ZIP/CBZ packaging with MediaStore delivery (Pictures/MochiStitch folder on Android 10+, FileProvider share on older devices).
 - **Batch queue**: import several comics, set a packaging format per title, and process them all in one run.
 - **Memory conscious**: RGB_565 bitmaps, bounded decode sampling, region-decode edge checks, and small on-screen previews instead of full-height strips held in RAM.
 - **Material 3 UI**: four bottom tabs (Input, Result, Queue, Settings) with count badges, light/dark/system theming.
