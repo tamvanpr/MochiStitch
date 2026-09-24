@@ -398,8 +398,6 @@ private fun InputStep(viewModel: StudioViewModel, modifier: Modifier = Modifier)
                 enabled = state.pages.isNotEmpty() && !state.busy
             ) {
                 Text("Rakit ${state.pages.size} halaman")
-                Spacer(modifier = Modifier.size(8.dp))
-                Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = null, modifier = Modifier.size(18.dp))
             }
         }
     }
