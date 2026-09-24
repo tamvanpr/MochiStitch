@@ -247,7 +247,7 @@ object DirectResolvers {
         val d = root.asObj()?.get("data")?.asObj()
         if (!root.bool("success") || d == null) throw RawApiException("Respons episode jjabtoon invalid.")
         val title = d["title"]?.asStr()
-            ?: ((d["episodeNo"] as? JVal.Num)?.v?.toInt()?.let { "$it화" } ?: "Episode")
+            ?: ((d["episodeNo"] as? JVal.Num)?.v?.toInt()?.let { "${it}화" } ?: "Episode")
         val images = (d["images"] as? JVal.Arr)?.items.orEmpty()
             .mapNotNull { item ->
                 val u = item.str("url")
@@ -278,7 +278,7 @@ object DirectResolvers {
             if (id.isBlank()) null
             else {
                 val epNo = (item.asObj()?.get("episodeNo") as? JVal.Num)?.v?.toInt()
-                ChapterHit(id = id, title = item.str("title").ifBlank { epNo?.let { "$it화" } ?: "Episode $id" }, url = "$origin/episodes/$id")
+                ChapterHit(id = id, title = item.str("title").ifBlank { epNo?.let { "${it}화" } ?: "Episode $id" }, url = "$origin/episodes/$id")
             }
         }
     }
