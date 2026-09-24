@@ -73,6 +73,7 @@ class StripBuilder(
         uris: List<Uri>,
         settings: StitchSettings,
         onProgress: (BuildPhase, Float) -> Unit = { _, _ -> },
+        banner: BannerPolicy? = null,
         bannerTemplateBitmaps: List<Bitmap> = emptyList()
     ): Result<BuildOutput> = withContext(Dispatchers.IO) {
         if (uris.isEmpty()) return@withContext Result.failure(IllegalArgumentException("Tidak ada gambar."))

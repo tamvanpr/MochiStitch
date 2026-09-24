@@ -472,12 +472,13 @@ class StudioViewModel : ViewModel() {
                 val banner = _state.value.comics
                     .firstOrNull { it.id == _state.value.activeComicId }
                     ?.sourceId?.let { RawSources.byId(it)?.banner }
-                 val out = StripBuilder(context).build(
-                     uris = _state.value.pages.map { it.uri },
-                     settings = settings,
-                     onProgress = { phase, p -> _state.update { it.copy(phase = phase.label, fraction = p) } },
-                     bannerTemplateBitmaps = bannerTemplateBitmaps(context)
-                 ).getOrThrow()
+                val out = StripBuilder(context).build(
+                    uris = _state.value.pages.map { it.uri },
+                    settings = settings,
+                    onProgress = { phase, p -> _state.update { it.copy(phase = phase.label, fraction = p) } },
+                    banner = if (settings.enableBannerCut) comicBannerPolicy() else null,
+                    bannerTemplateBitmaps = bannerTemplateBitmaps(context)
+                ).getOrThrow()
                 val done = out.strips
                 val slices = done.map { strip ->
                     SliceInfo(
@@ -597,6 +598,7 @@ class StudioViewModel : ViewModel() {
                         uris = comic.pageUris,
                         settings = base,
                         onProgress = { _, p -> _state.update { it.copy(fraction = (pi + p) / comics.size.toFloat()) } },
+                        banner = if (base.enableBannerCut) comic.sourceId?.let { RawSources.byId(it)?.banner } else null,
                         bannerTemplateBitmaps = bannerTemplateBitmaps(context)
                     ).getOrThrow().strips
                     // Batch: tiap komik punya nama sendiri (arsip -> basename
