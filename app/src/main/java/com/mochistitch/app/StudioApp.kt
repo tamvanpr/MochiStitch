@@ -267,7 +267,7 @@ fun StudioApp(viewModel: StudioViewModel, onExitApp: () -> Unit) {
                         imageVector = Icons.Default.Image,
                         contentDescription = null,
                         tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(48.dp)
+                        modifier = Modifier.size(72.dp)
                     )
                     Text(
                         "MochiStitch",
@@ -277,7 +277,8 @@ fun StudioApp(viewModel: StudioViewModel, onExitApp: () -> Unit) {
                     Text(state.phase.ifBlank { "Bekerja…" }, style = MaterialTheme.typography.bodyMedium)
                     LinearProgressIndicator(
                         progress = { state.fraction.coerceIn(0f, 1f) },
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier.fillMaxWidth(),
+                        color = MaterialTheme.colorScheme.primary
                     )
                 }
             }
@@ -499,12 +500,6 @@ private fun SourceRow(
                 Text(title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
                 Text(desc, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-            Icon(
-                Icons.AutoMirrored.Filled.ArrowForward,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.size(18.dp)
-            )
         }
     }
 }
@@ -551,9 +546,6 @@ private fun QueueStep(
                                         style = MaterialTheme.typography.bodySmall
                                     )
                                 }
-                                IconButton(onClick = { viewModel.openComic(comic.id) }) {
-                                    Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = "Buka")
-                                }
                                 IconButton(onClick = { viewModel.forgetComic(comic.id) }) {
                                     Icon(
                                         Icons.Default.Delete,
@@ -563,18 +555,21 @@ private fun QueueStep(
                                 }
                             }
                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                PackFormat.entries.forEach { pack ->
-                                    FilterChip(
-                                        selected = comic.packFor(state.settings.packFormat) == pack,
-                                        onClick = {
-                                            viewModel.setComicPack(
-                                                comic.id,
-                                                if (comic.packOverride == pack) null else pack
-                                            )
-                                        },
-                                        label = { Text(pack.name) }
-                                    )
-                                }
+                                FilterChip(
+                                    selected = comic.packFor(state.settings.packFormat) == PackFormat.ZIP,
+                                    onClick = { viewModel.setComicPack(comic.id, if (comic.packOverride == PackFormat.ZIP) null else PackFormat.ZIP) },
+                                    label = { Text("ZIP") }
+                                )
+                                FilterChip(
+                                    selected = comic.packFor(state.settings.packFormat) == PackFormat.CBZ,
+                                    onClick = { viewModel.setComicPack(comic.id, if (comic.packOverride == PackFormat.CBZ) null else PackFormat.CBZ) },
+                                    label = { Text("CBZ") }
+                                )
+                                FilterChip(
+                                    selected = comic.packFor(state.settings.packFormat) == PackFormat.FILES,
+                                    onClick = { viewModel.setComicPack(comic.id, if (comic.packOverride == PackFormat.FILES) null else PackFormat.FILES) },
+                                    label = { Text("Lepas") }
+                                )
                             }
                         }
                     }

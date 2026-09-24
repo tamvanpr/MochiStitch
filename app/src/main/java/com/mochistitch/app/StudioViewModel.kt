@@ -317,7 +317,7 @@ class StudioViewModel : ViewModel() {
         val url = rawUrl.trim()
         val (source, kind) = RawSources.classify(url)
         if (source == null || kind == UrlKind.UNKNOWN) {
-            _state.update { it.copy(failure = "URL tidak dikenali. ID: baozimh, wmanhua, jjabtoon, koudaimh, jjaptoon, goodtoon, manwa. EN: mangadex, mangapill, comick, mangageko, demonic, likemanga, mangabats, xcomic.") }
+            _state.update { it.copy(failure = "URL tidak dikenali. RAW: baozimh, wmanhua, jjabtoon, koudaimh, jjaptoon, goodtoon, manwa. EN: mangadex, mangapill, comick, mangageko, demonic, likemanga, mangabats, xcomic.") }
             return
         }
         val api = workerApiOrNull() ?: DirectDownloadApi(source)

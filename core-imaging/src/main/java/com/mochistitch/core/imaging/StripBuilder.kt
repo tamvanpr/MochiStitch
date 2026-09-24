@@ -91,13 +91,18 @@ class StripBuilder(
             val limit = settings.maxStripHeight
             val wantCut = settings.splitRule == SplitRule.MAX_HEIGHT && limit > 0
 
-            // 0) Banner situs + ketegasan potong: buat BannerPolicy dari
-            // settings (aplikasi bisa dipakai untuk semua sumber).
+            val cfg = when (settings.cutStrictness) {
+                com.mochistitch.core.settings.CutStrictness.LOOSE    -> SeamScan.configLoose()
+                com.mochistitch.core.settings.CutStrictness.BALANCED -> SeamScan.configBalanced()
+                com.mochistitch.core.settings.CutStrictness.STRICT   -> SeamScan.configStrict()
+            }
+            // 0) Banner situs: buat BannerPolicy dari settings (hanya sumber
+            // yang punya policy — saat ini baozimh) + ketegasan potong dari cfg.
             val policy = if (settings.enableBannerCut) {
                 val p = when (settings.cutStrictness) {
-                    CutStrictness.LOOSE    -> Triple(4, 3, 0.97)
-                    CutStrictness.BALANCED -> Triple(8, 3, 0.97)
-                    CutStrictness.STRICT   -> Triple(16, 3, 0.97)
+                    com.mochistitch.core.settings.CutStrictness.LOOSE    -> Triple(4, 3, 0.97)
+                    com.mochistitch.core.settings.CutStrictness.BALANCED -> Triple(8, 3, 0.97)
+                    com.mochistitch.core.settings.CutStrictness.STRICT   -> Triple(16, 3, 0.97)
                 }
                 BannerPolicy(
                     stripPx = 200,
@@ -118,7 +123,7 @@ class StripBuilder(
                 val renderedH = (effH.toLong() * stripWidth / m.width.coerceAtLeast(1)).toInt().coerceAtLeast(1)
                 val wasCut = effTop > 0 || effBot < m.height
                 if (wantCut && renderedH > limit) {
-                    segs.addAll(segmentPage(i, m, stripWidth, limit, effTop, effBot, wasCut))
+                    segs.addAll(segmentPage(i, m, stripWidth, limit, effTop, effBot, wasCut, cfg))
                 } else {
                     segs.add(Seg(m.uri, i, effTop, effBot, renderedH, wasCut))
                 }
@@ -389,7 +394,8 @@ class StripBuilder(
         limit: Int,
         effTop: Int,
         effBot: Int,
-        wasCut: Boolean
+        wasCut: Boolean,
+        cfg: SeamScan.Config
     ): List<Seg> {
         val effH = (effBot - effTop).coerceAtLeast(1)
         val renderedH = (effH.toLong() * stripWidth / m.width.coerceAtLeast(1)).toInt().coerceAtLeast(1)
@@ -415,7 +421,7 @@ class StripBuilder(
                 val rows = min(chunk, dh - y)
                 bmp.getPixels(buf, 0, dw, 0, y, dw, rows)
                 for (r in 0 until rows) {
-                    horiz[y + r] = SeamScan.rowIsSafe(buf, r * dw, dw)
+                    horiz[y + r] = SeamScan.rowIsSafe(buf, r * dw, dw, cfg)
                     if (paperSamples.size < 24 && (y + r) % max(1, dh / 24) == 0) {
                         paperSamples.add(buf.copyOfRange(r * dw, r * dw + dw))
                     }
@@ -432,7 +438,7 @@ class StripBuilder(
                 bmp.getPixels(buf, 0, dw, 0, y, dw, rows)
                 for (r in 0 until rows) {
                     if (horiz[y + r]) {
-                        horiz[y + r] = SeamScan.rowIsSafe(buf, r * dw, dw, paper)
+                        horiz[y + r] = SeamScan.rowIsSafe(buf, r * dw, dw, paper, cfg)
                     }
                 }
                 y += rows
@@ -442,7 +448,7 @@ class StripBuilder(
             val rowBuf = IntArray(dw)
             val vert = SeamScan.rowsVertSafe(dw, dh, getRow = { yy, out ->
                 bmp.getPixels(out, 0, dw, 0, yy, dw, 1)
-            })
+            }, cfg = cfg)
             // Hindari alokasi ganda: pakai rowBuf agar lambda tidak
             // mengalokasi sendiri (diabaikan, getPixels menulis ke out).
             @Suppress("UNUSED_VARIABLE")
@@ -459,7 +465,7 @@ class StripBuilder(
             // sedikit lebih tinggi daripada memotong tinta atau halaman utuh.
             val overflowDec = (limitDec / 5).coerceIn(128, 2500)
             val window = safe.copyOfRange(eTopDec, eBotDec)
-            val plan = SeamScan.planCuts(window, limitDec, overflow = overflowDec)
+            val plan = SeamScan.planCuts(window, limitDec, cfg, overflow = overflowDec)
             if (plan.cuts.isEmpty() && !plan.tailSafe) {
                 return listOf(Seg(m.uri, order, effTop, effBot, renderedH, wasCut))
             }

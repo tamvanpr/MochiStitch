@@ -34,6 +34,25 @@ data class CutPlan(val cuts: List<Int>, val tailSafe: Boolean = true)
  */
 object SeamScan {
 
+    /** Konfigurasi ketegasan potong sesuai preset [com.mochistitch.core.settings.CutStrictness]. */
+    data class Config(
+        val edgeTau: Int,
+        val vertTau: Int,
+        val minBand: Int,
+        val bandMargin: Int,
+        val darkTau: Int,
+        val paperTau: Int
+    )
+
+    /** Preset longgar: minim potongan, paling aman dari salah tebas. */
+    fun configLoose() = Config(edgeTau = 18, vertTau = 15, minBand = 10, bandMargin = 2, darkTau = 32, paperTau = 36)
+
+    /** Preset seimbang: rekomendasi default. */
+    fun configBalanced() = Config(edgeTau = 24, vertTau = 20, minBand = 16, bandMargin = 4, darkTau = 40, paperTau = 48)
+
+    /** Preset akurat: potong lebih sering, threshold ketat. */
+    fun configStrict() = Config(edgeTau = 36, vertTau = 30, minBand = 24, bandMargin = 6, darkTau = 52, paperTau = 60)
+
     /** Ambang tepi horizontal: langkah luminansi antar piksel tetangga. */
     const val EDGE_TAU = 24
 
@@ -170,11 +189,27 @@ object SeamScan {
         return true
     }
 
+    /** Varian dengan konfigurasi ketegasan dari preset [CutStrictness]. */
+    fun rowIsSafe(pixels: IntArray, offset: Int, length: Int, cfg: Config): Boolean {
+        if (length < 2) return true
+        if (rowMaxStep(pixels, offset, length) > cfg.edgeTau) return false
+        val med = rowMedianLum(pixels, offset, length)
+        if (med < cfg.darkTau) return false
+        return true
+    }
+
     /** Varian paper-aware: baris juga harus dekat luminansi kertas. */
     fun rowIsSafe(pixels: IntArray, offset: Int, length: Int, paperLum: Int): Boolean {
         if (!rowIsSafe(pixels, offset, length)) return false
         val med = rowMedianLum(pixels, offset, length)
         return absI(med - paperLum) <= PAPER_TAU
+    }
+
+    /** Varian paper-aware + konfigurasi ketegasan. */
+    fun rowIsSafe(pixels: IntArray, offset: Int, length: Int, paperLum: Int, cfg: Config): Boolean {
+        if (!rowIsSafe(pixels, offset, length, cfg)) return false
+        val med = rowMedianLum(pixels, offset, length)
+        return absI(med - paperLum) <= cfg.paperTau
     }
 
     /**
@@ -191,21 +226,28 @@ object SeamScan {
         getRow: (y: Int, out: IntArray) -> Unit,
         tau: Int = VERT_TAU
     ): BooleanArray {
+        return rowsVertSafe(width, height, getRow, Config(edgeTau = 24, vertTau = tau, minBand = 16, bandMargin = 4, darkTau = 40, paperTau = 48))
+    }
+
+    fun rowsVertSafe(
+        width: Int,
+        height: Int,
+        getRow: (y: Int, out: IntArray) -> Unit,
+        cfg: Config
+    ): BooleanArray {
         val out = BooleanArray(height) { true }
         if (width <= 0 || height <= 0) return out
         val prev = IntArray(width)
         val cur = IntArray(width)
-        // Simpan luminansi baris sebelumnya untuk banding vertikal.
         val prevLum = IntArray(width)
         getRow(0, cur)
         for (x in 0 until width) prevLum[x] = luminance(cur[x])
-        // Bandingkan tiap baris dengan sebelumnya; tandai KEDUA sisi tepi.
         System.arraycopy(cur, 0, prev, 0, width)
         for (y in 1 until height) {
             getRow(y, cur)
             for (x in 0 until width) {
                 val l = luminance(cur[x])
-                if (absI(l - prevLum[x]) > tau) {
+                if (absI(l - prevLum[x]) > cfg.vertTau) {
                     out[y] = false
                     out[y - 1] = false
                 }
@@ -223,8 +265,11 @@ object SeamScan {
     }
 
     /** Pita baris berurutan yang seluruhnya aman, panjang ≥ [minBand]. */
-    fun findBands(safe: BooleanArray, minBand: Int = MIN_BAND): List<IntRange> {
-        val band = minBand.coerceAtLeast(1)
+    fun findBands(safe: BooleanArray, minBand: Int = MIN_BAND): List<IntRange> =
+        findBands(safe, Config(edgeTau = 24, vertTau = 20, minBand = minBand, bandMargin = 4, darkTau = 40, paperTau = 48))
+
+    fun findBands(safe: BooleanArray, cfg: Config): List<IntRange> {
+        val band = cfg.minBand.coerceAtLeast(1)
         val out = mutableListOf<IntRange>()
         var start = -1
         for (i in safe.indices) {
@@ -253,18 +298,26 @@ object SeamScan {
         minChunk: Int = limit / 2,
         overflow: Int = 0,
         margin: Int = BAND_MARGIN
+    ): CutPlan = planCuts(safe, limit, Config(edgeTau = 24, vertTau = 20, minBand = minBand, bandMargin = margin, darkTau = 40, paperTau = 48), minChunk, overflow)
+
+    fun planCuts(
+        safe: BooleanArray,
+        limit: Int,
+        cfg: Config,
+        minChunk: Int = limit / 2,
+        overflow: Int = 0
     ): CutPlan {
         if (limit <= 0 || safe.size <= limit) return CutPlan(emptyList(), true)
         val minC = minChunk.coerceAtLeast(1)
-        val bands = findBands(safe, minBand)
+        val bands = findBands(safe, cfg)
         if (bands.isEmpty()) return CutPlan(emptyList(), tailSafe = false)
         val cuts = mutableListOf<Int>()
         var y = 0
         while (safe.size - y > limit) {
             val lo = y + minC
             val hi = y + limit
-            val c = nearestCenterInBands(bands, lo, hi, hi, margin)
-                ?: if (overflow > 0) nearestCenterInBands(bands, hi + 1, hi + overflow, hi, margin) else null
+            val c = nearestCenterInBands(bands, lo, hi, hi, cfg.bandMargin)
+                ?: if (overflow > 0) nearestCenterInBands(bands, hi + 1, hi + overflow, hi, cfg.bandMargin) else null
             if (c == null) return CutPlan(cuts, tailSafe = false)
             // Mencegah potongan kembar / mundur akibat margin.
             if (c <= y) return CutPlan(cuts, tailSafe = false)
