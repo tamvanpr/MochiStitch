@@ -474,8 +474,8 @@ class StudioViewModel : ViewModel() {
                     val uri = mediaPublish(context, tmp, name, mime, null)
                     try { tmp.delete() } catch (t: Throwable) { }
                     onProgress(1f)
-                    // Satu arsip = satu berkas keluaran.
-                    OutInfo("Pictures/MochiStitch/$name", 1, size, uri)
+                    // Satu arsip = satu berkas keluaran (koleksi Download).
+                    OutInfo("Download/MochiStitch/$name", 1, size, uri)
                 } else {
                     val dest = uniqueDestination(File(picturesRoot(), "MochiStitch"), name)
                     dest.parentFile?.mkdirs()
@@ -541,21 +541,28 @@ class StudioViewModel : ViewModel() {
         null
     }
 
-    /** Terbitkan satu file ke galeri via MediaStore (Android 10+). */
+    /**
+     * Terbitkan satu file via MediaStore (Android 10+).
+     * - Gambar (image/*) -> koleksi Images, Pictures/MochiStitch.
+     * - Arsip (zip/cbz) -> koleksi Downloads, Download/MochiStitch.
+     *   Koleksi Files/Download MENOLAK Pictures sebagai RELATIVE_PATH
+     *   ("Primary directory Pictures not allowed"), jadi arsip wajib ke
+     *   Download (muncul di app Files, bukan galeri).
+     */
     private fun mediaPublish(context: Context, src: File, displayName: String, mime: String, subfolder: String?): Uri? {
         val resolver = context.contentResolver
-        // Semua hasil (gambar maupun arsip) ke Pictures/MochiStitch.
-        // Arsip lewat koleksi Files: tak tampil di galeri, tapi ada di app Files.
+        val isImage = mime.startsWith("image/")
         val values = android.content.ContentValues().apply {
             put(android.provider.MediaStore.MediaColumns.DISPLAY_NAME, displayName)
             put(android.provider.MediaStore.MediaColumns.MIME_TYPE, mime)
-            val rel = if (subfolder.isNullOrBlank()) "Pictures/MochiStitch" else "Pictures/MochiStitch/$subfolder"
+            val base = if (isImage) "Pictures/MochiStitch" else "Download/MochiStitch"
+            val rel = if (subfolder.isNullOrBlank()) base else "$base/$subfolder"
             put(android.provider.MediaStore.MediaColumns.RELATIVE_PATH, rel)
         }
-        val collection = if (mime.startsWith("image/")) {
+        val collection = if (isImage) {
             android.provider.MediaStore.Images.Media.getContentUri(android.provider.MediaStore.VOLUME_EXTERNAL_PRIMARY)
         } else {
-            android.provider.MediaStore.Files.getContentUri("external")
+            android.provider.MediaStore.Downloads.getContentUri(android.provider.MediaStore.VOLUME_EXTERNAL_PRIMARY)
         }
         val uri = resolver.insert(collection, values) ?: return null
         resolver.openOutputStream(uri)?.use { out ->
