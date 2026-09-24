@@ -188,18 +188,20 @@ class SeamScanTest {
     @Test
     fun testSeamContinuesMatchesAdjacentRows() {
         // v6: hanya baris seam yang dibandingkan. Garis vertikal kontinu
-        // (kolom hitam sama di kedua sisi seam) = bersambung.
-        val w = 32
-        fun striped(blackAt: Int): IntArray {
+        // (blok hitam sama di kedua sisi seam) = bersambung. Blok hitam
+        // 8 kolom pada lebar 64 (12,5% tiap sisi, 25% total bila beda
+        // posisi) membedakan sambung vs tidak di bawah toleransi 0,9.
+        val w = 64
+        fun striped(blackFrom: Int, blackTo: Int): IntArray {
             val rows = 8
             return IntArray(w * rows) { idx ->
                 val x = idx % w
-                if (x == blackAt) 0xFF000000.toInt() else 0xFFFFFFFF.toInt()
+                if (x in blackFrom..blackTo) 0xFF000000.toInt() else 0xFFFFFFFF.toInt()
             }
         }
-        val bottom = striped(10)
-        val topSame = striped(10)
-        val topDiff = striped(20)
+        val bottom = striped(10, 17)
+        val topSame = striped(10, 17)
+        val topDiff = striped(40, 47)
         assertTrue(SeamScan.seamContinues(bottom, w, 8, topSame, w, 8))
         assertFalse(SeamScan.seamContinues(bottom, w, 8, topDiff, w, 8))
     }
