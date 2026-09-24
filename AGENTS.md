@@ -60,16 +60,17 @@ flag tinjau.
   ke disk, satu folder unik per impor
 - `core-download/` — unduhan mentah MODE GANDA via kontrak Trial Fetch
   (tanpa dependensi baru; HttpURLConnection + parser JSON mini + AES JCE):
-  RawSources (15 sumber ID+EN + classifier + BannerPolicy + imageHeaders
-  per-sumber), RawContract (3 bentuk JSON + buang banner utuh via metadata),
-  WorkerDownloadApi (dipakai bila workerUrl diisi), DirectResolvers
-  (resolve langsung tanpa worker: baozimh 6-host + kredensial app,
-  wmanhua num/pasd, jjabtoon/jjaptoon/goodtoon/manwa/koudaimh-params-AES,
-  mangadex at-home, mangapill, comick mirror, mangageko, demonic,
-  likemanga, mangabats API, xcomic Qwik), RawCrypto (AES manwa/koudaimh),
-  PageDownloader (streaming, konkurensi 3, retry 2x, transform dekripsi).
-  Bytes langsung dari CDN; hasil otomatis shelve() ke antrean.
-  Izin INTERNET; workerUrl opsional (kosong = mode langsung).
+  RawSources (15 sumber RAW+EN + classifier + BannerPolicy per sumber
+  **hanya baozimh** + imageHeaders per-sumber), RawContract (3 bentuk
+  JSON + buang banner utuh via metadata), WorkerDownloadApi (dipakai bila
+  workerUrl diisi), DirectResolvers (resolve langsung tanpa worker:
+  baozimh 6-host + kredensial app, wmanhua num/pasd, jjabtoon/jjaptoon/
+  goodtoon/manwa/koudaimh-params-AES, mangadex at-home, mangapill, comick
+  mirror, mangageko, demonic, likemanga, mangabats API, xcomic Qwik),
+  RawCrypto (AES manwa/koudaimh), PageDownloader (streaming, konkurensi 3,
+  retry 2x, transform dekripsi). Bytes langsung dari CDN; hasil otomatis
+  shelve() ke antrean. Izin INTERNET; workerUrl opsional (kosong = mode
+  langsung).
 - `core-common/` — ComicProject (+sourceId unduhan), BannerPolicy.
 - `core-common/` — ComicProject (antrean batch; halaman disinkronkan saat rakit)
 
