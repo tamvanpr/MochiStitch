@@ -65,12 +65,15 @@ class StripBuilder(
         val bannerCut: Boolean = false
     )
 
+    /** Hasil rakitan + catatan banner (null = kebijakan banner tak dipakai). */
+    data class BuildOutput(val strips: List<BuiltStrip>, val bannerNote: String? = null)
+
     suspend fun build(
         uris: List<Uri>,
         settings: StitchSettings,
         onProgress: (BuildPhase, Float) -> Unit = { _, _ -> },
         banner: BannerPolicy? = null
-    ): Result<List<BuiltStrip>> = withContext(Dispatchers.IO) {
+    ): Result<BuildOutput> = withContext(Dispatchers.IO) {
         if (uris.isEmpty()) return@withContext Result.failure(IllegalArgumentException("Tidak ada gambar."))
         try {
             onProgress(BuildPhase.MEASURING, 0.05f)
@@ -88,7 +91,9 @@ class StripBuilder(
 
             // 0) Banner situs (mis. baozimh 200px): crop HANYA bila strip
             // atas/bawah terbukti identik antar-halaman (gerbang BannerGate).
-            val bannerCrops = bannerCrops(measured, banner)
+            // Selalu ada catatan keputusan (null = kebijakan tak dipakai).
+            val bannerResult = bannerCrops(measured, banner)
+            val bannerCrops = bannerResult.crops
 
             // 1) Halaman raksasa -> segmen di celah aman (v6: vertikal+paper+tengah).
             val segs = mutableListOf<Seg>()
@@ -148,24 +153,33 @@ class StripBuilder(
                 )
             }
             onProgress(BuildPhase.ASSEMBLING, 1.0f)
-            Result.success(strips)
+            Result.success(BuildOutput(strips, bannerResult.note))
         } catch (e: Throwable) {
             Result.failure(e)
         }
     }
 
+    /** Hasil gerbang banner: crop per indeks + catatan keputusan untuk user. */
+    private data class BannerResult(val crops: Map<Int, Pair<Int, Int>>, val note: String?)
+
     /**
      * Kebijakan banner -> crop (topCut, bottomCut) per indeks halaman,
-     * dalam piksel gambar asli. Halaman pendek dilewati; tanpa keputusan
-     * bulat BannerGate tidak ada yang dicrop (arah aman).
+     * dalam piksel gambar asli. Keputusan per halaman (bukan bulat):
+     * halaman yang strip-nya tidak cocok dibiarkan utuh. Selalu sertakan
+     * catatan MENGAPA begitu (diagnostik, bukan diam).
      */
     private fun bannerCrops(
         measured: List<StripRenderer.Measured>,
         policy: BannerPolicy?
-    ): Map<Int, Pair<Int, Int>> {
-        if (policy == null || measured.isEmpty()) return emptyMap()
-        val tall = measured.filter { it.height >= max(policy.minPageH, policy.stripPx * 2 + 100) }
-        if (tall.size < policy.minPages.coerceAtLeast(2)) return emptyMap()
+    ): BannerResult {
+        if (policy == null || measured.isEmpty()) return BannerResult(emptyMap(), null)
+        val need = policy.minPages.coerceAtLeast(2)
+        val tallIdx = measured.indices.filter { i ->
+            measured[i].height >= max(policy.minPageH, policy.stripPx * 2 + 100)
+        }
+        if (tallIdx.size < need) {
+            return BannerResult(emptyMap(), "Banner: hanya ${tallIdx.size} halaman cukup tinggi (butuh $need) — tidak dicek.")
+        }
         fun strip(m: StripRenderer.Measured, top: Boolean): BannerGate.Strip? {
             val h = policy.stripPx.coerceIn(1, m.height)
             val patch = if (top) {
@@ -176,20 +190,38 @@ class StripBuilder(
             if (patch.h <= 0 || patch.w <= 0) return null
             return BannerGate.Strip(patch.px, patch.w, patch.h)
         }
-        val tops = tall.mapNotNull { strip(it, top = true) }
-        val bots = tall.mapNotNull { strip(it, top = false) }
-        // Keputusan butuh strip dari SEMUA halaman kandidat yang cukup.
-        if (tops.size < policy.minPages.coerceAtLeast(2) && policy.checkTop) return emptyMap()
-        if (bots.size < policy.minPages.coerceAtLeast(2) && policy.checkBottom) {
-            if (!policy.checkTop || tops.size < policy.minPages.coerceAtLeast(2)) return emptyMap()
+        val tops = tallIdx.mapNotNull { i ->
+            strip(measured[i], top = true)?.let { i to it }
         }
-        val decision = BannerGate.decide(tops, bots, policy)
-        if (!decision.cropTop && !decision.cropBottom) return emptyMap()
-        val tallIdx = tall.map { measured.indexOf(it) }.toSet()
-        return measured.indices.associateWith { i ->
-            if (!tallIdx.contains(i)) 0 to 0
-            else (if (decision.cropTop) policy.stripPx else 0) to (if (decision.cropBottom) policy.stripPx else 0)
-        }.filterValues { (a, b) -> a > 0 || b > 0 }
+        val bots = tallIdx.mapNotNull { i ->
+            strip(measured[i], top = false)?.let { i to it }
+        }
+        val need = policy.minPages.coerceAtLeast(2)
+        if (policy.checkTop && tops.size < need && policy.checkBottom && bots.size < need) {
+            return BannerResult(emptyMap(), "Banner: strip gagal dibaca (${tops.size}/${bots.size} dari $need) — dilewati.")
+        }
+        val topStrips = tops.map { it.second }
+        val botStrips = bots.map { it.second }
+        val decision = BannerGate.decide(topStrips, botStrips, policy)
+        // Petakan kembali indeks keputusan (dalam daftar kandidat) ke indeks halaman.
+        val topIdx = tops.map { it.first }
+        val botIdx = bots.map { it.first }
+        val out = mutableMapOf<Int, Pair<Int, Int>>()
+        decision.top.forEach { k -> topIdx.getOrNull(k)?.let { i -> out[i] = policy.stripPx to (out[i]?.second ?: 0) } }
+        decision.bottom.forEach { k -> botIdx.getOrNull(k)?.let { i -> out[i] = (out[i]?.first ?: 0) to policy.stripPx } }
+        if (out.isEmpty()) {
+            return BannerResult(
+                emptyMap(),
+                "Banner: strip atas/bawah beda-beda antar-halaman (${tallIdx.size} dicek) — bukan banner seragam, dilewati."
+            )
+        }
+        val t = decision.top.size
+        val b = decision.bottom.size
+        val where = listOf(
+            if (t > 0) "atas $t" else null,
+            if (b > 0) "bawah $b" else null
+        ).filterNotNull().joinToString(" + ")
+        return BannerResult(out, "Banner: dicrop $where (${out.size} halaman).")
     }
 
     /**

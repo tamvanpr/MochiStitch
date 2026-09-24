@@ -441,12 +441,13 @@ class StudioViewModel : ViewModel() {
                 val banner = _state.value.comics
                     .firstOrNull { it.id == _state.value.activeComicId }
                     ?.sourceId?.let { RawSources.byId(it)?.banner }
-                val done = StripBuilder(context).build(
+                val out = StripBuilder(context).build(
                     uris = _state.value.pages.map { it.uri },
                     settings = settings,
                     onProgress = { phase, p -> _state.update { it.copy(phase = phase.label, fraction = p) } },
                     banner = banner
                 ).getOrThrow()
+                val done = out.strips
                 val slices = done.map { strip ->
                     SliceInfo(
                         order = strip.order,
@@ -465,7 +466,7 @@ class StudioViewModel : ViewModel() {
                         busy = false,
                         slices = slices,
                         screen = StudioScreen.RESULT,
-                        notice = if (done.any { strip -> strip.bannerCut }) "Banner situs dicrop otomatis (strip 200px yang identik di semua halaman)." else null
+                        notice = out.bannerNote
                     )
                 }
             } catch (e: Throwable) {
@@ -553,7 +554,7 @@ class StudioViewModel : ViewModel() {
                         settings = base,
                         onProgress = { _, p -> _state.update { it.copy(fraction = (pi + p) / comics.size.toFloat()) } },
                         banner = banner
-                    ).getOrThrow()
+                    ).getOrThrow().strips
                     val info = writeOut(
                         context = context,
                         files = built.map { it.fileName to it.file },

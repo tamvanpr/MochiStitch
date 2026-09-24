@@ -34,8 +34,8 @@ class BannerGateTest {
         val tops = listOf(bannerStrip(64, 8), bannerStrip(64, 8), bannerStrip(64, 8))
         val bots = listOf(bannerStrip(64, 8, seed = 5), bannerStrip(64, 8, seed = 5), bannerStrip(64, 8, seed = 5))
         val d = BannerGate.decide(tops, bots, policy)
-        assertTrue(d.cropTop)
-        assertTrue(d.cropBottom)
+        assertTrue(d.top.isNotEmpty())
+        assertTrue(d.bottom.isNotEmpty())
     }
 
     @Test
@@ -43,16 +43,16 @@ class BannerGateTest {
         val tops = listOf(artStrip(64, 8, 1), artStrip(64, 8, 2), artStrip(64, 8, 3))
         val bots = listOf(artStrip(64, 8, 4), artStrip(64, 8, 5), artStrip(64, 8, 6))
         val d = BannerGate.decide(tops, bots, policy)
-        assertFalse(d.cropTop)
-        assertFalse(d.cropBottom)
+        assertTrue(d.top.isEmpty())
+        assertTrue(d.bottom.isEmpty())
     }
 
     @Test
     fun testTooFewPagesKeep() {
         val tops = listOf(bannerStrip(64, 8), bannerStrip(64, 8))
         val d = BannerGate.decide(tops, emptyList(), policy)
-        assertFalse(d.cropTop)
-        assertFalse(d.cropBottom)
+        assertTrue(d.top.isEmpty())
+        assertTrue(d.bottom.isEmpty())
     }
 
     @Test
@@ -60,7 +60,7 @@ class BannerGateTest {
         val tops = listOf(bannerStrip(64, 8), bannerStrip(64, 8), bannerStrip(64, 8))
         val bots = listOf(artStrip(64, 8, 1), artStrip(64, 8, 2), artStrip(64, 8, 3))
         val d = BannerGate.decide(tops, bots, policy)
-        assertTrue(d.cropTop)
-        assertFalse(d.cropBottom)
+        assertTrue(d.top.isNotEmpty())
+        assertTrue(d.bottom.isEmpty())
     }
 }
