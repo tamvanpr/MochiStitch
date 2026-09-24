@@ -12,13 +12,20 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.InputStream
 import kotlin.math.max
-import kotlin.math.roundToInt
 
 /**
- * v5: susun halaman/segmen PENUH vertikal. Satu-satunya operasi adalah
+ * v6: susun halaman/segmen PENUH vertikal. Satu-satunya operasi adalah
  * skala proporsional ke lebar strip + tumpuk. Segmen halaman raksasa
  * memakai rect sumber eksplisit (hasil rencana potong aman); halaman biasa
- * digambar utuh (rect sumber null). Tidak ada crop di luar itu.
+ * digambar utuh. Tidak ada crop di luar itu.
+ *
+ * Rombak v6 vs v5:
+ * - Render per-placement via BitmapRegionDecoder (hanya rect sumber yang
+ *   didecode), bukan full-decode lalu crop. Ini menghilangkan dua sumber
+ *   "potong nyasar": (a) OOM pada halaman raksasa, (b) drift rounding
+ *   float sx/sy yang menggeser potongan 1-2px ke dalam tinta.
+ * - Partisi sumber dijamin eksak & menutup penuh (tanpa gap/duplikat);
+ *   sample dihitung per-region (≤16MP) sehingga garis tipis tidak lolos.
  */
 class StripRenderer(private val openStream: (Uri) -> InputStream?) {
 
@@ -30,6 +37,9 @@ class StripRenderer(private val openStream: (Uri) -> InputStream?) {
     data class Placement(val uri: Uri, val srcTop: Int = 0, val srcBottom: Int = -1)
 
     data class Placed(val uri: Uri, val src: Rect?, val dst: Rect)
+
+    /** Patch tepi beserta dimensinya (untuk uji seam yang benar). */
+    data class EdgePatch(val px: IntArray, val w: Int, val h: Int)
 
     fun measure(uri: Uri): Pair<Int, Int> {
         return try {
@@ -73,7 +83,15 @@ class StripRenderer(private val openStream: (Uri) -> InputStream?) {
      * (murah: region-decode, tanpa memuat seluruh gambar). Koordinat
      * dijepit ke [0, height]. null bila gagal.
      */
-    fun edgeStrip(uri: Uri, width: Int, height: Int, top: Int, bottom: Int): IntArray? {
+    fun edgeStrip(uri: Uri, width: Int, height: Int, top: Int, bottom: Int): IntArray? =
+        edgePatch(uri, width, height, top, bottom)?.px
+
+    /**
+     * v6: varian [edgeStrip] yang mengembalikan dimensi patch agar
+     * [SeamScan.seamContinues] bisa membandingkan baris seam yang
+     * bersebelahan (bukan interior-vs-interior).
+     */
+    fun edgePatch(uri: Uri, width: Int, height: Int, top: Int, bottom: Int): EdgePatch? {
         if (width <= 0 || height <= 0) return null
         val t = top.coerceIn(0, height)
         val b = bottom.coerceIn(0, height)
@@ -90,7 +108,7 @@ class StripRenderer(private val openStream: (Uri) -> InputStream?) {
                     try {
                         val out = IntArray(bmp.width * bmp.height)
                         bmp.getPixels(out, 0, bmp.width, 0, 0, bmp.width, bmp.height)
-                        out
+                        EdgePatch(out, bmp.width, bmp.height)
                     } finally {
                         try { bmp.recycle() } catch (t: Throwable) { }
                     }
@@ -121,7 +139,8 @@ class StripRenderer(private val openStream: (Uri) -> InputStream?) {
             val byUri = measured.associateBy { it.uri }
             val stripWidth = max(1, measured.maxOf { it.width })
             // dst dihitung dari tinggi sumber tiap placement agar konsisten
-            // dengan rencana pengelompokan di StripBuilder.
+            // dengan rencana pengelompokan di StripBuilder. Partisi eksak:
+            // clamp dulu, lalu pastikan menutup penuh tanpa overlap.
             val items = placements.map { p ->
                 val m = byUri.getValue(p.uri)
                 val top = p.srcTop.coerceIn(0, m.height)
@@ -135,34 +154,24 @@ class StripRenderer(private val openStream: (Uri) -> InputStream?) {
             val strip = Bitmap.createBitmap(stripWidth, stripHeight, Bitmap.Config.RGB_565)
             val canvas = Canvas(strip)
             canvas.drawColor(config.matte.colorInt)
-            val paint = Paint(Paint.FILTER_BITMAP_FLAG or Paint.ANTI_ALIAS_FLAG)
+            val paint = Paint(Paint.FILTER_BITMAP_FLAG)
 
             var y = 0
             items.forEachIndexed { i, (p, srcRect, dstH) ->
                 val m = byUri.getValue(p.uri)
-                val opts = BitmapFactory.Options().apply {
-                    inPreferredConfig = Bitmap.Config.RGB_565
-                    inSampleSize = budgetSample(m.width, m.height)
-                }
-                val src = openStream(p.uri)?.use { stream ->
-                    BitmapFactory.decodeStream(stream, null, opts)
-                }
-                if (src == null) {
+                // Region-decode TEPAT rect sumber (bukan full-decode + crop):
+                // tanpa drift float, tanpa OOM halaman raksasa.
+                val region = decodeRegion(p.uri, srcRect)
+                if (region == null) {
                     strip.recycle()
                     return@withContext Result.failure(IllegalStateException("Gagal decode: ${p.uri}"))
                 }
-                val sx = src.width.toFloat() / m.width.toFloat()
-                val sy = src.height.toFloat() / m.height.toFloat()
-                var rLeft = (srcRect.left * sx).roundToInt().coerceIn(0, src.width)
-                var rTop = (srcRect.top * sy).roundToInt().coerceIn(0, src.height)
-                var rRight = (srcRect.right * sx).roundToInt().coerceIn(0, src.width)
-                var rBottom = (srcRect.bottom * sy).roundToInt().coerceIn(0, src.height)
-                if (rRight <= rLeft) rRight = (rLeft + 1).coerceAtMost(src.width)
-                if (rBottom <= rTop) rBottom = (rTop + 1).coerceAtMost(src.height)
-                val srcDec = Rect(rLeft, rTop, rRight, rBottom)
-                val dst = Rect(0, y, stripWidth, y + dstH)
-                canvas.drawBitmap(src, srcDec, dst, paint)
-                src.recycle()
+                try {
+                    val dst = Rect(0, y, stripWidth, y + dstH)
+                    canvas.drawBitmap(region, null, dst, paint)
+                } finally {
+                    try { region.recycle() } catch (t: Throwable) { }
+                }
                 y += dstH
                 onProgress(0.1f + 0.8f * ((i + 1).toFloat() / items.size.toFloat()))
             }
@@ -173,8 +182,42 @@ class StripRenderer(private val openStream: (Uri) -> InputStream?) {
         }
     }
 
-    /** Sample agar decode ≤ ~16MP; downsample seragam tidak membuang konten. */
-    private fun budgetSample(w: Int, h: Int): Int {
+    /**
+     * Decode tepat [rect] (koordinat gambar asli) dengan sample per-region
+     * agar hasil ≤ ~16MP. Rect dijepit ke dimensi gambar; sample dipilih
+     * dari luas REGION, bukan luas gambar penuh.
+     */
+    private fun decodeRegion(uri: Uri, rect: Rect): Bitmap? {
+        return try {
+            openStream(uri)?.use { stream ->
+                val dec = BitmapRegionDecoder.newInstance(stream, false) ?: return null
+                try {
+                    val w = dec.width
+                    val h = dec.height
+                    val r = Rect(
+                        rect.left.coerceIn(0, w),
+                        rect.top.coerceIn(0, h),
+                        rect.right.coerceIn(0, w),
+                        rect.bottom.coerceIn(0, h)
+                    )
+                    if (r.width() <= 0 || r.height() <= 0) return null
+                    val sample = regionSample(r.width(), r.height())
+                    val opts = BitmapFactory.Options().apply {
+                        inPreferredConfig = Bitmap.Config.RGB_565
+                        inSampleSize = sample
+                    }
+                    dec.decodeRegion(r, opts)
+                } finally {
+                    try { dec.recycle() } catch (t: Throwable) { }
+                }
+            }
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    /** Sample agar decode REGION ≤ ~16MP. */
+    private fun regionSample(w: Int, h: Int): Int {
         var s = 1
         while ((w / s).toLong() * (h / s).toLong() > 16_000_000L) s *= 2
         return max(1, s)

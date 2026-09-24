@@ -32,9 +32,10 @@ enum class BuildPhase(val label: String) {
 }
 
 /**
- * Orkestrasi v5: ukur -> potong halaman raksasa di celah aman (baris
- * bebas-tepi; tanpa OpenCV/ML) -> kelompokkan dengan menahan pasangan
- * halaman yang bersambung piksel dalam satu berkas -> render -> tulis.
+ * Orkestrasi v6: ukur -> potong halaman raksasa di celah aman (paper-aware
+ * + cek vertikal + potong tengah; tanpa OpenCV/ML) -> kelompokkan dengan
+ * menahan pasangan halaman yang bersambung piksel dalam satu berkas ->
+ * render region-decode -> tulis.
  *
  * Jaminan: garis potong tidak pernah melintasi tinta (balon/panel/teks).
  * Halaman yang tak punya celah aman dibiarkan utuh + ditandai; batas
@@ -80,7 +81,7 @@ class StripBuilder(
             val limit = settings.maxStripHeight
             val wantCut = settings.splitRule == SplitRule.MAX_HEIGHT && limit > 0
 
-            // 1) Halaman raksasa -> segmen di celah aman.
+            // 1) Halaman raksasa -> segmen di celah aman (v6: vertikal+paper+tengah).
             val segs = mutableListOf<Seg>()
             measured.forEachIndexed { i, m ->
                 val renderedH = (m.height.toLong() * stripWidth / m.width.coerceAtLeast(1)).toInt().coerceAtLeast(1)
@@ -139,8 +140,10 @@ class StripBuilder(
 
     /**
      * Bagi satu halaman raksasa menjadi segmen-segmen ≤ [limit] (rendered)
-     * dengan garis potong di pusat celah baris bebas-tepi. Tanpa celah:
-     * kembalikan halaman utuh (ditandai tallSingle oleh grouper).
+     * dengan garis potong di TENGAH celah paper-aware (horizontal + vertikal).
+     * Tanpa celah: kembalikan halaman utuh (ditandai tallSingle oleh grouper).
+     *
+     * Partisi dijamin eksak: sTop[0]=0, sBot[last]=H, sBot[i]=sTop[i+1].
      */
     private fun segmentPage(
         order: Int,
@@ -160,18 +163,50 @@ class StripBuilder(
             if (dw <= 0 || dh <= 0) {
                 return listOf(Seg(m.uri, order, 0, m.height, renderedH))
             }
-            val safe = BooleanArray(dh)
+            // — Pindai v6: masker horizontal + vertikal + paper. —
+            val horiz = BooleanArray(dh)
             val chunk = 64
             val buf = IntArray(dw * chunk)
+            // Kumpulkan sampel baris untuk estimasi kertas.
+            val paperSamples = mutableListOf<IntArray>()
             var y = 0
             while (y < dh) {
                 val rows = min(chunk, dh - y)
                 bmp.getPixels(buf, 0, dw, 0, y, dw, rows)
                 for (r in 0 until rows) {
-                    safe[y + r] = SeamScan.rowIsSafe(buf, r * dw, dw)
+                    horiz[y + r] = SeamScan.rowIsSafe(buf, r * dw, dw)
+                    if (paperSamples.size < 24 && (y + r) % max(1, dh / 24) == 0) {
+                        paperSamples.add(buf.copyOfRange(r * dw, r * dw + dw))
+                    }
                 }
                 y += rows
             }
+            val paper = SeamScan.estimatePaper(paperSamples)
+            // Terapkan paper-aware: baris yang median-nya jauh dari kertas
+            // (mis. abu screentone pekat / tinta merata yang lolos cek
+            // horizontal) ditandai tidak aman.
+            y = 0
+            while (y < dh) {
+                val rows = min(chunk, dh - y)
+                bmp.getPixels(buf, 0, dw, 0, y, dw, rows)
+                for (r in 0 until rows) {
+                    if (horiz[y + r]) {
+                        horiz[y + r] = SeamScan.rowIsSafe(buf, r * dw, dw, paper)
+                    }
+                }
+                y += rows
+            }
+            // Masker vertikal: butuh akses baris acak — baca per baris via
+            // getPixels 1-baris (murah pada bitmap pindai ≤16MP).
+            val rowBuf = IntArray(dw)
+            val vert = SeamScan.rowsVertSafe(dw, dh) { yy, out ->
+                bmp.getPixels(out, 0, dw, 0, yy, dw, 1)
+            }
+            // Hindari alokasi ganda: pakai rowBuf agar lambda tidak
+            // mengalokasi sendiri (diabaikan, getPixels menulis ke out).
+            @Suppress("UNUSED_VARIABLE")
+            val keep = rowBuf
+            val safe = SeamScan.combineSafe(horiz, vert)
             // Batas ke koordinat decode.
             val f = stripWidth.toDouble() / m.width.toDouble()
             val ks = dh.toDouble() / m.height.toDouble()
@@ -183,17 +218,31 @@ class StripBuilder(
             if (plan.cuts.isEmpty() && !plan.tailSafe) {
                 return listOf(Seg(m.uri, order, 0, m.height, renderedH))
             }
-            val bounds = mutableListOf<Pair<Int, Int>>()
+            // — Partisi eksak dalam koordinat sumber (tanpa gap/duplikat). —
+            val dBounds = mutableListOf<Pair<Int, Int>>()
             var prev = 0
             for (c in plan.cuts) {
-                bounds.add(prev to c)
+                dBounds.add(prev to c)
                 prev = c
             }
-            bounds.add(prev to dh)
-            return bounds.map { (dTop, dBot) ->
+            dBounds.add(prev to dh)
+            val sBounds = dBounds.map { (dTop, dBot) ->
                 val sTop = (dTop.toDouble() / ks).roundToInt().coerceIn(0, m.height)
                 var sBot = (dBot.toDouble() / ks).roundToInt().coerceIn(0, m.height)
                 if (sBot <= sTop) sBot = min(m.height, sTop + 1)
+                sTop to sBot
+            }.toMutableList()
+            // Jahit batas agar sBot[i] == sTop[i+1], ujung menutup penuh.
+            for (i in sBounds.indices) {
+                val (t, b) = sBounds[i]
+                val nt = if (i == 0) 0 else sBounds[i - 1].second
+                val nb = if (i == sBounds.lastIndex) m.height else b
+                sBounds[i] = nt.coerceIn(0, m.height) to nb.coerceIn(0, m.height)
+            }
+            // Buang segmen degenerasi (tinggi 0) bila ada.
+            val clean = sBounds.filter { (t, b) -> b > t }
+            if (clean.isEmpty()) return listOf(Seg(m.uri, order, 0, m.height, renderedH))
+            return clean.map { (sTop, sBot) ->
                 val h = ((sBot - sTop).toLong() * stripWidth / m.width.coerceAtLeast(1)).toInt().coerceAtLeast(1)
                 Seg(m.uri, order, sTop, sBot, h)
             }
@@ -210,11 +259,12 @@ class StripBuilder(
         if (m.width.toLong() * m.height.toLong() <= 20_000_000L) 1 else 2
 
     /**
-     * Peta pasangan indeks-segmen berurutan yang bersambung piksel
-     * (tepi bawah segmen-a berlanjut ke tepi atas segmen-b). Segmen dari
-     * halaman yang sama dilewati: urutannya sudah pasti bersambung.
-     * Pasangan latar-datar-vs-datar TIDAK dihitung bersambung (margin
-     * putih bertemu margin putih bukan alasan menggabung berkas).
+     * v6: peta pasangan indeks-segmen berurutan yang bersambung piksel.
+     * Hanya baris-baris SEAM yang dibandingkan (bawah-segmen-a vs
+     * atas-segmen-b) via [SeamScan.seamContinues]. Segmen dari halaman yang
+     * sama dilewati: urutannya sudah pasti bersambung. Pasangan
+     * latar-datar-vs-datar TIDAK dihitung bersambung (margin putih bertemu
+     * margin putih bukan alasan menggabung berkas).
      */
     private fun continuityMap(
         segs: List<Seg>,
@@ -228,10 +278,12 @@ class StripBuilder(
             val ma = byOrder[a.order] ?: continue
             val mb = byOrder[b.order] ?: continue
             val r = 48
-            val bottom = renderer.edgeStrip(a.uri, ma.width, ma.height, a.srcBottom - r, a.srcBottom) ?: continue
-            val top = renderer.edgeStrip(b.uri, mb.width, mb.height, b.srcTop, b.srcTop + r) ?: continue
-            if (!SeamScan.hasContent(bottom) && !SeamScan.hasContent(top)) continue
-            if (SeamScan.rowsContinue(bottom, top)) out.add(i to i + 1)
+            val bottom = renderer.edgePatch(a.uri, ma.width, ma.height, a.srcBottom - r, a.srcBottom) ?: continue
+            val top = renderer.edgePatch(b.uri, mb.width, mb.height, b.srcTop, b.srcTop + r) ?: continue
+            if (!SeamScan.hasContent(bottom.px) && !SeamScan.hasContent(top.px)) continue
+            if (SeamScan.seamContinues(bottom.px, bottom.w, bottom.h, top.px, top.w, top.h)) {
+                out.add(i to i + 1)
+            }
         }
         return out
     }
