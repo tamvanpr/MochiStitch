@@ -193,14 +193,37 @@ object RawContract {
     fun parsePages(body: String): ChapterPages {
         val root = checkError(RawJson.parse(body))
         val items = root.arr("images").orEmpty()
-        val pages = items.mapIndexedNotNull { idx, item ->
+        val all = items.mapIndexedNotNull { idx, item ->
             val url = item.str("url")
             if (url.isBlank()) null
-            else PageRef(page = item.int("page", idx + 1), url = url)
+            else PageRef(
+                page = item.int("page", idx + 1),
+                url = url,
+                width = item.int("width"),
+                height = item.int("height")
+            )
         }.sortedBy { it.page }
+        // Banner UTUH (bukan strip): pendek melebar, mis. 800x200.
+        // Dibuang via metadata tanpa mengunduh. Pengaman: jangan sampai
+        // semua halaman terbuang (metadata ngaco -> biarkan lolos).
+        val kept = all.filterNot { isFullBanner(it) }
+        val pages = if (kept.isNotEmpty()) kept else all
         val title = root.str("chapter_title").ifBlank {
             root.str("comic_title").ifBlank { root.str("page_title", "Unduhan") }
         }
-        return ChapterPages(source = root.str("source"), title = title, pages = pages)
+        return ChapterPages(
+            source = root.str("source"),
+            title = title,
+            pages = pages,
+            droppedBanners = all.size - pages.size
+        )
     }
+
+    /**
+     * Gambar banner utuh: tinggi ≤ 220px DAN lebih lebar daripada tinggi
+     * (halaman komik selalu tinggi-melebar ke bawah). Butuh metadata
+     * width+height; tanpa metadata tidak ditandai (arah aman).
+     */
+    fun isFullBanner(p: PageRef): Boolean =
+        p.width > 0 && p.height > 0 && p.height <= 220 && p.width > p.height
 }

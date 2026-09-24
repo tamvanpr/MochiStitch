@@ -1,5 +1,7 @@
 package com.mochistitch.core.download
 
+import com.mochistitch.core.common.BannerPolicy
+
 /** Kelompok sumber: ID (fase 1) dan EN (fase berikutnya, struktur siap). */
 enum class SourceGroup { ID, EN }
 
@@ -16,7 +18,9 @@ data class SourceDef(
     val chapterRx: List<Regex>,
     val seriesRx: List<Regex>,
     /** Tanpa endpoint search di worker (mis. manwa) — hanya tempel URL. */
-    val searchable: Boolean = true
+    val searchable: Boolean = true,
+    /** Strip banner bawaan sumber (null = tidak ada). */
+    val banner: BannerPolicy? = null
 )
 
 /** Hasil series dari `?action=search`. */
@@ -35,13 +39,15 @@ data class ChapterHit(
 )
 
 /** Satu halaman dari resolve chapter (kontrak minimal: page + url). */
-data class PageRef(val page: Int, val url: String)
+data class PageRef(val page: Int, val url: String, val width: Int = 0, val height: Int = 0)
 
 /** Hasil resolve chapter: judul + daftar gambar berurutan. */
 data class ChapterPages(
     val source: String,
     val title: String,
-    val pages: List<PageRef>
+    val pages: List<PageRef>,
+    /** Gambar banner utuh yang dibuang via metadata (tanpa unduh). */
+    val droppedBanners: Int = 0
 )
 
 enum class UrlKind { SERIES, CHAPTER, UNKNOWN }
@@ -55,7 +61,8 @@ object RawSources {
         ),
         seriesRx = listOf(
             Regex("""^https?://(?:www\.)?(?:baozimh\.com|twmanga\.com)/comic/([^/?#]+)/?(?:[?#].*)?$""", RegexOption.IGNORE_CASE)
-        )
+        ),
+        banner = BannerPolicy()
     )
 
     val WMANHUA = SourceDef(
@@ -114,6 +121,8 @@ object RawSources {
 
     /** Fase 1: sumber ID. EN menyusul (kontrak JSON identik). */
     val ALL_ID: List<SourceDef> = listOf(BAOZIMH, WMANHUA, JJABTOON, KOUDAIMH, JJAPTOON, GOODTOON, MANWA)
+
+    fun byId(id: String): SourceDef? = ALL_ID.firstOrNull { it.id == id }
 
     /**
      * Kenali tempelan URL sebagai (sumber, SERIES/CHAPTER). Chapter diperiksa

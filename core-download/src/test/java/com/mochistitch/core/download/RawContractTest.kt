@@ -100,6 +100,30 @@ class RawContractTest {
     }
 
     @Test
+    fun testParsePagesDropsFullBanners() {
+        // Banner utuh 800x200 + 2 halaman normal: banner dibuang via metadata.
+        val body = """{"source":"baozimh","chapter_title":"Ch. 1","total_images":3,
+            |"images":[{"page":1,"url":"https://c/b.jpg","width":800,"height":200},
+            |{"page":2,"url":"https://c/2.jpg","width":800,"height":1200},
+            |{"page":3,"url":"https://c/3.jpg","width":800,"height":1150}]}""".trimMargin()
+        val got = RawContract.parsePages(body)
+        assertEquals(2, got.pages.size)
+        assertEquals(1, got.droppedBanners)
+        assertEquals("https://c/2.jpg", got.pages[0].url)
+    }
+
+    @Test
+    fun testParsePagesNeverDropsAll() {
+        // Metadata ngaco (semua terbaca banner) -> biarkan lolos semua.
+        val body = """{"source":"x","total_images":2,
+            |"images":[{"page":1,"url":"https://c/1.jpg","width":800,"height":200},
+            |{"page":2,"url":"https://c/2.jpg","width":700,"height":180}]}""".trimMargin()
+        val got = RawContract.parsePages(body)
+        assertEquals(2, got.pages.size)
+        assertEquals(0, got.droppedBanners)
+    }
+
+    @Test
     fun testResolveUrlShape() {
         val api = WorkerDownloadApi("https://worker.example.workers.dev")
         val u = api.resolveUrl("https://www.baozimh.com/comic/x/", "https://www.baozimh.com/")

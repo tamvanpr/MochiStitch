@@ -27,6 +27,7 @@ android {
 }
 
 dependencies {
+    implementation(project(":core-common"))
     implementation(libs.androidx.core.ktx)
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
     testImplementation(libs.junit)

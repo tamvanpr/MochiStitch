@@ -45,7 +45,9 @@ flag tinjau.
   findBands/planCuts-tengah/seamContinues, murni array, unit-testable),
   PageGrouper (pinning + hardCap + seamCut), StripRenderer (Placement
   src-rect; decodeSampled; edgePatch region; renderStrip region-decode),
-  StripBuilder (pindai vertikal + continuityMap seam + partisi eksak),
+  StripBuilder (pindai vertikal + continuityMap seam + partisi eksak +
+  crop banner via BannerGate: strip 200px atas/bawah dicrop HANYA bila
+  identik antar-halaman minimal 3, halaman pendek dilewati), BannerGate,
   FileNamer. Preview hasil diskalakan ke <=2048px.
 - `core-settings/` — DataStore; tanpa smartCut/strictness/paper/fit
 - `core-ui/` — tema M3, PageStrip (thumb Fit), SettingsPanel,
@@ -55,11 +57,13 @@ flag tinjau.
   ke disk, satu folder unik per impor
 - `core-download/` — unduhan mentah fase 1 via worker Trial Fetch (tanpa
   dependensi baru; HttpURLConnection + parser JSON mini): RawSources
-  (7 sumber ID + classifier series/chapter), RawContract (3 bentuk JSON:
-  search/chapters/images, kontrak minimal page+url), WorkerDownloadApi,
-  PageDownloader (streaming, konkurensi 3, retry 2x, Referer = chapter).
-  Bytes langsung dari CDN (hemat rate limit worker); hasil otomatis
-  shelve() ke antrean. Butuh izin INTERNET + workerUrl di Setelan.
+  (7 sumber ID + classifier series/chapter + BannerPolicy per sumber),
+  RawContract (3 bentuk JSON + buang banner utuh via metadata w/h),
+  WorkerDownloadApi, PageDownloader (streaming, konkurensi 3, retry 2x,
+  Referer = chapter). Bytes langsung dari CDN (hemat rate limit worker);
+  hasil otomatis shelve() ke antrean. Butuh izin INTERNET + workerUrl
+  di Setelan.
+- `core-common/` — ComicProject (+sourceId unduhan), BannerPolicy.
 - `core-common/` — ComicProject (antrean batch; halaman disinkronkan saat rakit)
 
 ## Aturan Penting

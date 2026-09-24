@@ -71,7 +71,8 @@ data class StudioState(
     val batchOutcomes: List<PublishedFile> = emptyList(),
     /** Hasil resolve series mentah: dipilih chapter-nya sebelum diunduh. */
     val rawChapters: List<ChapterHit> = emptyList(),
-    val rawSourceLabel: String? = null
+    val rawSourceLabel: String? = null,
+    val rawSourceId: String? = null
 )
 
 class StudioViewModel : ViewModel() {
@@ -132,7 +133,7 @@ class StudioViewModel : ViewModel() {
     }
 
     fun clearRawChapters() {
-        _state.update { it.copy(rawChapters = emptyList(), rawSourceLabel = null) }
+        _state.update { it.copy(rawChapters = emptyList(), rawSourceLabel = null, rawSourceId = null) }
     }
 
     // ── Antrean ─────────────────────────────────────────────────────
@@ -166,11 +167,12 @@ class StudioViewModel : ViewModel() {
         }
     }
 
-    private fun shelve(origin: String, items: List<PageItem>) {
+    private fun shelve(origin: String, items: List<PageItem>, sourceId: String? = null) {
         val comic = ComicProject(
             origin = origin.ifBlank { "Komik ${System.currentTimeMillis()}" },
             pageUris = items.map { it.uri },
-            pageNames = items.map { it.title }
+            pageNames = items.map { it.title },
+            sourceId = sourceId
         )
         _state.update { s ->
             s.copy(comics = s.comics + comic, activeComicId = comic.id, activeOrigin = comic.origin)
@@ -289,6 +291,7 @@ class StudioViewModel : ViewModel() {
             return
         }
         if (kind == UrlKind.CHAPTER) {
+            _state.update { it.copy(rawSourceId = source.id) }
             fetchChapterPick(ChapterHit(id = url, title = url, url = url), context)
             return
         }
@@ -299,7 +302,7 @@ class StudioViewModel : ViewModel() {
                 if (chapters.isEmpty()) {
                     _state.update { it.copy(busy = false, failure = "Tidak ada chapter di: $url") }
                 } else {
-                    _state.update { it.copy(busy = false, rawChapters = chapters, rawSourceLabel = source.label) }
+                    _state.update { it.copy(busy = false, rawChapters = chapters, rawSourceLabel = source.label, rawSourceId = source.id) }
                 }
             } catch (e: Throwable) {
                 _state.update { it.copy(busy = false, failure = dlMessage(e)) }
@@ -349,10 +352,11 @@ class StudioViewModel : ViewModel() {
                     return@launch
                 }
                 val items = out.ok.map { file -> PageItem(uri = Uri.fromFile(file), title = file.name) }
-                shelve(title, items)
+                shelve(title, items, _state.value.rawSourceId)
                 val warn = if (out.failed.isEmpty()) "" else " (${out.failed.size} gagal)"
+                val dropped = if (resolved.droppedBanners > 0) " (${resolved.droppedBanners} banner dilewati)" else ""
                 _state.update { s ->
-                    s.copy(busy = false, pages = items, screen = StudioScreen.INPUT, notice = "$title: ${items.size} halaman diunduh$warn, masuk antrean.")
+                    s.copy(busy = false, pages = items, screen = StudioScreen.INPUT, notice = "$title: ${items.size} halaman diunduh$warn$dropped, masuk antrean.")
                 }
             } catch (e: Throwable) {
                 _state.update { it.copy(busy = false, failure = dlMessage(e)) }
@@ -427,10 +431,14 @@ class StudioViewModel : ViewModel() {
         viewModelScope.launch {
             try {
                 val settings = _state.value.settings
+                val banner = _state.value.comics
+                    .firstOrNull { it.id == _state.value.activeComicId }
+                    ?.sourceId?.let { RawSources.byId(it)?.banner }
                 val done = StripBuilder(context).build(
                     uris = _state.value.pages.map { it.uri },
                     settings = settings,
-                    onProgress = { phase, p -> _state.update { it.copy(phase = phase.label, fraction = p) } }
+                    onProgress = { phase, p -> _state.update { it.copy(phase = phase.label, fraction = p) } },
+                    banner = banner
                 ).getOrThrow()
                 val slices = done.map { strip ->
                     SliceInfo(
@@ -445,7 +453,14 @@ class StudioViewModel : ViewModel() {
                         bytes = strip.bytes
                     )
                 }
-                _state.update { it.copy(busy = false, slices = slices, screen = StudioScreen.RESULT) }
+                _state.update {
+                    it.copy(
+                        busy = false,
+                        slices = slices,
+                        screen = StudioScreen.RESULT,
+                        notice = if (done.any { strip -> strip.bannerCut }) "Banner situs dicrop otomatis (strip 200px yang identik di semua halaman)." else null
+                    )
+                }
             } catch (e: Throwable) {
                 val oom = e is OutOfMemoryError || (e.message?.contains("OutOfMemory", ignoreCase = true) == true)
                 _state.update { it.copy(busy = false, failure = if (oom) "Memori tidak cukup." else (e.message ?: "Gagal merakit.")) }
@@ -523,12 +538,14 @@ class StudioViewModel : ViewModel() {
                     s.copy(phase = "${comic.origin} (${pi + 1}/${comics.size})", fraction = pi.toFloat() / comics.size.toFloat())
                 }
                 val pack = comic.packFor(base.packFormat)
+                val banner = comic.sourceId?.let { RawSources.byId(it)?.banner }
                 var built: List<BuiltStrip> = emptyList()
                 try {
                     built = StripBuilder(context).build(
                         uris = comic.pageUris,
                         settings = base,
-                        onProgress = { _, p -> _state.update { it.copy(fraction = (pi + p) / comics.size.toFloat()) } }
+                        onProgress = { _, p -> _state.update { it.copy(fraction = (pi + p) / comics.size.toFloat()) } },
+                        banner = banner
                     ).getOrThrow()
                     val info = writeOut(
                         context = context,

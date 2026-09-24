@@ -3,6 +3,7 @@ package com.mochistitch.core.imaging
 import android.content.Context
 import android.graphics.Bitmap
 import android.net.Uri
+import com.mochistitch.core.common.BannerPolicy
 import com.mochistitch.core.settings.SplitRule
 import com.mochistitch.core.settings.StitchSettings
 import kotlinx.coroutines.Dispatchers
@@ -23,7 +24,9 @@ data class BuiltStrip(
     val height: Int,
     val flagged: Boolean = false,
     val flagReason: String? = null,
-    val bytes: Long = 0L
+    val bytes: Long = 0L,
+    /** Strip banner situs dicrop di berkas ini (info, bukan peringatan). */
+    val bannerCut: Boolean = false
 )
 
 enum class BuildPhase(val label: String) {
@@ -58,13 +61,15 @@ class StripBuilder(
         val order: Int,
         val srcTop: Int,
         val srcBottom: Int,
-        val renderedH: Int
+        val renderedH: Int,
+        val bannerCut: Boolean = false
     )
 
     suspend fun build(
         uris: List<Uri>,
         settings: StitchSettings,
-        onProgress: (BuildPhase, Float) -> Unit = { _, _ -> }
+        onProgress: (BuildPhase, Float) -> Unit = { _, _ -> },
+        banner: BannerPolicy? = null
     ): Result<List<BuiltStrip>> = withContext(Dispatchers.IO) {
         if (uris.isEmpty()) return@withContext Result.failure(IllegalArgumentException("Tidak ada gambar."))
         try {
@@ -81,14 +86,23 @@ class StripBuilder(
             val limit = settings.maxStripHeight
             val wantCut = settings.splitRule == SplitRule.MAX_HEIGHT && limit > 0
 
+            // 0) Banner situs (mis. baozimh 200px): crop HANYA bila strip
+            // atas/bawah terbukti identik antar-halaman (gerbang BannerGate).
+            val bannerCrops = bannerCrops(measured, banner)
+
             // 1) Halaman raksasa -> segmen di celah aman (v6: vertikal+paper+tengah).
             val segs = mutableListOf<Seg>()
             measured.forEachIndexed { i, m ->
-                val renderedH = (m.height.toLong() * stripWidth / m.width.coerceAtLeast(1)).toInt().coerceAtLeast(1)
+                val (cutTop, cutBot) = bannerCrops[i] ?: (0 to 0)
+                val effTop = cutTop.coerceIn(0, m.height)
+                val effBot = (m.height - cutBot).coerceIn(effTop + 1, m.height)
+                val effH = (effBot - effTop).coerceAtLeast(1)
+                val renderedH = (effH.toLong() * stripWidth / m.width.coerceAtLeast(1)).toInt().coerceAtLeast(1)
+                val wasCut = effTop > 0 || effBot < m.height
                 if (wantCut && renderedH > limit) {
-                    segs.addAll(segmentPage(i, m, stripWidth, limit))
+                    segs.addAll(segmentPage(i, m, stripWidth, limit, effTop, effBot, wasCut))
                 } else {
-                    segs.add(Seg(m.uri, i, 0, m.height, renderedH))
+                    segs.add(Seg(m.uri, i, effTop, effBot, renderedH, wasCut))
                 }
             }
 
@@ -118,6 +132,7 @@ class StripBuilder(
                 }
                 val whole = renderer.renderStrip(placements, config).getOrThrow()
 
+                val anyBanner = bundle.sheets.any { sheet -> segs[sheet.order].bannerCut }
                 val flagged = bundle.tallSingle || bundle.seamCut
                 val reason = when {
                     bundle.tallSingle -> "Melebihi batas ${settings.maxStripHeight}px dan tak ada celah aman — dibiarkan utuh, tangani manual"
@@ -127,7 +142,8 @@ class StripBuilder(
                 strips.add(
                     store(
                         bitmap = whole, number = number++, series = series, chapter = chapter,
-                        settings = settings, config = config, flagged = flagged, flagReason = reason
+                        settings = settings, config = config, flagged = flagged, flagReason = reason,
+                        bannerCut = anyBanner
                     )
                 )
             }
@@ -139,21 +155,65 @@ class StripBuilder(
     }
 
     /**
+     * Kebijakan banner -> crop (topCut, bottomCut) per indeks halaman,
+     * dalam piksel gambar asli. Halaman pendek dilewati; tanpa keputusan
+     * bulat BannerGate tidak ada yang dicrop (arah aman).
+     */
+    private fun bannerCrops(
+        measured: List<StripRenderer.Measured>,
+        policy: BannerPolicy?
+    ): Map<Int, Pair<Int, Int>> {
+        if (policy == null || measured.isEmpty()) return emptyMap()
+        val tall = measured.filter { it.height >= max(policy.minPageH, policy.stripPx * 2 + 100) }
+        if (tall.size < policy.minPages.coerceAtLeast(2)) return emptyMap()
+        fun strip(m: StripRenderer.Measured, top: Boolean): BannerGate.Strip? {
+            val h = policy.stripPx.coerceIn(1, m.height)
+            val patch = if (top) {
+                renderer.edgePatch(m.uri, m.width, m.height, 0, h)
+            } else {
+                renderer.edgePatch(m.uri, m.width, m.height, m.height - h, m.height)
+            } ?: return null
+            if (patch.h <= 0 || patch.w <= 0) return null
+            return BannerGate.Strip(patch.px, patch.w, patch.h)
+        }
+        val tops = tall.mapNotNull { strip(it, top = true) }
+        val bots = tall.mapNotNull { strip(it, top = false) }
+        // Keputusan butuh strip dari SEMUA halaman kandidat yang cukup.
+        if (tops.size < policy.minPages.coerceAtLeast(2) && policy.checkTop) return emptyMap()
+        if (bots.size < policy.minPages.coerceAtLeast(2) && policy.checkBottom) {
+            if (!policy.checkTop || tops.size < policy.minPages.coerceAtLeast(2)) return emptyMap()
+        }
+        val decision = BannerGate.decide(tops, bots, policy)
+        if (!decision.cropTop && !decision.cropBottom) return emptyMap()
+        val tallIdx = tall.map { measured.indexOf(it) }.toSet()
+        return measured.indices.associateWith { i ->
+            if (!tallIdx.contains(i)) 0 to 0
+            else (if (decision.cropTop) policy.stripPx else 0) to (if (decision.cropBottom) policy.stripPx else 0)
+        }.filterValues { (a, b) -> a > 0 || b > 0 }
+    }
+
+    /**
      * Bagi satu halaman raksasa menjadi segmen-segmen ≤ [limit] (rendered)
      * dengan garis potong di TENGAH celah paper-aware (horizontal + vertikal).
+     * Rentang sumber dibatasi [effTop, effBot) (sesudah crop banner).
      * Tanpa celah: kembalikan halaman utuh (ditandai tallSingle oleh grouper).
      *
-     * Partisi dijamin eksak: sTop[0]=0, sBot[last]=H, sBot[i]=sTop[i+1].
+     * Partisi dijamin eksak: sTop[0]=effTop, sBot[last]=effBot,
+     * sBot[i]=sTop[i+1].
      */
     private fun segmentPage(
         order: Int,
         m: StripRenderer.Measured,
         stripWidth: Int,
-        limit: Int
+        limit: Int,
+        effTop: Int,
+        effBot: Int,
+        wasCut: Boolean
     ): List<Seg> {
-        val renderedH = (m.height.toLong() * stripWidth / m.width.coerceAtLeast(1)).toInt().coerceAtLeast(1)
+        val effH = (effBot - effTop).coerceAtLeast(1)
+        val renderedH = (effH.toLong() * stripWidth / m.width.coerceAtLeast(1)).toInt().coerceAtLeast(1)
         if (renderedH <= limit) {
-            return listOf(Seg(m.uri, order, 0, m.height, renderedH))
+            return listOf(Seg(m.uri, order, effTop, effBot, renderedH, wasCut))
         }
         val bmp = renderer.decodeSampled(m.uri, maxPixels = 16_000_000L, maxSample = scanSample(m))
             ?: return listOf(Seg(m.uri, order, 0, m.height, renderedH))
@@ -207,44 +267,50 @@ class StripBuilder(
             @Suppress("UNUSED_VARIABLE")
             val keep = rowBuf
             val safe = SeamScan.combineSafe(horiz, vert)
-            // Batas ke koordinat decode.
+            // Batas ke koordinat decode; rencana potong hanya di jendela
+            // efektif [effTop, effBot) (sesudah crop banner).
             val f = stripWidth.toDouble() / m.width.toDouble()
             val ks = dh.toDouble() / m.height.toDouble()
+            val eTopDec = (effTop.toDouble() * ks).roundToInt().coerceIn(0, dh)
+            val eBotDec = (effBot.toDouble() * ks).roundToInt().coerceIn(eTopDec + 1, dh)
             val limitDec = (limit.toDouble() / f * ks).toInt().coerceAtLeast(8)
             // Boleh lewat batas sedikit demi celah aman: lebih baik berkas
             // sedikit lebih tinggi daripada memotong tinta atau halaman utuh.
             val overflowDec = (limitDec / 5).coerceIn(128, 2500)
-            val plan = SeamScan.planCuts(safe, limitDec, overflow = overflowDec)
+            val window = safe.copyOfRange(eTopDec, eBotDec)
+            val plan = SeamScan.planCuts(window, limitDec, overflow = overflowDec)
             if (plan.cuts.isEmpty() && !plan.tailSafe) {
-                return listOf(Seg(m.uri, order, 0, m.height, renderedH))
+                return listOf(Seg(m.uri, order, effTop, effBot, renderedH, wasCut))
             }
             // — Partisi eksak dalam koordinat sumber (tanpa gap/duplikat). —
             val dBounds = mutableListOf<Pair<Int, Int>>()
-            var prev = 0
+            var prev = eTopDec
             for (c in plan.cuts) {
-                dBounds.add(prev to c)
-                prev = c
+                val cc = (c + eTopDec).coerceIn(eTopDec + 1, eBotDec)
+                if (cc <= prev) return listOf(Seg(m.uri, order, effTop, effBot, renderedH, wasCut))
+                dBounds.add(prev to cc)
+                prev = cc
             }
-            dBounds.add(prev to dh)
+            dBounds.add(prev to eBotDec)
             val sBounds = dBounds.map { (dTop, dBot) ->
-                val sTop = (dTop.toDouble() / ks).roundToInt().coerceIn(0, m.height)
-                var sBot = (dBot.toDouble() / ks).roundToInt().coerceIn(0, m.height)
-                if (sBot <= sTop) sBot = min(m.height, sTop + 1)
+                val sTop = (dTop.toDouble() / ks).roundToInt().coerceIn(effTop, effBot)
+                var sBot = (dBot.toDouble() / ks).roundToInt().coerceIn(effTop, effBot)
+                if (sBot <= sTop) sBot = min(effBot, sTop + 1)
                 sTop to sBot
             }.toMutableList()
             // Jahit batas agar sBot[i] == sTop[i+1], ujung menutup penuh.
             for (i in sBounds.indices) {
                 val (t, b) = sBounds[i]
-                val nt = if (i == 0) 0 else sBounds[i - 1].second
-                val nb = if (i == sBounds.lastIndex) m.height else b
-                sBounds[i] = nt.coerceIn(0, m.height) to nb.coerceIn(0, m.height)
+                val nt = if (i == 0) effTop else sBounds[i - 1].second
+                val nb = if (i == sBounds.lastIndex) effBot else b
+                sBounds[i] = nt.coerceIn(effTop, effBot) to nb.coerceIn(effTop, effBot)
             }
             // Buang segmen degenerasi (tinggi 0) bila ada.
             val clean = sBounds.filter { (t, b) -> b > t }
-            if (clean.isEmpty()) return listOf(Seg(m.uri, order, 0, m.height, renderedH))
+            if (clean.isEmpty()) return listOf(Seg(m.uri, order, effTop, effBot, renderedH, wasCut))
             return clean.map { (sTop, sBot) ->
                 val h = ((sBot - sTop).toLong() * stripWidth / m.width.coerceAtLeast(1)).toInt().coerceAtLeast(1)
-                Seg(m.uri, order, sTop, sBot, h)
+                Seg(m.uri, order, sTop, sBot, h, wasCut)
             }
         } finally {
             try { bmp.recycle() } catch (t: Throwable) { }
@@ -296,7 +362,8 @@ class StripBuilder(
         settings: StitchSettings,
         config: StripConfig,
         flagged: Boolean,
-        flagReason: String?
+        flagReason: String?,
+        bannerCut: Boolean = false
     ): BuiltStrip {
         val ext = FileNamer.extensionOf(settings.imageFormat)
         val stem = FileNamer.numbered(settings.namePattern, series, chapter, number, settings.numberWidth, settings.imageFormat)
@@ -326,7 +393,8 @@ class StripBuilder(
             height = fullHeight,
             flagged = flagged,
             flagReason = flagReason,
-            bytes = final.length()
+            bytes = final.length(),
+            bannerCut = bannerCut
         )
     }
 
