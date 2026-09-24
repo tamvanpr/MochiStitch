@@ -65,7 +65,7 @@ class SeamScanTest {
         val white = whiteRow(w)
         val black = IntArray(w) { 0xFF000000.toInt() }
         val rows = listOf(white, white, black, black)
-        val vert = SeamScan.rowsVertSafe(w, 4) { y, out -> rows[y].copyInto(out) }
+        val vert = SeamScan.rowsVertSafe(w, 4, getRow = { y, out -> rows[y].copyInto(out) })
         // Tepi antara baris 1 dan 2 harus menandai keduanya tidak aman.
         assertTrue(vert[0])
         assertFalse(vert[1])

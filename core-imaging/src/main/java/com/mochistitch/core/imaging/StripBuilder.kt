@@ -199,9 +199,9 @@ class StripBuilder(
             // Masker vertikal: butuh akses baris acak — baca per baris via
             // getPixels 1-baris (murah pada bitmap pindai ≤16MP).
             val rowBuf = IntArray(dw)
-            val vert = SeamScan.rowsVertSafe(dw, dh) { yy, out ->
+            val vert = SeamScan.rowsVertSafe(dw, dh, getRow = { yy, out ->
                 bmp.getPixels(out, 0, dw, 0, yy, dw, 1)
-            }
+            })
             // Hindari alokasi ganda: pakai rowBuf agar lambda tidak
             // mengalokasi sendiri (diabaikan, getPixels menulis ke out).
             @Suppress("UNUSED_VARIABLE")
