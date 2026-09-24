@@ -94,17 +94,16 @@ class StripBuilder(
             // 0) Banner situs + ketegasan potong: buat BannerPolicy dari
             // settings (aplikasi bisa dipakai untuk semua sumber).
             val policy = if (settings.enableBannerCut) {
-                val (minP, minBand, overflow, margin) = when (settings.cutStrictness) {
-                    CutStrictness.LOOSE    -> Triple(4, 8, 0, 2)
-                    CutStrictness.BALANCED -> Triple(8, 16, 512, 4)
-                    CutStrictness.STRICT   -> Triple(16, 32, 1024, 8)
+                val p = when (settings.cutStrictness) {
+                    CutStrictness.LOOSE    -> Triple(4, 8, 2)
+                    CutStrictness.BALANCED -> Triple(8, 16, 4)
+                    CutStrictness.STRICT   -> Triple(16, 32, 8)
                 }
                 BannerPolicy(
                     stripPx = 200,
-                    minPages = minP,
-                    minBand = minBand,
-                    overflow = overflow,
-                    margin = margin
+                    minPages = p.first,
+                    minBand = p.second,
+                    margin = p.third
                 )
             } else null
             val bannerResult = bannerCrops(measured, policy, bannerTemplateBitmaps)
