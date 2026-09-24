@@ -95,15 +95,14 @@ class StripBuilder(
             // settings (aplikasi bisa dipakai untuk semua sumber).
             val policy = if (settings.enableBannerCut) {
                 val p = when (settings.cutStrictness) {
-                    CutStrictness.LOOSE    -> Triple(4, 8, 2)
-                    CutStrictness.BALANCED -> Triple(8, 16, 4)
-                    CutStrictness.STRICT   -> Triple(16, 32, 8)
+                    CutStrictness.LOOSE    -> Triple(4, 3, 0.97)
+                    CutStrictness.BALANCED -> Triple(8, 3, 0.97)
+                    CutStrictness.STRICT   -> Triple(16, 3, 0.97)
                 }
                 BannerPolicy(
                     stripPx = 200,
-                    minPages = p.first,
-                    minBand = p.second,
-                    margin = p.third
+                    minPages = p.first.coerceAtLeast(2),
+                    minFrac = p.third
                 )
             } else null
             val bannerResult = bannerCrops(measured, policy, bannerTemplateBitmaps)
