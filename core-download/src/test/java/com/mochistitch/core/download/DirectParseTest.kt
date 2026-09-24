@@ -118,9 +118,10 @@ class DirectParseTest {
         val iv = ByteArray(16) { i -> (i + 3).toByte() }
         val enc = RawCrypto.aesCbcEncrypt(k, iv, fake)
         // Jalur produksi memakai IV = key: verifikasi vektor tetap itu.
+        // (64 byte + 1 blok padding PKCS5 = 80 byte terenkripsi.)
         val enc2 = RawCrypto.aesCbcEncrypt(k, k, fake)
         assertEquals(fake.toList(), RawCrypto.decryptManwaImage(enc2).toList())
-        assertEquals(64, enc.size)
+        assertEquals(80, enc.size)
     }
 
     // ── EN ──────────────────────────────────────────────────────
@@ -236,7 +237,7 @@ class DirectParseTest {
         val noRef = RawSources.imageHeaders("koudaimh", "https://abc.shimolife.com/x.jpg", "https://m.koudaimh.com/manhua/a/1.html")
         assertTrue(noRef.none { it.key.equals("Referer", ignoreCase = true) })
         val ref = RawSources.imageHeaders("baozimh", "https://cdn/x.jpg", "https://www.baozimh.com/comic/chapter/a/1.html")
-        assertEquals("https://www.baozimh.com/comic/chapter/a/1.html", ref["Referer"])
+        assertEquals("https://appgb.baozimh.com/", ref["Referer"])
     }
 
     @Test
