@@ -100,14 +100,17 @@ class StudioViewModel : ViewModel() {
             for (name in names) {
                 try {
                     context.assets.open("banners/$name").use { inp ->
-                        val bmp = BitmapFactory.decodeStream(inp) ?: continue
-                        try {
-                            if (bmp.width <= 0 || bmp.height <= 0) return@use
-                            val px = IntArray(bmp.width * bmp.height)
-                            bmp.getPixels(px, 0, bmp.width, 0, 0, bmp.width, bmp.height)
-                            out.add(BannerTemplate.Sig(BannerTemplate.downscale(px, bmp.width, bmp.height)))
-                        } finally {
-                            try { bmp.recycle() } catch (t: Throwable) { }
+                        val bmp = BitmapFactory.decodeStream(inp)
+                        if (bmp != null) {
+                            try {
+                                if (bmp.width > 0 && bmp.height > 0) {
+                                    val px = IntArray(bmp.width * bmp.height)
+                                    bmp.getPixels(px, 0, bmp.width, 0, 0, bmp.width, bmp.height)
+                                    out.add(BannerTemplate.Sig(BannerTemplate.downscale(px, bmp.width, bmp.height)))
+                                }
+                            } finally {
+                                try { bmp.recycle() } catch (t: Throwable) { }
+                            }
                         }
                     }
                 } catch (t: Throwable) { /* satu template rusak: lewati */ }
