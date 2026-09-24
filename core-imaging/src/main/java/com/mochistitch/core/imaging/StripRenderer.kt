@@ -70,15 +70,19 @@ class StripRenderer(private val openStream: (Uri) -> InputStream?) {
 
     /**
      * Pita piksel [top, bottom) selebar penuh untuk uji kesinambungan
-     * (murah: region-decode, tanpa memuat seluruh gambar). null bila gagal.
+     * (murah: region-decode, tanpa memuat seluruh gambar). Koordinat
+     * dijepit ke [0, height]. null bila gagal.
      */
-    fun edgeStrip(uri: Uri, width: Int, top: Int, bottom: Int): IntArray? {
-        if (width <= 0 || bottom <= top) return null
+    fun edgeStrip(uri: Uri, width: Int, height: Int, top: Int, bottom: Int): IntArray? {
+        if (width <= 0 || height <= 0) return null
+        val t = top.coerceIn(0, height)
+        val b = bottom.coerceIn(0, height)
+        if (b <= t) return null
         return try {
             openStream(uri)?.use { stream ->
                 val dec = BitmapRegionDecoder.newInstance(stream, false) ?: return null
                 try {
-                    val rect = Rect(0, max(0, top), width, bottom)
+                    val rect = Rect(0, t, width, b)
                     val opts = BitmapFactory.Options().apply {
                         inPreferredConfig = Bitmap.Config.RGB_565
                     }

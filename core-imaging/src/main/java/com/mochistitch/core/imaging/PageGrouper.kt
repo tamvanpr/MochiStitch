@@ -89,11 +89,17 @@ object PageGrouper {
                     current.add(sheet)
                     height += sheet.renderedHeight
                 } else {
-                    out.add(Bundle(current, seamCut = seamCut))
-                    current = mutableListOf(sheet)
-                    height = sheet.renderedHeight
-                    // Batas antar-berkas jatuh tepat di sambungan: tandai berkas baru.
-                    seamCut = pairLinked
+                    // Putus di batas aman terakhir (mundur), bukan di tengah
+                    // sambungan — kecuali seluruh berkas memang satu sambungan.
+                    val linkFn = linked
+                    val oldSize = current.size
+                    val cutAt = if (pairLinked && linkFn != null) lastSafeBreak(current, linkFn) else oldSize
+                    out.add(Bundle(current.subList(0, cutAt).toList(), seamCut = seamCut))
+                    val rest = current.subList(cutAt, oldSize).toList()
+                    current = (rest + sheet).toMutableList()
+                    height = rest.sumOf { it.renderedHeight } + sheet.renderedHeight
+                    // Berkas baru ditandai hanya bila batasnya jatuh di sambungan.
+                    seamCut = cutAt == oldSize && pairLinked
                 }
             } else {
                 current.add(sheet)
@@ -102,5 +108,17 @@ object PageGrouper {
         }
         if (current.isNotEmpty()) out.add(Bundle(current, seamCut = seamCut))
         return out
+    }
+
+    /**
+     * Indeks mulai berkas baru: tepat setelah batas non-sambung terakhir
+     * (batas aman). Bila seluruh isi berkas saling bersambung, kembalikan
+     * size (= putus paksa di batas limit, ditandai seamCut oleh pemanggil).
+     */
+    private fun lastSafeBreak(current: List<Sheet>, linked: (Int, Int) -> Boolean): Int {
+        for (j in current.size - 1 downTo 1) {
+            if (!linked(current[j - 1].order, current[j].order)) return j
+        }
+        return current.size
     }
 }

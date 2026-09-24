@@ -228,8 +228,8 @@ class StripBuilder(
             val ma = byOrder[a.order] ?: continue
             val mb = byOrder[b.order] ?: continue
             val r = 48
-            val bottom = renderer.edgeStrip(a.uri, ma.width, a.srcBottom - r, a.srcBottom) ?: continue
-            val top = renderer.edgeStrip(b.uri, mb.width, b.srcTop, b.srcTop + r) ?: continue
+            val bottom = renderer.edgeStrip(a.uri, ma.width, ma.height, a.srcBottom - r, a.srcBottom) ?: continue
+            val top = renderer.edgeStrip(b.uri, mb.width, mb.height, b.srcTop, b.srcTop + r) ?: continue
             if (!SeamScan.hasContent(bottom) && !SeamScan.hasContent(top)) continue
             if (SeamScan.rowsContinue(bottom, top)) out.add(i to i + 1)
         }

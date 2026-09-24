@@ -63,6 +63,22 @@ class GroupingTest {
     }
 
     @Test
+    fun testBreakBacktracksToSafeBoundary() {
+        // Pasangan (2,3) bersambung; batas paksa jatuh di C|D -> mundur ke B|C.
+        val groups = PageGrouper.group(
+            sheets(3000, 3000, 3000, 8000, 8000), SplitRule.MAX_HEIGHT, 10000, 10,
+            linked = { a, b -> a == 2 && b == 3 }, hardCap = 15000
+        )
+        assertEquals(3, groups.size)
+        assertEquals(listOf(0, 1), groups[0].sheets.map { it.order })
+        assertEquals(listOf(2, 3), groups[1].sheets.map { it.order })
+        assertEquals(listOf(4), groups[2].sheets.map { it.order })
+        assertFalse(groups[0].seamCut)
+        assertFalse(groups[1].seamCut)
+        assertFalse(groups[2].seamCut)
+    }
+
+    @Test
     fun testNoLinkInfoBehavesAsBefore() {
         val groups = PageGrouper.group(
             sheets(400, 400, 300, 500), SplitRule.MAX_HEIGHT, 1000, 10, null, 0

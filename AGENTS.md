@@ -14,8 +14,9 @@ jendela, potongan boleh lewat batas sedikit (overflow) demi celah aman.
 Batas antar-berkas output diusahakan tidak jatuh di pasangan halaman
 yang bersambung piksel — pinning hanya bila kedua tepi mengandung
 konten (margin putih-vs-putih bukan sambungan), sampai batas keras
-1,5x batas lunak. Batas yang terpaksa jatuh di sambungan, dan halaman
-yang tak punya celah aman, ditandai sebagai flag tinjau.
+1,5x batas lunak. Bila batas paksa jatuh di sambungan, pemutusan mundur
+ke batas aman terakhir dalam berkas; hanya sambungan penuh yang
+terpaksa diputus dan ditandai sebagai flag tinjau.
 
 - `app/` — 4 tab bawah (Masuk, Hasil, Antrean, Setelan); edge-to-edge;
   satu Scaffold (TopAppBar + NavigationBar); tombol kembali ke tab Masuk;
