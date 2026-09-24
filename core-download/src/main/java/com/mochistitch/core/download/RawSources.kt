@@ -119,10 +119,92 @@ object RawSources {
         searchable = false
     )
 
-    /** Fase 1: sumber ID. EN menyusul (kontrak JSON identik). */
+    // ── Sumber EN (kontrak resolve sama; pola URL dari worker En Trial Fetch). ──
+
+    val MANGADEX = SourceDef(
+        id = "mangadex", label = "MangaDex", group = SourceGroup.EN,
+        chapterRx = listOf(Regex("""^https?://(?:www\.)?mangadex\.org/chapter/([0-9a-f-]{36})""", RegexOption.IGNORE_CASE)),
+        seriesRx = listOf(Regex("""^https?://(?:www\.)?mangadex\.org/title/([0-9a-f-]{36})""", RegexOption.IGNORE_CASE))
+    )
+
+    val MANGAPILL = SourceDef(
+        id = "mangapill", label = "MangaPill", group = SourceGroup.EN,
+        chapterRx = listOf(Regex("""^https?://(?:www\.)?mangapill\.com/chapters/([^/]+)/([^/?#]+)""", RegexOption.IGNORE_CASE)),
+        seriesRx = listOf(Regex("""^https?://(?:www\.)?mangapill\.com/manga/(\d+)/([^/?#]+)""", RegexOption.IGNORE_CASE))
+    )
+
+    val COMICK = SourceDef(
+        id = "comick", label = "Comick", group = SourceGroup.EN,
+        chapterRx = listOf(
+            Regex("""^https?://(?:api\.)?comick\.(?:io|fun|dev)/chapter/([a-zA-Z0-9-]+)""", RegexOption.IGNORE_CASE),
+            Regex("""^https?://(?:www\.)?comick\.(?:io|fun|dev)/comic/[^/]+/([a-zA-Z0-9-]+)-chapter-""", RegexOption.IGNORE_CASE)
+        ),
+        seriesRx = listOf(Regex("""^https?://(?:www\.)?comick\.(?:io|fun|dev)/comic/([^/?#]+)""", RegexOption.IGNORE_CASE))
+    )
+
+    val MANGAGEKO = SourceDef(
+        id = "mangageko", label = "MangaGeko", group = SourceGroup.EN,
+        chapterRx = listOf(Regex("""^https?://(?:www\.)?(?:mgeko\.cc|mangageko\.cc|mangamob\.com)/reader/[^/]+/([^/?#]+)/?$""", RegexOption.IGNORE_CASE)),
+        seriesRx = listOf(Regex("""^https?://(?:www\.)?(?:mgeko\.cc|mangageko\.cc|mangamob\.com)/manga/([^/?#]+)/?$""", RegexOption.IGNORE_CASE))
+    )
+
+    val DEMONIC = SourceDef(
+        id = "demonic", label = "DemonicScans", group = SourceGroup.EN,
+        chapterRx = listOf(
+            Regex("""^https?://(?:www\.)?demonicscans\.org/chaptered\.php""", RegexOption.IGNORE_CASE),
+            Regex("""^https?://(?:www\.)?demonicscans\.org/title/[^/]+/chapter/([^/?#]+)""", RegexOption.IGNORE_CASE)
+        ),
+        seriesRx = listOf(Regex("""^https?://(?:www\.)?demonicscans\.org/manga/([^/?#]+)/?$""", RegexOption.IGNORE_CASE))
+    )
+
+    val LIKEMANGA = SourceDef(
+        id = "likemanga", label = "LikeManga", group = SourceGroup.EN,
+        chapterRx = listOf(Regex("""^https?://(?:www\.)?likemanga\.ink/[a-z0-9][^/]*-\d+/(chapter-[^/?#]+)/?$""", RegexOption.IGNORE_CASE)),
+        seriesRx = listOf(Regex("""^https?://(?:www\.)?likemanga\.ink/([a-z0-9][^/]*-\d+)/?$""", RegexOption.IGNORE_CASE))
+    )
+
+    val MANGABATS = SourceDef(
+        id = "mangabats", label = "MangaBats", group = SourceGroup.EN,
+        chapterRx = listOf(Regex("""^https?://(?:www\.)?mangabats\.com/manga/[^/]+/([^/?#]+)/?$""", RegexOption.IGNORE_CASE)),
+        seriesRx = listOf(Regex("""^https?://(?:www\.)?mangabats\.com/manga/([^/?#]+)/?$""", RegexOption.IGNORE_CASE)),
+        searchable = false
+    )
+
+    val XCOMIC = SourceDef(
+        id = "xcomic", label = "XComic", group = SourceGroup.EN,
+        chapterRx = listOf(Regex("""^https?://(?:www\.)?xcomic\.me/chapter/([^/?#]+)/?$""", RegexOption.IGNORE_CASE)),
+        seriesRx = listOf(Regex("""^https?://(?:www\.)?xcomic\.me/source/([^/?#]+)/?$""", RegexOption.IGNORE_CASE))
+    )
+
+    val ALL_EN: List<SourceDef> = listOf(MANGADEX, MANGAPILL, COMICK, MANGAGEKO, DEMONIC, LIKEMANGA, MANGABATS, XCOMIC)
+
+    /** Fase 1: sumber ID. */
     val ALL_ID: List<SourceDef> = listOf(BAOZIMH, WMANHUA, JJABTOON, KOUDAIMH, JJAPTOON, GOODTOON, MANWA)
 
-    fun byId(id: String): SourceDef? = ALL_ID.firstOrNull { it.id == id }
+    /** Semua sumber yang dikenal (ID + EN). */
+    val ALL: List<SourceDef> = ALL_ID + ALL_EN
+
+    fun byId(id: String): SourceDef? = ALL_ID.firstOrNull { it.id == id } ?: ALL_EN.firstOrNull { it.id == id }
+
+    /**
+     * Header unduhan gambar per sumber. Default Referer = halaman chapter
+     * (lolos proteksi hotlink). Koudaimh MEMAKSA tanpa Referer/Origin untuk
+     * CDN-nya (referrerpolicy no-referrer di situs asli; mengirim Referer
+     * justru berisiko 403) — sama seperti worker.
+     */
+    fun imageHeaders(sourceId: String, imageUrl: String, chapterUrl: String): Map<String, String> {
+        if (sourceId == KOUDAIMH.id) {
+            val host = imageUrl.substringAfter("://").substringBefore("/").lowercase()
+            val bare = host.removePrefix("www.")
+            if (bare == "shimolife.com" || bare.endsWith(".shimolife.com") ||
+                bare == "koudaimg.com" || bare.endsWith(".koudaimg.com") ||
+                bare == "koudaimh.com" || bare.endsWith(".koudaimh.com")
+            ) {
+                return mapOf("Accept-Language" to "zh-CN,zh;q=0.9,en;q=0.8")
+            }
+        }
+        return mapOf("Referer" to chapterUrl)
+    }
 
     /**
      * Kenali tempelan URL sebagai (sumber, SERIES/CHAPTER). Chapter diperiksa
@@ -131,10 +213,10 @@ object RawSources {
     fun classify(rawUrl: String): Pair<SourceDef?, UrlKind> {
         val url = rawUrl.trim()
         if (url.isEmpty()) return null to UrlKind.UNKNOWN
-        for (s in ALL_ID) {
+        for (s in ALL) {
             if (s.chapterRx.any { it.containsMatchIn(url) }) return s to UrlKind.CHAPTER
         }
-        for (s in ALL_ID) {
+        for (s in ALL) {
             if (s.seriesRx.any { it.containsMatchIn(url) }) return s to UrlKind.SERIES
         }
         return null to UrlKind.UNKNOWN

@@ -12,8 +12,10 @@ import com.mochistitch.core.archive.ArchiveItem
 import com.mochistitch.core.archive.ArchiveKit
 import com.mochistitch.core.common.ComicProject
 import com.mochistitch.core.download.ChapterHit
+import com.mochistitch.core.download.DirectDownloadApi
 import com.mochistitch.core.download.PageDownloader
 import com.mochistitch.core.download.RawApiException
+import com.mochistitch.core.download.RawCrypto
 import com.mochistitch.core.download.RawSources
 import com.mochistitch.core.download.UrlKind
 import com.mochistitch.core.download.WorkerDownloadApi
@@ -269,6 +271,8 @@ class StudioViewModel : ViewModel() {
     }
 
     // ── Unduhan mentah (fase 1: tempel URL chapter/series) ──────────
+    // Mode ganda: URL worker diisi -> via worker; kosong -> langsung
+    // dari aplikasi (DirectDownloadApi). Kontrak datanya identik.
 
     private fun workerApiOrNull(): WorkerDownloadApi? {
         val base = _state.value.settings.workerUrl.trim().trimEnd('/')
@@ -282,14 +286,10 @@ class StudioViewModel : ViewModel() {
         val url = rawUrl.trim()
         val (source, kind) = RawSources.classify(url)
         if (source == null || kind == UrlKind.UNKNOWN) {
-            _state.update { it.copy(failure = "URL tidak dikenali. Mendukung: baozimh, wmanhua, jjabtoon, koudaimh, jjaptoon, goodtoon, manwa.") }
+            _state.update { it.copy(failure = "URL tidak dikenali. ID: baozimh, wmanhua, jjabtoon, koudaimh, jjaptoon, goodtoon, manwa. EN: mangadex, mangapill, comick, mangageko, demonic, likemanga, mangabats, xcomic.") }
             return
         }
-        val api = workerApiOrNull()
-        if (api == null) {
-            _state.update { it.copy(failure = "Isi URL worker dulu di Setelan → Unduhan Mentah.") }
-            return
-        }
+        val api = workerApiOrNull() ?: DirectDownloadApi(source)
         if (kind == UrlKind.CHAPTER) {
             _state.update { it.copy(rawSourceId = source.id) }
             fetchChapterPick(ChapterHit(id = url, title = url, url = url), context)
@@ -313,12 +313,16 @@ class StudioViewModel : ViewModel() {
     /** Unduh satu chapter terpilih lalu masukkan ke antrean otomatis. */
     fun fetchChapterPick(chapter: ChapterHit, context: Context) {
         boot(context)
-        val api = workerApiOrNull()
+        val sourceId = _state.value.rawSourceId
+        val source = sourceId?.let { RawSources.byId(it) }
+        val api = workerApiOrNull() ?: source?.let { DirectDownloadApi(it) }
         if (api == null) {
-            _state.update { it.copy(failure = "Isi URL worker dulu di Setelan → Unduhan Mentah.") }
+            _state.update { it.copy(failure = "Sumber tak dikenal, tempel ulang URL-nya.") }
             return
         }
         clearRawChapters()
+        // rawSourceId ikut terhapus oleh clearRawChapters — simpan dulu.
+        _state.update { it.copy(rawSourceId = sourceId) }
         dropSlices()
         _state.update { it.copy(busy = true, phase = "Mengambil daftar gambar", fraction = 0f, failure = null) }
         viewModelScope.launch(Dispatchers.IO) {
@@ -331,12 +335,13 @@ class StudioViewModel : ViewModel() {
                 val title = resolved.title.ifBlank { chapter.title }.ifBlank { "Unduhan" }
                 val stem = ArchiveKit.sanitizeName(title.ifBlank { "unduhan" }.take(60))
                 val dir = File(File(context.cacheDir, "studio_import"), "${stem}_${System.currentTimeMillis()}").apply { mkdirs() }
-                // Referer = halaman chapter: lolos proteksi hotlink di
-                // banyak sumber tanpa membebani rate limit worker.
+                // Header gambar per sumber (koudaimh tanpa Referer; sisanya
+                // Referer = halaman chapter). Gambar manwa terenkripsi AES.
+                val sid = _state.value.rawSourceId ?: ""
                 val out = PageDownloader().fetchAll(
                     pages = resolved.pages,
                     destDir = dir,
-                    headersFor = { mapOf("Referer" to chapter.url) },
+                    headersFor = { pageUrl -> RawSources.imageHeaders(sid, pageUrl, chapter.url) },
                     onProgress = { p ->
                         _state.update {
                             it.copy(
@@ -344,7 +349,8 @@ class StudioViewModel : ViewModel() {
                                 fraction = 0.1f + 0.8f * (p.done.toFloat() / p.total.toFloat().coerceAtLeast(1f))
                             )
                         }
-                    }
+                    },
+                    transform = if (sid == RawSources.MANWA.id) RawCrypto::decryptManwaImage else null
                 )
                 if (out.ok.isEmpty()) {
                     try { dir.deleteRecursively() } catch (t: Throwable) { }

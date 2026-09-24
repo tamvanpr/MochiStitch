@@ -97,7 +97,9 @@ class PageDownloader(
         pages: List<PageRef>,
         destDir: File,
         headersFor: (pageUrl: String) -> Map<String, String> = { emptyMap() },
-        onProgress: (FetchProgress) -> Unit = {}
+        onProgress: (FetchProgress) -> Unit = {},
+        /** Pasca-proses bytes (mis. dekripsi AES manwa) sebelum tulis berkas. */
+        transform: ((ByteArray) -> ByteArray)? = null
     ): Outcome = withContext(Dispatchers.IO) {
         destDir.mkdirs()
         val sem = Semaphore(parallel.coerceAtLeast(1))
@@ -105,7 +107,7 @@ class PageDownloader(
         val failed = mutableListOf<String>()
         var done = 0
         val jobs = pages.map { page ->
-            async { sem.withPermit { downloadOne(page, destDir, headersFor(page.url)) } }
+            async { sem.withPermit { downloadOne(page, destDir, headersFor(page.url), transform) } }
         }
         jobs.forEach { d ->
             val (file, name) = d.await()
@@ -122,14 +124,40 @@ class PageDownloader(
         Outcome(ok.sortedBy { it.name }, failed.toList())
     }
 
-    private fun downloadOne(page: PageRef, dir: File, headers: Map<String, String>): Pair<File?, String> {
-        val ext = guessExt(page.url)
+    private fun downloadOne(
+        page: PageRef,
+        dir: File,
+        headers: Map<String, String>,
+        transform: ((ByteArray) -> ByteArray)? = null
+    ): Pair<File?, String> {
+        // Manwa terenkripsi selalu webp (lihat worker: Content-Type image/webp).
+        val ext = if (transform != null && page.url.substringBefore('?').lowercase().let { u ->
+                !u.endsWith(".png") && !u.endsWith(".jpg") && !u.endsWith(".jpeg")
+            }) ".webp" else guessExt(page.url)
         val name = "%03d_dl%s".format(page.page, ext)
         val dest = File(dir, name)
         var attempt = 0
         var lastErr: Exception? = null
         while (attempt <= retries) {
             try {
+                // Mode transform (mis. dekripsi AES manwa): butuh seluruh
+                // bytes dulu, satu request via DirectHttp.
+                if (transform != null) {
+                    val raw = DirectHttp.getBytes(page.url, headers, timeoutMs, maxBytes)
+                    val plain = try {
+                        transform(raw)
+                    } catch (e: Exception) {
+                        throw IOException("Transform: ${e.message}")
+                    }
+                    val tmp = File(dir, "$name.part")
+                    tmp.outputStream().use { it.write(plain) }
+                    if (dest.exists()) dest.delete()
+                    if (!tmp.renameTo(dest)) {
+                        tmp.copyTo(dest, overwrite = true)
+                        tmp.delete()
+                    }
+                    return dest to name
+                }
                 val c = (URL(page.url).openConnection() as HttpURLConnection).apply {
                     requestMethod = "GET"
                     connectTimeout = timeoutMs

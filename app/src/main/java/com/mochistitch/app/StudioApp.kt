@@ -394,7 +394,7 @@ private fun InputStep(viewModel: StudioViewModel, modifier: Modifier = Modifier)
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(
-                        "Tempel URL chapter atau series (baozimh, wmanhua, jjabtoon, koudaimh, jjaptoon, goodtoon, manwa). Hasil otomatis masuk antrean.",
+                        "Tempel URL chapter atau series. ID: baozimh, wmanhua, jjabtoon, koudaimh, jjaptoon, goodtoon, manwa. EN: mangadex, mangapill, comick, mangageko, demonic, likemanga, mangabats, xcomic. Hasil otomatis masuk antrean.",
                         style = MaterialTheme.typography.bodySmall
                     )
                     OutlinedTextField(

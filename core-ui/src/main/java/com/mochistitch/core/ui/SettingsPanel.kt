@@ -217,9 +217,9 @@ fun SettingsPanel(
             OutlinedTextField(
                 value = settings.workerUrl,
                 onValueChange = { onChange(settings.copy(workerUrl = it.trim())) },
-                label = { Text("URL worker Trial Fetch") },
+                label = { Text("URL worker Trial Fetch (opsional)") },
                 placeholder = { Text("https://worker-kamu.workers.dev") },
-                supportingText = { Text("Kosong = fitur Unduh nonaktif. Sumber ID: baozimh, wmanhua, jjabtoon, koudaimh, jjaptoon, goodtoon, manwa.") },
+                supportingText = { Text("Kosong = mode langsung dari aplikasi (tanpa worker). Diisi = via worker.") },
                 singleLine = true,
                 shape = RoundedCornerShape(12.dp),
                 modifier = Modifier.fillMaxWidth()

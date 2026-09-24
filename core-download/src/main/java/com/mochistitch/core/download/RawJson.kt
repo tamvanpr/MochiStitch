@@ -37,6 +37,20 @@ fun JVal.int(key: String, default: Int = 0): Int {
         else -> default
     }
 }
+fun JVal.bool(key: String, default: Boolean = false): Boolean {
+    val v = (this as? JVal.Obj)?.map?.get(key) ?: return default
+    return when (v) {
+        is JVal.True -> true
+        is JVal.False -> false
+        is JVal.Str -> v.v.equals("true", ignoreCase = true)
+        is JVal.Num -> v.v != 0.0
+        else -> default
+    }
+}
+/** Bungkus objek sebagai peta (untuk navigasi JSON bersarang). */
+fun JVal.asObj(): Map<String, JVal>? = (this as? JVal.Obj)?.map
+/** Nilai string apa adanya (untuk ekstraksi manual). */
+fun JVal.asStr(): String? = (this as? JVal.Str)?.v
 
 object RawJson {
     fun parse(text: String): JVal {
