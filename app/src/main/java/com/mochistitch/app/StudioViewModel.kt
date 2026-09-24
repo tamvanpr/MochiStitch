@@ -476,7 +476,7 @@ class StudioViewModel : ViewModel() {
                     uris = _state.value.pages.map { it.uri },
                     settings = settings,
                     onProgress = { phase, p -> _state.update { it.copy(phase = phase.label, fraction = p) } },
-                    banner = if (settings.enableBannerCut) comicBannerPolicy() else null,
+                    banner = if (settings.enableBannerCut) banner else null,
                     bannerTemplateBitmaps = bannerTemplateBitmaps(context)
                 ).getOrThrow()
                 val done = out.strips
