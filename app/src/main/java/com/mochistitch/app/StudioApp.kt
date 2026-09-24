@@ -41,6 +41,7 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
@@ -50,6 +51,7 @@ import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -306,36 +308,42 @@ private fun InputStep(viewModel: StudioViewModel, modifier: Modifier = Modifier)
         modifier = modifier.padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-            Button(
-                onClick = {
-                    pickImages.launch(
-                        PickVisualMediaRequest(
-                            ActivityResultContracts.PickVisualMedia.ImageOnly
+        Card(
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Column(modifier = Modifier.padding(8.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text(
+                    "Tambah halaman",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                )
+                SourceRow(
+                    icon = { Icon(Icons.Default.Image, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
+                    title = "Gambar",
+                    desc = "Pilih dari galeri perangkat",
+                    onTap = {
+                        pickImages.launch(
+                            PickVisualMediaRequest(
+                                ActivityResultContracts.PickVisualMedia.ImageOnly
+                            )
                         )
-                    )
-                },
-                modifier = Modifier.weight(1f)
-            ) {
-                Icon(Icons.Default.Image, contentDescription = null, modifier = Modifier.size(18.dp))
-                Spacer(modifier = Modifier.size(6.dp))
-                Text("Gambar")
-            }
-            Button(
-                onClick = { pickArchive.launch(arrayOf("*/*")) },
-                modifier = Modifier.weight(1f)
-            ) {
-                Icon(Icons.Default.Unarchive, contentDescription = null, modifier = Modifier.size(18.dp))
-                Spacer(modifier = Modifier.size(6.dp))
-                Text("Arsip")
-            }
-            Button(
-                onClick = { urlText = ""; showUrlDialog = true },
-                modifier = Modifier.weight(1f)
-            ) {
-                Icon(Icons.Default.Download, contentDescription = null, modifier = Modifier.size(18.dp))
-                Spacer(modifier = Modifier.size(6.dp))
-                Text("Unduh")
+                    }
+                )
+                SourceRow(
+                    icon = { Icon(Icons.Default.Unarchive, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
+                    title = "Arsip",
+                    desc = "ZIP · CBZ · RAR · CBR · 7Z · CB7",
+                    onTap = { pickArchive.launch(arrayOf("*/*")) }
+                )
+                SourceRow(
+                    icon = { Icon(Icons.Default.Download, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
+                    title = "Unduh",
+                    desc = "Tempel URL chapter/series (15 sumber ID+EN)",
+                    onTap = { urlText = ""; showUrlDialog = true }
+                )
             }
         }
         if (state.pages.isEmpty()) {
@@ -344,7 +352,7 @@ private fun InputStep(viewModel: StudioViewModel, modifier: Modifier = Modifier)
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Text(
-                    "Belum ada halaman. Pilih gambar atau arsip (ZIP/CBZ/RAR/CBR/7Z) untuk mulai.",
+                    "Belum ada halaman. Tambah lewat Gambar, Arsip, atau Unduh di atas untuk mulai.",
                     style = MaterialTheme.typography.bodyMedium,
                     modifier = Modifier.padding(20.dp)
                 )
@@ -394,13 +402,24 @@ private fun InputStep(viewModel: StudioViewModel, modifier: Modifier = Modifier)
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(
-                        "Tempel URL chapter atau series. ID: baozimh, wmanhua, jjabtoon, koudaimh, jjaptoon, goodtoon, manwa. EN: mangadex, mangapill, comick, mangageko, demonic, likemanga, mangabats, xcomic. Hasil otomatis masuk antrean.",
-                        style = MaterialTheme.typography.bodySmall
+                        "Tempel URL chapter atau series — hasil otomatis masuk antrean.",
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                    Text(
+                        "ID: baozimh · wmanhua · jjabtoon · koudaimh · jjaptoon · goodtoon · manwa",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Text(
+                        "EN: mangadex · mangapill · comick · mangageko · demonic · likemanga · mangabats · xcomic",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     OutlinedTextField(
                         value = urlText,
                         onValueChange = { urlText = it },
-                        label = { Text("URL") },
+                        label = { Text("URL chapter/series") },
+                        placeholder = { Text("https://…") },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth()
                     )
@@ -415,10 +434,10 @@ private fun InputStep(viewModel: StudioViewModel, modifier: Modifier = Modifier)
             confirmButton = {
                 TextButton(onClick = viewModel::clearRawChapters) { Text("Tutup") }
             },
-            title = { Text("Pilih chapter${state.rawSourceLabel?.let { " ($it)" } ?: ""}") },
+            title = { Text("Pilih chapter${state.rawSourceLabel?.let { " · $it" } ?: ""} (${state.rawChapters.size})") },
             text = {
-                LazyColumn(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    items(state.rawChapters) { ch ->
+                LazyColumn(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    items(state.rawChapters, key = { it.id + it.url }) { ch ->
                         TextButton(
                             onClick = { viewModel.fetchChapterPick(ch, ctx) },
                             modifier = Modifier.fillMaxWidth()
@@ -429,10 +448,45 @@ private fun InputStep(viewModel: StudioViewModel, modifier: Modifier = Modifier)
                                 style = MaterialTheme.typography.bodyMedium
                             )
                         }
+                        HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant)
                     }
                 }
             }
         )
+    }
+}
+
+/** Baris aksi vertikal: ikon + judul + deskripsi + chevron. */
+@Composable
+private fun SourceRow(
+    icon: @Composable () -> Unit,
+    title: String,
+    desc: String,
+    onTap: () -> Unit
+) {
+    Surface(
+        onClick = onTap,
+        shape = RoundedCornerShape(12.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 11.dp)
+        ) {
+            icon()
+            Spacer(modifier = Modifier.size(12.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                Text(desc, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            Icon(
+                Icons.AutoMirrored.Filled.ArrowForward,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(18.dp)
+            )
+        }
     }
 }
 
@@ -454,7 +508,7 @@ private fun QueueStep(
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Text(
-                    "Antrean kosong. Impor arsip atau rakit sekali — tiap komik otomatis masuk antrean dan bisa diproses bersama di sini.",
+                    "Antrean kosong. Tambah lewat Gambar, Arsip, atau Unduh di tab Masuk — atau rakit sekali; tiap komik otomatis masuk antrean dan bisa diproses bersama di sini.",
                     style = MaterialTheme.typography.bodyMedium,
                     modifier = Modifier.padding(20.dp)
                 )
