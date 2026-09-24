@@ -1,6 +1,7 @@
 package com.mochistitch.core.download
 
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
@@ -104,9 +105,7 @@ class PageDownloader(
         val failed = mutableListOf<String>()
         var done = 0
         val jobs = pages.map { page ->
-            kotlinx.coroutines.async {
-                sem.withPermit { downloadOne(page, destDir, headersFor(page.url)) }
-            }
+            async { sem.withPermit { downloadOne(page, destDir, headersFor(page.url)) } }
         }
         jobs.forEach { d ->
             val (file, name) = d.await()
