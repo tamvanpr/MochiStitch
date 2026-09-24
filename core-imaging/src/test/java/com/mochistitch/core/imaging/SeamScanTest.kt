@@ -77,6 +77,40 @@ class SeamScanTest {
     }
 
     @Test
+    fun testPlanCutsOverflowReachesNextBand() {
+        val safe = BooleanArray(350)
+        for (i in 0 until 61) safe[i] = true
+        for (i in 330 until 350) safe[i] = true
+        val plan = SeamScan.planCuts(safe, limit = 100, minChunk = 50, overflow = 250)
+        assertTrue(plan.tailSafe)
+        assertEquals(listOf(60, 330), plan.cuts)
+    }
+
+    @Test
+    fun testPlanCutsNoOverflowFallsBack() {
+        val safe = BooleanArray(350)
+        for (i in 0 until 61) safe[i] = true
+        for (i in 330 until 350) safe[i] = true
+        val plan = SeamScan.planCuts(safe, limit = 100, minChunk = 50, overflow = 0)
+        assertFalse(plan.tailSafe)
+        assertEquals(listOf(60), plan.cuts)
+    }
+
+    @Test
+    fun testHasContentFlatVsInk() {
+        assertFalse(SeamScan.hasContent(whiteRow(256)))
+        val noisy = IntArray(256) { i ->
+            val v = 0xFF - (i % 3)
+            (0xFF shl 24) or (v shl 16) or (v shl 8) or v
+        }
+        assertFalse(SeamScan.hasContent(noisy))
+        val withInk = whiteRow(256)
+        withInk[200] = 0xFF000000.toInt()
+        assertTrue(SeamScan.hasContent(withInk))
+        assertFalse(SeamScan.hasContent(IntArray(0)))
+    }
+
+    @Test
     fun testRowsContinueIdentical() {
         val a = whiteRow(64)
         val b = whiteRow(64)

@@ -95,7 +95,8 @@ class StripBuilder(
             val byOrder = measured.mapIndexed { i, m -> i to m }.toMap()
             val linked = continuityMap(segs, byOrder)
             val sheets = segs.mapIndexed { idx, s -> PageGrouper.Sheet(order = idx, renderedHeight = s.renderedH) }
-            val hardCap = max(limit * 2, 30000)
+            // Batas keras: pinning pasangan bersambung tak boleh lebih dari 1,5x batas.
+            val hardCap = limit + limit / 2
             val bundles = PageGrouper.group(
                 sheets, settings.splitRule, settings.maxStripHeight, settings.pagesPerPack,
                 linked = { a, b -> linked.contains(a to b) }, hardCap = hardCap
@@ -151,7 +152,7 @@ class StripBuilder(
         if (renderedH <= limit) {
             return listOf(Seg(m.uri, order, 0, m.height, renderedH))
         }
-        val bmp = renderer.decodeSampled(m.uri, maxPixels = 16_000_000L, maxSample = 2)
+        val bmp = renderer.decodeSampled(m.uri, maxPixels = 16_000_000L, maxSample = scanSample(m))
             ?: return listOf(Seg(m.uri, order, 0, m.height, renderedH))
         try {
             val dw = bmp.width
@@ -175,7 +176,10 @@ class StripBuilder(
             val f = stripWidth.toDouble() / m.width.toDouble()
             val ks = dh.toDouble() / m.height.toDouble()
             val limitDec = (limit.toDouble() / f * ks).toInt().coerceAtLeast(8)
-            val plan = SeamScan.planCuts(safe, limitDec)
+            // Boleh lewat batas sedikit demi celah aman: lebih baik berkas
+            // sedikit lebih tinggi daripada memotong tinta atau halaman utuh.
+            val overflowDec = (limitDec / 5).coerceIn(128, 2500)
+            val plan = SeamScan.planCuts(safe, limitDec, overflow = overflowDec)
             if (plan.cuts.isEmpty() && !plan.tailSafe) {
                 return listOf(Seg(m.uri, order, 0, m.height, renderedH))
             }
@@ -199,9 +203,18 @@ class StripBuilder(
     }
 
     /**
+     * Sampel pindai: resolusi penuh bila muat (garis tipis seperti ekor
+     * balon tidak boleh lolos), turun ke 2 hanya untuk halaman raksasa.
+     */
+    private fun scanSample(m: StripRenderer.Measured): Int =
+        if (m.width.toLong() * m.height.toLong() <= 20_000_000L) 1 else 2
+
+    /**
      * Peta pasangan indeks-segmen berurutan yang bersambung piksel
      * (tepi bawah segmen-a berlanjut ke tepi atas segmen-b). Segmen dari
      * halaman yang sama dilewati: urutannya sudah pasti bersambung.
+     * Pasangan latar-datar-vs-datar TIDAK dihitung bersambung (margin
+     * putih bertemu margin putih bukan alasan menggabung berkas).
      */
     private fun continuityMap(
         segs: List<Seg>,
@@ -214,9 +227,10 @@ class StripBuilder(
             if (a.order == b.order) continue
             val ma = byOrder[a.order] ?: continue
             val mb = byOrder[b.order] ?: continue
-            val r = 24
+            val r = 48
             val bottom = renderer.edgeStrip(a.uri, ma.width, a.srcBottom - r, a.srcBottom) ?: continue
             val top = renderer.edgeStrip(b.uri, mb.width, b.srcTop, b.srcTop + r) ?: continue
+            if (!SeamScan.hasContent(bottom) && !SeamScan.hasContent(top)) continue
             if (SeamScan.rowsContinue(bottom, top)) out.add(i to i + 1)
         }
         return out

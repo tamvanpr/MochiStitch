@@ -34,6 +34,9 @@ object SeamScan {
     /** Fraksi pasangan piksel harus cocok agar dinyatakan bersambung. */
     const val LINK_MIN_FRAC = 0.9
 
+    /** Sebaran |ΣRGB| minimal agar patch dianggap berisi konten. */
+    const val CONTENT_SPREAD_TAU = 64
+
     /** Baris [pixels] (satu baris ARGB) aman dipotong: tak ada tepi berarti. */
     fun rowIsSafe(pixels: IntArray): Boolean = rowIsSafe(pixels, 0, pixels.size)
 
@@ -82,13 +85,16 @@ object SeamScan {
      * Rencana potongan untuk [safe] sepanjang [safe.size] baris dengan batas
      * tinggi [limit]. Potongan dipilih sebagai titik di dalam celah yang
      * terdekat ke batas, dalam jendela [minChunk, limit] — tidak pernah di
-     * luar batas, tidak pernah di baris bertepi.
+     * baris bertepi. Bila tak ada celah dalam jendela, jendela diperpanjang
+     * sampai [overflow] demi celah aman (sedikit melewati batas lebih baik
+     * daripada memotong tinta atau membiarkan halaman raksasa utuh).
      */
     fun planCuts(
         safe: BooleanArray,
         limit: Int,
         minBand: Int = MIN_BAND,
-        minChunk: Int = limit / 2
+        minChunk: Int = limit / 2,
+        overflow: Int = 0
     ): CutPlan {
         if (limit <= 0 || safe.size <= limit) return CutPlan(emptyList(), true)
         val minC = minChunk.coerceAtLeast(1)
@@ -98,24 +104,52 @@ object SeamScan {
         while (safe.size - y > limit) {
             val lo = y + minC
             val hi = y + limit
-            var best: Int? = null
-            var bestDist = Int.MAX_VALUE
-            for (band in bands) {
-                val oLo = maxOf(lo, band.first)
-                val oHi = minOf(hi, band.last)
-                if (oLo > oHi) continue
-                val cand = hi.coerceIn(oLo, oHi)
-                val dist = absI(cand - hi)
-                if (dist < bestDist) {
-                    bestDist = dist
-                    best = cand
-                }
-            }
-            if (best == null) return CutPlan(cuts, tailSafe = false)
-            cuts.add(best)
-            y = best
+            val c = nearestInBands(bands, lo, hi, hi)
+                ?: if (overflow > 0) nearestInBands(bands, hi + 1, hi + overflow, hi) else null
+            if (c == null) return CutPlan(cuts, tailSafe = false)
+            cuts.add(c)
+            y = c
         }
         return CutPlan(cuts, tailSafe = true)
+    }
+
+    private fun nearestInBands(bands: List<IntRange>, lo: Int, hi: Int, target: Int): Int? {
+        var best: Int? = null
+        var bestDist = Int.MAX_VALUE
+        for (band in bands) {
+            val oLo = maxOf(lo, band.first)
+            val oHi = minOf(hi, band.last)
+            if (oLo > oHi) continue
+            val cand = target.coerceIn(oLo, oHi)
+            val dist = absI(cand - target)
+            if (dist < bestDist) {
+                bestDist = dist
+                best = cand
+            }
+        }
+        return best
+    }
+
+    /**
+     * true bila patch piksel mengandung konten (bukan latar datar): sebaran
+     * kecerahan cukup besar. Dipakai agar margin putih-vs-putih tidak
+     * disangka "bersambung".
+     */
+    fun hasContent(px: IntArray): Boolean {
+        if (px.isEmpty()) return false
+        val stride = maxOf(1, px.size / 512)
+        var mn = Int.MAX_VALUE
+        var mx = Int.MIN_VALUE
+        var i = 0
+        while (i < px.size) {
+            val p = px[i]
+            val s = ((p shr 16) and 0xFF) + ((p shr 8) and 0xFF) + (p and 0xFF)
+            if (s < mn) mn = s
+            if (s > mx) mx = s
+            if (mx - mn > CONTENT_SPREAD_TAU) return true
+            i += stride
+        }
+        return mx - mn > CONTENT_SPREAD_TAU
     }
 
     /**

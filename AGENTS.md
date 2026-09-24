@@ -8,10 +8,14 @@ Purpose: Penggabung halaman komik vertikal (strip webtoon).
 
 Satu prinsip mesin: garis potong tidak pernah melintasi tinta (balon,
 panel, teks). Halaman raksasa dipotong HANYA di pusat pita baris
-bebas-tepi (SeamScan, Kotlin murni — tanpa OpenCV/ML). Batas antar-berkas
-output diusahakan tidak jatuh di pasangan halaman yang bersambung piksel
-(pinning sampai batas keras); batas yang terpaksa jatuh di sambungan, dan
-halaman yang tak punya celah aman, ditandai sebagai flag tinjau.
+bebas-tepi (SeamScan, Kotlin murni — tanpa OpenCV/ML; pindai resolusi
+penuh ≤20MP agar garis tipis tak lolos). Bila tak ada celah dalam
+jendela, potongan boleh lewat batas sedikit (overflow) demi celah aman.
+Batas antar-berkas output diusahakan tidak jatuh di pasangan halaman
+yang bersambung piksel — pinning hanya bila kedua tepi mengandung
+konten (margin putih-vs-putih bukan sambungan), sampai batas keras
+1,5x batas lunak. Batas yang terpaksa jatuh di sambungan, dan halaman
+yang tak punya celah aman, ditandai sebagai flag tinjau.
 
 - `app/` — 4 tab bawah (Masuk, Hasil, Antrean, Setelan); edge-to-edge;
   satu Scaffold (TopAppBar + NavigationBar); tombol kembali ke tab Masuk;
