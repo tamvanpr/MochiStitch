@@ -164,26 +164,26 @@ class StripBuilder(
     private data class BannerResult(val crops: Map<Int, Pair<Int, Int>>, val note: String?)
 
     /**
-     * Kebijakan banner -> crop (topCut, bottomCut) per indeks halaman,
-     * dalam piksel gambar asli. Keputusan per halaman (bukan bulat):
-     * halaman yang strip-nya tidak cocok dibiarkan utuh. Selalu sertakan
-     * catatan MENGAPA begitu (diagnostik, bukan diam).
+     * Banner -> crop (topCut, bottomCut) per indeks halaman, piksel asli.
+     * Lapis template berjalan SELALU (tak butuh sourceId: cocok = banner).
+     * Gerbang konsistensi butuh policy (asumsi tinggi + risiko header
+     * komik yang berulang). Selalu ada catatan keputusan (diagnostik).
      */
     private fun bannerCrops(
         measured: List<StripRenderer.Measured>,
         policy: BannerPolicy?,
         templates: List<BannerTemplate.Sig>
     ): BannerResult {
-        if (policy == null || measured.isEmpty()) return BannerResult(emptyMap(), null)
-        val need = policy.minPages.coerceAtLeast(2)
-        val tallIdx = measured.indices.filter { i ->
-            measured[i].height >= max(policy.minPageH, policy.stripPx * 2 + 100)
-        }
-        if (tallIdx.size < need && templates.isEmpty()) {
-            return BannerResult(emptyMap(), "Banner: hanya ${tallIdx.size} halaman cukup tinggi (butuh $need) — tidak dicek.")
+        if (measured.isEmpty()) return BannerResult(emptyMap(), null)
+        if (policy == null && templates.isEmpty()) return BannerResult(emptyMap(), null)
+        val stripH = (policy?.stripPx ?: 200).coerceIn(1, 400)
+        val minH = max(policy?.minPageH ?: 600, stripH * 2 + 100)
+        val tallIdx = measured.indices.filter { i -> measured[i].height >= minH }
+        if (tallIdx.isEmpty()) {
+            return BannerResult(emptyMap(), "Banner: tidak ada halaman cukup tinggi — tidak dicek.")
         }
         fun strip(m: StripRenderer.Measured, top: Boolean): BannerGate.Strip? {
-            val h = policy.stripPx.coerceIn(1, m.height)
+            val h = stripH.coerceIn(1, m.height)
             val patch = if (top) {
                 renderer.edgePatch(m.uri, m.width, m.height, 0, h)
             } else {
@@ -221,21 +221,28 @@ class StripBuilder(
                 else if (sc >= BannerTemplate.MEDIUM) medBot.add(i)
             }
         }
-        // Lapis 2 — gerbang konsistensi (banner belum dikenal).
-        val topStrips = tops.map { it.second }
-        val botStrips = bots.map { it.second }
-        val decision = BannerGate.decide(topStrips, botStrips, policy)
-        val topIdx = tops.map { it.first }
-        val botIdx = bots.map { it.first }
-        val gateTop = decision.top.mapNotNull { topIdx.getOrNull(it) }.toSet()
-        val gateBot = decision.bottom.mapNotNull { botIdx.getOrNull(it) }.toSet()
+        // Lapis 2 — gerbang konsistensi (banner belum dikenal; butuh policy).
+        val gateTop: Set<Int>
+        val gateBot: Set<Int>
+        if (policy != null && tops.isNotEmpty() && bots.isNotEmpty()) {
+            val topStrips = tops.map { it.second }
+            val botStrips = bots.map { it.second }
+            val decision = BannerGate.decide(topStrips, botStrips, policy)
+            val topIdx = tops.map { it.first }
+            val botIdx = bots.map { it.first }
+            gateTop = decision.top.mapNotNull { topIdx.getOrNull(it) }.toSet()
+            gateBot = decision.bottom.mapNotNull { botIdx.getOrNull(it) }.toSet()
+        } else {
+            gateTop = emptySet()
+            gateBot = emptySet()
+        }
         // Komposisi: kuat-template langsung; medium-template + gate setuju.
         val out = mutableMapOf<Int, Pair<Int, Int>>()
         fun addTop(i: Int) {
-            out[i] = policy.stripPx to (out[i]?.second ?: 0)
+            out[i] = stripH to (out[i]?.second ?: 0)
         }
         fun addBot(i: Int) {
-            out[i] = (out[i]?.first ?: 0) to policy.stripPx
+            out[i] = (out[i]?.first ?: 0) to stripH
         }
         var viaGate = 0
         for (i in strongTop) {
