@@ -472,13 +472,12 @@ class StudioViewModel : ViewModel() {
                 val banner = _state.value.comics
                     .firstOrNull { it.id == _state.value.activeComicId }
                     ?.sourceId?.let { RawSources.byId(it)?.banner }
-                val out = StripBuilder(context).build(
-                    uris = _state.value.pages.map { it.uri },
-                    settings = settings,
-                    onProgress = { phase, p -> _state.update { it.copy(phase = phase.label, fraction = p) } },
-                    banner = banner,
-                    bannerTemplateBitmaps = bannerTemplateBitmaps(context)
-                ).getOrThrow()
+                 val out = StripBuilder(context).build(
+                     uris = _state.value.pages.map { it.uri },
+                     settings = settings,
+                     onProgress = { phase, p -> _state.update { it.copy(phase = phase.label, fraction = p) } },
+                     bannerTemplateBitmaps = bannerTemplateBitmaps(context)
+                 ).getOrThrow()
                 val done = out.strips
                 val slices = done.map { strip ->
                     SliceInfo(
@@ -592,14 +591,12 @@ class StudioViewModel : ViewModel() {
                     s.copy(phase = "${comic.origin} (${pi + 1}/${comics.size})", fraction = pi.toFloat() / comics.size.toFloat())
                 }
                 val pack = comic.packFor(base.packFormat)
-                val banner = comic.sourceId?.let { RawSources.byId(it)?.banner }
                 var built: List<BuiltStrip> = emptyList()
                 try {
                     built = StripBuilder(context).build(
                         uris = comic.pageUris,
                         settings = base,
                         onProgress = { _, p -> _state.update { it.copy(fraction = (pi + p) / comics.size.toFloat()) } },
-                        banner = banner,
                         bannerTemplateBitmaps = bannerTemplateBitmaps(context)
                     ).getOrThrow().strips
                     // Batch: tiap komik punya nama sendiri (arsip -> basename

@@ -86,9 +86,21 @@ fun StudioApp(viewModel: StudioViewModel, onExitApp: () -> Unit) {
     val state by viewModel.state.collectAsState()
     val settings = state.settings
 
-    // Tombol kembali sistem dari tab mana pun kembali ke Masukkan.
-    BackHandler(enabled = state.screen != StudioScreen.INPUT) {
-        viewModel.travel(StudioScreen.INPUT)
+    // Kembali sistem: dari tab lain ke Masukkan; di Masukkan tekan 2x
+    // dalam 2 detik untuk keluar aplikasi (tanpa tombol X).
+    var lastBackPress by remember { mutableStateOf(0L) }
+    BackHandler(enabled = true) {
+        if (state.screen != StudioScreen.INPUT) {
+            viewModel.travel(StudioScreen.INPUT)
+        } else {
+            val now = System.currentTimeMillis()
+            if (now - lastBackPress < 2000) {
+                onExitApp()
+            } else {
+                lastBackPress = now
+                android.widget.Toast.makeText(ctx, "Tekan kembali sekali lagi untuk keluar", android.widget.Toast.LENGTH_SHORT).show()
+            }
+        }
     }
 
     // Izin tulis untuk Android 7-9 (API <= 28); Q+ pakai MediaStore.
@@ -181,14 +193,8 @@ fun StudioApp(viewModel: StudioViewModel, onExitApp: () -> Unit) {
                     }
                 },
                 navigationIcon = {
-                    if (state.screen == StudioScreen.INPUT) {
-                        IconButton(onClick = onExitApp) {
-                            Icon(Icons.Default.Close, contentDescription = "Tutup")
-                        }
-                    } else {
-                        IconButton(onClick = { viewModel.travel(StudioScreen.INPUT) }) {
-                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Kembali")
-                        }
+                    IconButton(onClick = { viewModel.travel(StudioScreen.INPUT) }) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Kembali")
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -255,11 +261,24 @@ fun StudioApp(viewModel: StudioViewModel, onExitApp: () -> Unit) {
                 Column(
                     modifier = Modifier.padding(24.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
-                    CircularProgressIndicator()
+                    Icon(
+                        imageVector = Icons.Default.Image,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(48.dp)
+                    )
+                    Text(
+                        "MochiStitch",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
+                    )
                     Text(state.phase.ifBlank { "Bekerja…" }, style = MaterialTheme.typography.bodyMedium)
-                    LinearProgressIndicator(progress = { state.fraction.coerceIn(0f, 1f) })
+                    LinearProgressIndicator(
+                        progress = { state.fraction.coerceIn(0f, 1f) },
+                        modifier = Modifier.fillMaxWidth()
+                    )
                 }
             }
         }
@@ -341,7 +360,7 @@ private fun InputStep(viewModel: StudioViewModel, modifier: Modifier = Modifier)
                 SourceRow(
                     icon = { Icon(Icons.Default.Download, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
                     title = "Unduh",
-                    desc = "Tempel URL chapter/series (15 sumber ID+EN)",
+                    desc = "Tempel URL chapter/series (15 sumber RAW+EN)",
                     onTap = { urlText = ""; showUrlDialog = true }
                 )
             }
@@ -406,7 +425,7 @@ private fun InputStep(viewModel: StudioViewModel, modifier: Modifier = Modifier)
                         style = MaterialTheme.typography.bodyMedium
                     )
                     Text(
-                        "ID: baozimh · wmanhua · jjabtoon · koudaimh · jjaptoon · goodtoon · manwa",
+                        "RAW: baozimh · wmanhua · jjabtoon · koudaimh · jjaptoon · goodtoon · manwa",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )

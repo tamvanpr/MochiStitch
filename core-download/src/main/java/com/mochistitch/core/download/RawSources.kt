@@ -3,7 +3,7 @@ package com.mochistitch.core.download
 import com.mochistitch.core.common.BannerPolicy
 
 /** Kelompok sumber: ID (fase 1) dan EN (fase berikutnya, struktur siap). */
-enum class SourceGroup { ID, EN }
+enum class SourceGroup { RAW, EN }
 
 /**
  * Definisi satu sumber unduhan.
@@ -55,7 +55,7 @@ enum class UrlKind { SERIES, CHAPTER, UNKNOWN }
 object RawSources {
 
     val BAOZIMH = SourceDef(
-        id = "baozimh", label = "Baozimh", group = SourceGroup.ID,
+        id = "baozimh", label = "Baozimh", group = SourceGroup.RAW,
         chapterRx = listOf(
             Regex("""(?:twmanga\.com|baozimh\.com)/(?:comic/chapter|baozimhapp/comic/chapter)/([^/]+)/([^/?#]+)\.html""")
         ),
@@ -66,7 +66,7 @@ object RawSources {
     )
 
     val WMANHUA = SourceDef(
-        id = "wmanhua", label = "Wmanhua", group = SourceGroup.ID,
+        id = "wmanhua", label = "Wmanhua", group = SourceGroup.RAW,
         chapterRx = listOf(
             Regex("""^https?://(?:www\.)?wmanhua\.com/chapter/(\d+)-(\d+)\.html""", RegexOption.IGNORE_CASE)
         ),
@@ -76,19 +76,19 @@ object RawSources {
     )
 
     val JJABTOON = SourceDef(
-        id = "jjabtoon", label = "JJabtoon", group = SourceGroup.ID,
+        id = "jjabtoon", label = "JJabtoon", group = SourceGroup.RAW,
         chapterRx = listOf(Regex("""[^/]*jjabtoon[^/]*/episodes/(\d+)""")),
         seriesRx = listOf(Regex("""[^/]*jjabtoon[^/]*/webtoons/(\d+)"""))
     )
 
     val JJAPTOON = SourceDef(
-        id = "jjaptoon", label = "JJaptoon", group = SourceGroup.ID,
+        id = "jjaptoon", label = "JJaptoon", group = SourceGroup.RAW,
         chapterRx = listOf(Regex("""[^/]*jjaptoon[^/]*/chapters/(\d+)""")),
         seriesRx = listOf(Regex("""[^/]*jjaptoon[^/]*/comics/(\d+)"""))
     )
 
     val KOUDAIMH = SourceDef(
-        id = "koudaimh", label = "Koudaimh", group = SourceGroup.ID,
+        id = "koudaimh", label = "Koudaimh", group = SourceGroup.RAW,
         chapterRx = listOf(
             Regex("""^(?:https?://)?(?:www\.|m\.)?koudaimh\.com/manhua/([^/]+)/(\d+)\.html""")
         ),
@@ -98,7 +98,7 @@ object RawSources {
     )
 
     val GOODTOON = SourceDef(
-        id = "goodtoon", label = "Goodtoon", group = SourceGroup.ID,
+        id = "goodtoon", label = "Goodtoon", group = SourceGroup.RAW,
         chapterRx = listOf(
             Regex("""[^/]*goodtoon[^/]*/manga/([^/?#]+)/(?:chapter-)?(\d+)/?(?:[?#].*)?$""")
         ),
@@ -109,7 +109,7 @@ object RawSources {
 
     /** Manwa: tanpa search di worker, tapi resolve chapter+series didukung. */
     val MANWA = SourceDef(
-        id = "manwa", label = "Manwa", group = SourceGroup.ID,
+        id = "manwa", label = "Manwa", group = SourceGroup.RAW,
         chapterRx = listOf(
             Regex("""^https?://(?:www\.)?manwa\.me/chapter/(\d+)""")
         ),
@@ -179,12 +179,12 @@ object RawSources {
     val ALL_EN: List<SourceDef> = listOf(MANGADEX, MANGAPILL, COMICK, MANGAGEKO, DEMONIC, LIKEMANGA, MANGABATS, XCOMIC)
 
     /** Fase 1: sumber ID. */
-    val ALL_ID: List<SourceDef> = listOf(BAOZIMH, WMANHUA, JJABTOON, KOUDAIMH, JJAPTOON, GOODTOON, MANWA)
+    val ALL_RAW: List<SourceDef> = listOf(BAOZIMH, WMANHUA, JJABTOON, KOUDAIMH, JJAPTOON, GOODTOON, MANWA)
 
     /** Semua sumber yang dikenal (ID + EN). */
-    val ALL: List<SourceDef> = ALL_ID + ALL_EN
+    val ALL: List<SourceDef> = ALL_RAW + ALL_EN
 
-    fun byId(id: String): SourceDef? = ALL_ID.firstOrNull { it.id == id } ?: ALL_EN.firstOrNull { it.id == id }
+    fun byId(id: String): SourceDef? = ALL_RAW.firstOrNull { it.id == id } ?: ALL_EN.firstOrNull { it.id == id }
 
     /**
      * Header unduhan gambar per sumber — disalin dari config frontend

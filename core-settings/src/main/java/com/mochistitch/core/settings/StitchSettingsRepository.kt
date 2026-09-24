@@ -33,6 +33,8 @@ class StitchSettingsRepository(private val dataStore: DataStore<Preferences>) {
         val K_MATTE = stringPreferencesKey("matte")
         val K_THEME = stringPreferencesKey("theme")
         val K_WORKER = stringPreferencesKey("worker_url")
+        val K_STRICT = stringPreferencesKey("cut_strict")
+        val K_BANNER = booleanPreferencesKey("cut_banner")
     }
 
     val flow: Flow<StitchSettings> = dataStore.data.map { p ->
@@ -51,7 +53,9 @@ class StitchSettingsRepository(private val dataStore: DataStore<Preferences>) {
             showReviewFlags = p[K_FLAGS] ?: true,
             matteColor = p[K_MATTE]?.let { runCatching { MatteColor.valueOf(it) }.getOrNull() } ?: MatteColor.WHITE,
             themeMode = p[K_THEME]?.let { runCatching { ThemeMode.valueOf(it) }.getOrNull() } ?: ThemeMode.SYSTEM,
-            workerUrl = p[K_WORKER] ?: ""
+            workerUrl = p[K_WORKER] ?: "",
+            cutStrictness = p[K_STRICT]?.let { runCatching { CutStrictness.valueOf(it) }.getOrNull() } ?: CutStrictness.BALANCED,
+            enableBannerCut = p[K_BANNER] ?: true
         )
     }
 
@@ -72,6 +76,8 @@ class StitchSettingsRepository(private val dataStore: DataStore<Preferences>) {
             p[K_MATTE] = s.matteColor.name
             p[K_THEME] = s.themeMode.name
             p[K_WORKER] = s.workerUrl
+            p[K_STRICT] = s.cutStrictness.name
+            p[K_BANNER] = s.enableBannerCut
         }
     }
 }

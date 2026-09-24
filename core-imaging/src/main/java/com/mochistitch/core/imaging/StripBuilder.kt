@@ -4,6 +4,7 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.net.Uri
 import com.mochistitch.core.common.BannerPolicy
+import com.mochistitch.core.settings.CutStrictness
 import com.mochistitch.core.settings.SplitRule
 import com.mochistitch.core.settings.StitchSettings
 import kotlinx.coroutines.Dispatchers
@@ -72,7 +73,6 @@ class StripBuilder(
         uris: List<Uri>,
         settings: StitchSettings,
         onProgress: (BuildPhase, Float) -> Unit = { _, _ -> },
-        banner: BannerPolicy? = null,
         bannerTemplateBitmaps: List<Bitmap> = emptyList()
     ): Result<BuildOutput> = withContext(Dispatchers.IO) {
         if (uris.isEmpty()) return@withContext Result.failure(IllegalArgumentException("Tidak ada gambar."))
@@ -90,10 +90,23 @@ class StripBuilder(
             val limit = settings.maxStripHeight
             val wantCut = settings.splitRule == SplitRule.MAX_HEIGHT && limit > 0
 
-            // 0) Banner situs (mis. baozimh 200px): crop HANYA bila strip
-            // atas/bawah terbukti identik antar-halaman (gerbang BannerGate).
-            // Selalu ada catatan keputusan (null = kebijakan tak dipakai).
-            val bannerResult = bannerCrops(measured, banner, bannerTemplateBitmaps)
+            // 0) Banner situs + ketegasan potong: buat BannerPolicy dari
+            // settings (aplikasi bisa dipakai untuk semua sumber).
+            val policy = if (settings.enableBannerCut) {
+                val (minP, minBand, overflow, margin) = when (settings.cutStrictness) {
+                    CutStrictness.LOOSE    -> Triple(4, 8, 0, 2)
+                    CutStrictness.BALANCED -> Triple(8, 16, 512, 4)
+                    CutStrictness.STRICT   -> Triple(16, 32, 1024, 8)
+                }
+                BannerPolicy(
+                    stripPx = 200,
+                    minPages = minP,
+                    minBand = minBand,
+                    overflow = overflow,
+                    margin = margin
+                )
+            } else null
+            val bannerResult = bannerCrops(measured, policy, bannerTemplateBitmaps)
             val bannerCrops = bannerResult.crops
 
             // 1) Halaman raksasa -> segmen di celah aman (v6: vertikal+paper+tengah).

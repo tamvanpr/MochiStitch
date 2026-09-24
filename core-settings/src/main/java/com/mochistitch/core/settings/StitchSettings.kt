@@ -11,6 +11,8 @@ enum class SplitRule { WHOLE, MAX_HEIGHT, PAGES_PER_PACK }
 
 enum class ThemeMode { SYSTEM, LIGHT, DARK }
 
+enum class CutStrictness { LOOSE, BALANCED, STRICT }
+
 /** Warna latar strip. */
 enum class MatteColor { WHITE, BLACK, CLEAR }
 
@@ -29,6 +31,10 @@ data class StitchSettings(
     val showReviewFlags: Boolean = true,
     val matteColor: MatteColor = MatteColor.WHITE,
     val themeMode: ThemeMode = ThemeMode.SYSTEM,
-    /** Basis URL worker Trial Fetch (fase 1: sumber ID). Kosong = unduhan nonaktif. */
-    val workerUrl: String = ""
+    /** Basis URL worker Trial Fetch (fase 1: sumber RAW). Kosong = unduhan nonaktif. */
+    val workerUrl: String = "",
+    /** Ketegasan mesin potong: LONGGAR (lebih banyak halaman utuh) — BALANCED — AKURAT (cut paling ketat). */
+    val cutStrictness: CutStrictness = CutStrictness.BALANCED,
+    /** Pakai banner template OpenCV + gate konsistensi. */
+    val enableBannerCut: Boolean = true
 )

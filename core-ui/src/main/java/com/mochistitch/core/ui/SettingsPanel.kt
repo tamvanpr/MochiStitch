@@ -38,6 +38,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.mochistitch.core.imaging.FileNamer
+import com.mochistitch.core.settings.CutStrictness
 import com.mochistitch.core.settings.ImageFormat
 import com.mochistitch.core.settings.MatteColor
 import com.mochistitch.core.settings.PackFormat
@@ -211,6 +212,30 @@ fun SettingsPanel(
                     )
                 }
             }
+        }
+
+        Group("Potong Cerdas") {
+            SubLabel("Ketegasan potongan")
+            ChipRow {
+                CutStrictness.entries.forEach { preset ->
+                    OptionChip(
+                        active = settings.cutStrictness == preset,
+                        onTap = { onChange(settings.copy(cutStrictness = preset)) },
+                        text = when (preset) {
+                            CutStrictness.LOOSE -> "Longgar"
+                            CutStrictness.BALANCED -> "Seimbang"
+                            CutStrictness.STRICT -> "Akurat"
+                        }
+                    )
+                }
+            }
+            Note(
+                when (settings.cutStrictness) {
+                    CutStrictness.LOOSE -> "Longgar: minimal garis potong (lebih aman, halaman mungkin terlalu tinggi)."
+                    CutStrictness.BALANCED -> "Seimbang: keseimbangan antara keamanan dan efisiensi (rekomendasi)."
+                    CutStrictness.STRICT -> "Akurat: potong lebih sering (banner lebih bersih, risiko halaman terpotong lebih tinggi)."
+                }
+            )
         }
 
         Group("Unduhan Mentah") {
