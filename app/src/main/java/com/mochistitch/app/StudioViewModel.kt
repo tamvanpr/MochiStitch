@@ -655,7 +655,7 @@ class StudioViewModel : ViewModel() {
 
     /**
      * Terbitkan satu file via MediaStore (Android 10+).
-     * - Gambar (image/*) -> koleksi Images, Pictures/MochiStitch.
+     * - Gambar (tipe image) -> koleksi Images, Pictures/MochiStitch.
      * - Arsip (zip/cbz) -> koleksi Downloads, Download/MochiStitch.
      *   Koleksi Files/Download MENOLAK Pictures sebagai RELATIVE_PATH
      *   ("Primary directory Pictures not allowed"), jadi arsip wajib ke
