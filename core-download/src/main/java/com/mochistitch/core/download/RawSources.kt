@@ -187,11 +187,28 @@ object RawSources {
     fun byId(id: String): SourceDef? = ALL_ID.firstOrNull { it.id == id } ?: ALL_EN.firstOrNull { it.id == id }
 
     /**
-     * Header unduhan gambar per sumber. Default Referer = halaman chapter
-     * (lolos proteksi hotlink). Koudaimh MEMAKSA tanpa Referer/Origin untuk
-     * CDN-nya (referrerpolicy no-referrer di situs asli; mengirim Referer
-     * justru berisiko 403) — sama seperti worker.
+     * Header unduhan gambar per sumber — disalin dari config frontend
+     * (Trial Fetch ID + EN). Kebanyakan CDN hanya memeriksa origin, tapi
+     * baozimh WAJIB `https://appgb.baozimh.com/` dan koudaimh WAJIB tanpa
+     * Referer/Origin untuk CDN-nya (referrerpolicy no-referrer di situs
+     * asli; mengirim Referer justru berisiko 403).
      */
+    private val SITE_REFERERS = mapOf(
+        "baozimh" to "https://appgb.baozimh.com/",
+        "manwa" to "https://manwa.me/",
+        "wmanhua" to "https://www.wmanhua.com/",
+        "mangadex" to "https://mangadex.org/",
+        "mangapill" to "https://mangapill.com/",
+        "comick" to "https://comick.io/",
+        "mangageko" to "https://www.mgeko.cc/",
+        "likemanga" to "https://likemanga.ink/",
+        "mangabats" to "https://www.mangabats.com/",
+        "xcomic" to "https://xcomic.me/"
+    )
+
+    /** Sumber yang referer-nya ikut origin URL tempelan (domain berputar). */
+    private val DYNAMIC_REFERERS = setOf("jjaptoon", "jjabtoon", "goodtoon", "demonic")
+
     fun imageHeaders(sourceId: String, imageUrl: String, chapterUrl: String): Map<String, String> {
         if (sourceId == KOUDAIMH.id) {
             val host = imageUrl.substringAfter("://").substringBefore("/").lowercase()
@@ -202,7 +219,12 @@ object RawSources {
             ) {
                 return mapOf("Accept-Language" to "zh-CN,zh;q=0.9,en;q=0.8")
             }
+            return emptyMap()
         }
+        if (sourceId in DYNAMIC_REFERERS) {
+            return mapOf("Referer" to DirectResolvers.originOf(chapterUrl).trimEnd('/') + "/")
+        }
+        SITE_REFERERS[sourceId]?.let { return mapOf("Referer" to it) }
         return mapOf("Referer" to chapterUrl)
     }
 

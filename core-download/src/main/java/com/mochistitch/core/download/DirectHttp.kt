@@ -56,7 +56,7 @@ object DirectHttp {
             if (code !in 200..299) throw IOException("HTTP $code")
             val out = java.io.ByteArrayOutputStream()
             var total = 0L
-            c.inputStream.use { inp ->
+            decodedStream(c).use { inp ->
                 val buf = ByteArray(64 * 1024)
                 while (true) {
                     val n = inp.read(buf)
@@ -72,6 +72,21 @@ object DirectHttp {
         }
     }
 
+    /**
+     * HttpURLConnection TIDAK mendekompresi otomatis bila Accept-Encoding
+     * di-set manual (kasus header app baozimh yang menyertakan gzip).
+     * Tanpa ini respons terbaca sebagai biner sampah dan parse gagal.
+     */
+    fun decodedStream(c: HttpURLConnection): java.io.InputStream {
+        val raw = c.inputStream
+        val enc = (c.getHeaderField("Content-Encoding") ?: "").lowercase()
+        return when {
+            enc.contains("gzip") -> java.util.zip.GZIPInputStream(raw)
+            enc.contains("deflate") -> java.util.zip.InflaterInputStream(raw)
+            else -> raw
+        }
+    }
+
     private fun open(url: String, method: String, headers: Map<String, String>, timeoutMs: Int): HttpURLConnection {
         val c = URL(url).openConnection() as HttpURLConnection
         c.requestMethod = method
@@ -84,7 +99,7 @@ object DirectHttp {
     }
 
     private fun streamText(c: HttpURLConnection, code: Int): String {
-        val stream = if (code in 200..299) c.inputStream else (c.errorStream ?: c.inputStream)
+        val stream = if (code in 200..299) decodedStream(c) else (c.errorStream ?: c.inputStream)
         return stream.bufferedReader(Charsets.UTF_8).use { it.readText() }
     }
 

@@ -37,6 +37,20 @@ object RawCrypto {
         return aesCbcDecrypt(k, k, encrypted)
     }
 
+    /**
+     * Placeholder 1px CDN koudaimh (HTTP 200 berisi dummy): hash SHA-256
+     * yang dikenal dari frontend (`KNOWN_PLACEHOLDER_HASHES`).
+     */
+    private const val KOUDAIMH_PLACEHOLDER_SHA256 =
+        "4ea088b69b1c9e7d0e394e4278b922c0b0988e6a33c2cd796dd7d4c9a6860dfb"
+
+    fun isKoudaimhPlaceholder(bytes: ByteArray): Boolean {
+        if (bytes.size >= 5000) return false
+        val digest = java.security.MessageDigest.getInstance("SHA-256").digest(bytes)
+        val hex = digest.joinToString("") { "%02x".format(it) }
+        return hex == KOUDAIMH_PLACEHOLDER_SHA256
+    }
+
     /** Blob `params` koudaimh -> JSON plaintext (base64url, IV = 16 byte pertama). */
     fun decryptKoudaimhParams(blob: String): String {
         var b64 = blob.replace("\\s+".toRegex(), "").replace("-", "+").replace("_", "/")

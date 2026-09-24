@@ -350,7 +350,8 @@ class StudioViewModel : ViewModel() {
                             )
                         }
                     },
-                    transform = if (sid == RawSources.MANWA.id) RawCrypto::decryptManwaImage else null
+                    transform = if (sid == RawSources.MANWA.id) RawCrypto::decryptManwaImage else null,
+                    smallVeto = if (sid == RawSources.KOUDAIMH.id) RawCrypto::isKoudaimhPlaceholder else null
                 )
                 if (out.ok.isEmpty()) {
                     try { dir.deleteRecursively() } catch (t: Throwable) { }

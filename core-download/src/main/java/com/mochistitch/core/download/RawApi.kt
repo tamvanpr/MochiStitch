@@ -99,7 +99,12 @@ class PageDownloader(
         headersFor: (pageUrl: String) -> Map<String, String> = { emptyMap() },
         onProgress: (FetchProgress) -> Unit = {},
         /** Pasca-proses bytes (mis. dekripsi AES manwa) sebelum tulis berkas. */
-        transform: ((ByteArray) -> ByteArray)? = null
+        transform: ((ByteArray) -> ByteArray)? = null,
+        /**
+         * Veto berkas kecil (< 5KB): true = tolak (mis. placeholder 1px
+         * koudaimh yang lolos sebagai HTTP 200) agar di-retry/gagal jelas.
+         */
+        smallVeto: ((ByteArray) -> Boolean)? = null
     ): Outcome = withContext(Dispatchers.IO) {
         destDir.mkdirs()
         val sem = Semaphore(parallel.coerceAtLeast(1))
@@ -107,7 +112,7 @@ class PageDownloader(
         val failed = mutableListOf<String>()
         var done = 0
         val jobs = pages.map { page ->
-            async { sem.withPermit { downloadOne(page, destDir, headersFor(page.url), transform) } }
+            async { sem.withPermit { downloadOne(page, destDir, headersFor(page.url), transform, smallVeto) } }
         }
         jobs.forEach { d ->
             val (file, name) = d.await()
@@ -128,7 +133,8 @@ class PageDownloader(
         page: PageRef,
         dir: File,
         headers: Map<String, String>,
-        transform: ((ByteArray) -> ByteArray)? = null
+        transform: ((ByteArray) -> ByteArray)? = null,
+        smallVeto: ((ByteArray) -> Boolean)? = null
     ): Pair<File?, String> {
         // Manwa terenkripsi selalu webp (lihat worker: Content-Type image/webp).
         val ext = if (transform != null && page.url.substringBefore('?').lowercase().let { u ->
@@ -171,7 +177,7 @@ class PageDownloader(
                     if (c.responseCode !in 200..299) throw IOException("HTTP ${c.responseCode}")
                     val tmp = File(dir, "$name.part")
                     var bytes = 0L
-                    c.inputStream.use { inp ->
+                    DirectHttp.decodedStream(c).use { inp ->
                         tmp.outputStream().use { out ->
                             val buf = ByteArray(64 * 1024)
                             while (true) {
@@ -181,6 +187,17 @@ class PageDownloader(
                                 if (bytes > maxBytes) throw IOException("Gambar > ${maxBytes / 1024 / 1024}MB")
                                 out.write(buf, 0, n)
                             }
+                        }
+                    }
+                    if (smallVeto != null && tmp.length() < 5000) {
+                        val veto = try {
+                            smallVeto(tmp.readBytes())
+                        } catch (e: Exception) {
+                            false
+                        }
+                        if (veto) {
+                            try { tmp.delete() } catch (t: Throwable) { }
+                            throw IOException("placeholder CDN")
                         }
                     }
                     if (dest.exists()) dest.delete()

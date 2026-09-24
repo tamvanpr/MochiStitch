@@ -137,15 +137,25 @@ object DirectResolvers {
         val tags = Regex("""<img\b[^>]*\bclass="comic-contain__item"[^>]*>""", RegexOption.IGNORE_CASE)
             .findAll(html).map { it.value }.toList()
         val images = tags.mapNotNull { tag ->
-            val src = Regex("""data-src="([^"]+)"""", RegexOption.IGNORE_CASE).find(tag)?.groupValues?.get(1) ?: return@mapNotNull null
+            val raw = Regex("""data-src="([^"]+)"""", RegexOption.IGNORE_CASE).find(tag)?.groupValues?.get(1) ?: return@mapNotNull null
             val idx = Regex("""data-index="(\d+)"""", RegexOption.IGNORE_CASE).find(tag)?.groupValues?.get(1)?.toIntOrNull()
             val w = Regex("""data-w="(\d+)"""", RegexOption.IGNORE_CASE).find(tag)?.groupValues?.get(1)?.toIntOrNull() ?: 0
             val h = Regex("""data-h="(\d+)"""", RegexOption.IGNORE_CASE).find(tag)?.groupValues?.get(1)?.toIntOrNull() ?: 0
-            Triple(idx, src, w to h)
+            Triple(idx, rewriteBzcdnUrl(raw), w to h)
         }.sortedBy { it.first ?: Int.MAX_VALUE }
             .mapIndexed { i, (_, src, wh) -> PageRef(page = i + 1, url = src, width = wh.first, height = wh.second) }
         if (images.isEmpty()) throw RawApiException("Tidak ada gambar di chapter baozimh (markup berubah?).")
         return finishPages("baozimh", tParts.getOrElse(1) { "" }.trim(), tParts.getOrElse(0) { "" }.trim(), images)
+    }
+
+    /**
+     * Gambar s.baozicdn.com/s1.baozicdn.com (dan bzcdn.net) ber-watermark;
+     * static-tw.baozimh.com melayani path yang sama TANPA watermark.
+     * Porting rewriteBzcdnUrl frontend.
+     */
+    fun rewriteBzcdnUrl(url: String): String {
+        val m = Regex("""^https?://[\w-]+\.(?:baozicdn\.com|bzcdn\.net)/(.+)$""").find(url.trim())
+        return if (m != null) "https://static-tw.baozimh.com/${m.groupValues[1]}" else url
     }
 
     // ── ID: wmanhua ─────────────────────────────────────────────────

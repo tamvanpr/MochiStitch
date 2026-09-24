@@ -238,4 +238,72 @@ class DirectParseTest {
         val ref = RawSources.imageHeaders("baozimh", "https://cdn/x.jpg", "https://www.baozimh.com/comic/chapter/a/1.html")
         assertEquals("https://www.baozimh.com/comic/chapter/a/1.html", ref["Referer"])
     }
+
+    @Test
+    fun testImageHeadersPerSite() {
+        // Disalin dari config frontend: baozimh WAJIB appgb, dinamis ikut origin.
+        assertEquals(
+            "https://appgb.baozimh.com/",
+            RawSources.imageHeaders("baozimh", "https://static-tw.baozimh.com/x.jpg", "https://www.baozimh.com/comic/chapter/a/1.html")["Referer"]
+        )
+        assertEquals(
+            "https://www.jjaptoon008.com/",
+            RawSources.imageHeaders("jjaptoon", "https://cdn/x.jpg", "https://www.jjaptoon008.com/chapters/5")["Referer"]
+        )
+        assertEquals(
+            "https://mangadex.org/",
+            RawSources.imageHeaders("mangadex", "https://uploads.mdex/x.jpg", "https://mangadex.org/chapter/abc")["Referer"]
+        )
+        assertEquals(
+            "https://manwa.me/",
+            RawSources.imageHeaders("manwa", "https://mwappimgs.cc/x.webp", "https://manwa.me/chapter/9")["Referer"]
+        )
+    }
+
+    @Test
+    fun testRewriteBzcdnUrl() {
+        assertEquals(
+            "https://static-tw.baozimh.com/a/b.jpg",
+            DirectResolvers.rewriteBzcdnUrl("https://s.baozicdn.com/a/b.jpg")
+        )
+        assertEquals(
+            "https://static-tw.baozimh.com/a/b.jpg",
+            DirectResolvers.rewriteBzcdnUrl("https://x.bzcdn.net/a/b.jpg")
+        )
+        assertEquals(
+            "https://other.com/a.jpg",
+            DirectResolvers.rewriteBzcdnUrl("https://other.com/a.jpg")
+        )
+    }
+
+    @Test
+    fun testBaozimhChapterRewritesWatermark() {
+        val html = """<html><head><title>C - K</title></head><body>
+            |<img class="comic-contain__item" data-index="0" data-src="https://s.baozicdn.com/p/1.jpg" data-w="800" data-h="1200">
+            |</body></html>""".trimMargin()
+        val got = DirectResolvers.parseBaozimhChapter(html)
+        assertEquals("https://static-tw.baozimh.com/p/1.jpg", got.pages[0].url)
+    }
+
+    @Test
+    fun testGzipDecode() {
+        val raw = "halo gzip, halaman komik mentah".toByteArray(Charsets.UTF_8)
+        val buf = java.io.ByteArrayOutputStream()
+        java.util.zip.GZIPOutputStream(buf).use { it.write(raw) }
+        val conn = object : java.net.HttpURLConnection(java.net.URL("https://example.com/")) {
+            override fun connect() {}
+            override fun disconnect() {}
+            override fun usingProxy(): Boolean = false
+            override fun getHeaderField(name: String?): String? =
+                if (name.equals("Content-Encoding", ignoreCase = true)) "gzip" else null
+            override fun getInputStream(): java.io.InputStream = buf.toByteArray().inputStream()
+        }
+        assertEquals(raw.toList(), DirectHttp.decodedStream(conn).readBytes().toList())
+    }
+
+    @Test
+    fun testPlaceholderNegative() {
+        assertEquals(false, RawCrypto.isKoudaimhPlaceholder(ByteArray(100) { it.toByte() }))
+        assertEquals(false, RawCrypto.isKoudaimhPlaceholder(ByteArray(6000)))
+    }
 }
