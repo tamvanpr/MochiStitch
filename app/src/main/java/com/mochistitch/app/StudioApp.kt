@@ -277,7 +277,7 @@ fun StudioApp(viewModel: StudioViewModel, onExitApp: () -> Unit) {
                     LinearProgressIndicator(
                         progress = { state.fraction.coerceIn(0f, 1f) },
                         modifier = Modifier.fillMaxWidth(),
-                        color = MaterialTheme.colorScheme.primary
+                        color = MaterialTheme.colorScheme.secondary
                     )
                 }
             }
