@@ -79,7 +79,9 @@ flag tinjau.
 - Format gambar default: JPG; pembungkus default: ZIP
 - Tidak ada UI horizontal di mana pun
 - Input arsip: ZIP/CBZ/RAR/CBR/7Z/CB7 via core-archive
-- Output arsip dari sumber arsip = basename SAMA (tanpa timestamp)
+- Output arsip: Terbitkan (tab Hasil) SELALU ikut Setelan
+  (`{series}_ch{chapter}.zip/cbz`, tanpa timestamp); batch per komik
+  (arsip asal = basename sama, unduhan/manual = judulnya, tanpa timestamp)
 - Bitmap config: RGB_565 — hemat memory
 - Tiap build menghasilkan 5 APK: universal, armeabi-v7a, arm64-v8a, x86, x86_64
 - Commit message dalam bahasa Indonesia

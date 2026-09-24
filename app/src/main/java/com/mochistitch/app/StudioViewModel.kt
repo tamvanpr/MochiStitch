@@ -490,7 +490,8 @@ class StudioViewModel : ViewModel() {
                         height = strip.height,
                         flagged = strip.flagged,
                         flagReason = strip.flagReason,
-                        bytes = strip.bytes
+                        bytes = strip.bytes,
+                        bannerCut = strip.bannerCut
                     )
                 }
                 _state.update {
@@ -521,6 +522,18 @@ class StudioViewModel : ViewModel() {
         }
     }
 
+    /**
+     * Nama arsip sesuai Setelan (tanpa timestamp): dipakai tombol Terbitkan.
+     * Disanitasi agar aman sebagai nama berkas.
+     */
+    fun defaultArchiveName(): String {
+        val s = _state.value.settings
+        val series = ArchiveKit.sanitizeName(s.seriesTitle.ifBlank { "MochiStitch" })
+        val chapter = ArchiveKit.sanitizeName(s.chapterLabel.ifBlank { "1" })
+        val ext = if (s.packFormat == PackFormat.CBZ) "cbz" else "zip"
+        return "${series}_ch${chapter}.$ext"
+    }
+
     fun exportMime(): String = when (_state.value.settings.packFormat) {
         PackFormat.CBZ -> "application/x-cbz"
         PackFormat.ZIP -> "application/zip"
@@ -542,6 +555,7 @@ class StudioViewModel : ViewModel() {
                     files = slices.map { it.fileName to it.cachePath?.let { path -> File(path) } },
                     origin = _state.value.activeOrigin,
                     pack = settings.packFormat,
+                    fileName = defaultArchiveName(),
                     onProgress = { p -> _state.update { it.copy(fraction = p) } }
                 )
                 _state.update {
@@ -588,11 +602,19 @@ class StudioViewModel : ViewModel() {
                         banner = banner,
                         bannerTemplateBitmaps = bannerTemplateBitmaps(context)
                     ).getOrThrow().strips
+                    // Batch: tiap komik punya nama sendiri (arsip -> basename
+                    // sama; unduhan/manual -> judulnya) agar tak tabrakan.
+                    val batchName = if (ArchiveKit.canOpen(comic.origin)) {
+                        FileNamer.packName(comic.origin, pack)
+                    } else {
+                        FileNamer.packName(ArchiveKit.sanitizeName(comic.origin.ifBlank { "komik" }), pack)
+                    }
                     val info = writeOut(
                         context = context,
                         files = built.map { it.fileName to it.file },
                         origin = comic.origin,
-                        pack = pack
+                        pack = pack,
+                        fileName = batchName
                     )
                     outcomes.add(PublishedFile(comic.origin, info.path, info.shareUri, info.packs, info.bytes))
                 } catch (e: Throwable) {
@@ -613,16 +635,19 @@ class StudioViewModel : ViewModel() {
         files: List<Pair<String, File?>>,
         origin: String?,
         pack: PackFormat,
+        fileName: String? = null,
         onProgress: suspend (Float) -> Unit = {}
     ): OutInfo = withContext(Dispatchers.IO) {
         val useMedia = android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q
         val stamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
 
         if (pack == PackFormat.CBZ || pack == PackFormat.ZIP) {
-            val name = when {
+            // Prioritas nama: eksplisit (Setelan/batch) -> basename arsip
+            // asal -> judul origin -> default Setelan. Tanpa timestamp.
+            val name = fileName?.takeIf { it.isNotBlank() } ?: when {
                 origin != null && ArchiveKit.canOpen(origin) -> FileNamer.packName(origin, pack)
-                origin != null && origin.isNotBlank() -> FileNamer.packName(origin, pack, stamp)
-                else -> FileNamer.packName(defaultFileName(), pack, stamp)
+                origin != null && origin.isNotBlank() -> FileNamer.packName(ArchiveKit.sanitizeName(origin), pack)
+                else -> defaultArchiveName()
             }
             val mime = if (pack == PackFormat.CBZ) "application/x-cbz" else "application/zip"
             // Rakit dulu ke cache, lalu terbitkan via MediaStore (wajib di Android 10+).

@@ -21,5 +21,7 @@ data class SliceInfo(
     val height: Int,
     val flagged: Boolean = false,
     val flagReason: String? = null,
-    val bytes: Long = 0L
+    val bytes: Long = 0L,
+    /** Strip banner situs dicrop di berkas ini (info, bukan peringatan). */
+    val bannerCut: Boolean = false
 )
