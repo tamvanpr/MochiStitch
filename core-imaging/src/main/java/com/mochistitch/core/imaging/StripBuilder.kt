@@ -72,7 +72,8 @@ class StripBuilder(
         uris: List<Uri>,
         settings: StitchSettings,
         onProgress: (BuildPhase, Float) -> Unit = { _, _ -> },
-        banner: BannerPolicy? = null
+        banner: BannerPolicy? = null,
+        bannerTemplates: List<BannerTemplate.Sig> = emptyList()
     ): Result<BuildOutput> = withContext(Dispatchers.IO) {
         if (uris.isEmpty()) return@withContext Result.failure(IllegalArgumentException("Tidak ada gambar."))
         try {
@@ -92,7 +93,7 @@ class StripBuilder(
             // 0) Banner situs (mis. baozimh 200px): crop HANYA bila strip
             // atas/bawah terbukti identik antar-halaman (gerbang BannerGate).
             // Selalu ada catatan keputusan (null = kebijakan tak dipakai).
-            val bannerResult = bannerCrops(measured, banner)
+            val bannerResult = bannerCrops(measured, banner, bannerTemplates)
             val bannerCrops = bannerResult.crops
 
             // 1) Halaman raksasa -> segmen di celah aman (v6: vertikal+paper+tengah).
@@ -170,14 +171,15 @@ class StripBuilder(
      */
     private fun bannerCrops(
         measured: List<StripRenderer.Measured>,
-        policy: BannerPolicy?
+        policy: BannerPolicy?,
+        templates: List<BannerTemplate.Sig>
     ): BannerResult {
         if (policy == null || measured.isEmpty()) return BannerResult(emptyMap(), null)
         val need = policy.minPages.coerceAtLeast(2)
         val tallIdx = measured.indices.filter { i ->
             measured[i].height >= max(policy.minPageH, policy.stripPx * 2 + 100)
         }
-        if (tallIdx.size < need) {
+        if (tallIdx.size < need && templates.isEmpty()) {
             return BannerResult(emptyMap(), "Banner: hanya ${tallIdx.size} halaman cukup tinggi (butuh $need) — tidak dicek.")
         }
         fun strip(m: StripRenderer.Measured, top: Boolean): BannerGate.Strip? {
@@ -196,32 +198,97 @@ class StripBuilder(
         val bots = tallIdx.mapNotNull { i ->
             strip(measured[i], top = false)?.let { i to it }
         }
-        val need = policy.minPages.coerceAtLeast(2)
-        if (policy.checkTop && tops.size < need && policy.checkBottom && bots.size < need) {
-            return BannerResult(emptyMap(), "Banner: strip gagal dibaca (${tops.size}/${bots.size} dari $need) — dilewati.")
+        if (tops.isEmpty() && bots.isEmpty()) {
+            return BannerResult(emptyMap(), "Banner: strip gagal dibaca — dilewati.")
         }
+        // Lapis 1 — template (per halaman, tanpa butuh halaman lain).
+        var viaTemplate = 0
+        val strongTop = mutableSetOf<Int>()
+        val strongBot = mutableSetOf<Int>()
+        val medTop = mutableSetOf<Int>()
+        val medBot = mutableSetOf<Int>()
+        if (templates.isNotEmpty()) {
+            for ((i, s) in tops) {
+                val g = BannerTemplate.downscale(s.px, s.w, s.h)
+                val sc = BannerTemplate.bestScore(g, templates)
+                if (sc >= BannerTemplate.STRONG) strongTop.add(i)
+                else if (sc >= BannerTemplate.MEDIUM) medTop.add(i)
+            }
+            for ((i, s) in bots) {
+                val g = BannerTemplate.downscale(s.px, s.w, s.h)
+                val sc = BannerTemplate.bestScore(g, templates)
+                if (sc >= BannerTemplate.STRONG) strongBot.add(i)
+                else if (sc >= BannerTemplate.MEDIUM) medBot.add(i)
+            }
+        }
+        // Lapis 2 — gerbang konsistensi (banner belum dikenal).
         val topStrips = tops.map { it.second }
         val botStrips = bots.map { it.second }
         val decision = BannerGate.decide(topStrips, botStrips, policy)
-        // Petakan kembali indeks keputusan (dalam daftar kandidat) ke indeks halaman.
         val topIdx = tops.map { it.first }
         val botIdx = bots.map { it.first }
+        val gateTop = decision.top.mapNotNull { topIdx.getOrNull(it) }.toSet()
+        val gateBot = decision.bottom.mapNotNull { botIdx.getOrNull(it) }.toSet()
+        // Komposisi: kuat-template langsung; medium-template + gate setuju.
         val out = mutableMapOf<Int, Pair<Int, Int>>()
-        decision.top.forEach { k -> topIdx.getOrNull(k)?.let { i -> out[i] = policy.stripPx to (out[i]?.second ?: 0) } }
-        decision.bottom.forEach { k -> botIdx.getOrNull(k)?.let { i -> out[i] = (out[i]?.first ?: 0) to policy.stripPx } }
+        fun addTop(i: Int) {
+            out[i] = policy.stripPx to (out[i]?.second ?: 0)
+        }
+        fun addBot(i: Int) {
+            out[i] = (out[i]?.first ?: 0) to policy.stripPx
+        }
+        var viaGate = 0
+        for (i in strongTop) {
+            addTop(i)
+            viaTemplate++
+        }
+        for (i in strongBot) {
+            addBot(i)
+            viaTemplate++
+        }
+        for (i in medTop) {
+            if (i in gateTop && i !in strongTop) {
+                addTop(i)
+                viaGate++
+            }
+        }
+        for (i in medBot) {
+            if (i in gateBot && i !in strongBot) {
+                addBot(i)
+                viaGate++
+            }
+        }
+        // Halaman yang template-nya lemah tapi gate mengelompokkannya penuh:
+        // ikutkan seluruh kelompok gate (banner baru yang seragam).
+        for (i in gateTop) {
+            if (i !in strongTop && i !in medTop && tops.any { it.first == i }) {
+                addTop(i)
+                viaGate++
+            }
+        }
+        for (i in gateBot) {
+            if (i !in strongBot && i !in medBot && bots.any { it.first == i }) {
+                addBot(i)
+                viaGate++
+            }
+        }
         if (out.isEmpty()) {
             return BannerResult(
                 emptyMap(),
-                "Banner: strip atas/bawah beda-beda antar-halaman (${tallIdx.size} dicek) — bukan banner seragam, dilewati."
+                "Banner: tidak cocok template dan strip beda-beda (${tallIdx.size} dicek) — dilewati."
             )
         }
-        val t = decision.top.size
-        val b = decision.bottom.size
+        val t = out.count { it.value.first > 0 }
+        val b = out.count { it.value.second > 0 }
         val where = listOf(
             if (t > 0) "atas $t" else null,
             if (b > 0) "bawah $b" else null
         ).filterNotNull().joinToString(" + ")
-        return BannerResult(out, "Banner: dicrop $where (${out.size} halaman).")
+        val how = listOf(
+            if (viaTemplate > 0) "$viaTemplate template" else null,
+            if (viaGate > 0) "$viaGate konsistensi" else null
+        ).filterNotNull().joinToString(" + ")
+        return BannerResult(out, "Banner: dicrop $where (${out.size} halaman via $how).")
     }
 
     /**

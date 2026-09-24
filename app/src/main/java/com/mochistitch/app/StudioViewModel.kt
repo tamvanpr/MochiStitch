@@ -2,6 +2,7 @@ package com.mochistitch.app
 
 import android.content.Context
 import android.content.Intent
+import android.graphics.BitmapFactory
 import android.net.Uri
 import android.os.Environment
 import android.provider.OpenableColumns
@@ -16,10 +17,10 @@ import com.mochistitch.core.download.DirectDownloadApi
 import com.mochistitch.core.download.PageDownloader
 import com.mochistitch.core.download.RawApiException
 import com.mochistitch.core.download.RawCrypto
-import com.mochistitch.core.download.RawSources
-import com.mochistitch.core.download.UrlKind
+import com.mochistitch.core.download.RawSourcesimport com.mochistitch.core.download.UrlKind
 import com.mochistitch.core.download.WorkerDownloadApi
 import com.mochistitch.core.imaging.BuildPhase
+import com.mochistitch.core.imaging.BannerTemplate
 import com.mochistitch.core.imaging.BuiltStrip
 import com.mochistitch.core.imaging.FileNamer
 import com.mochistitch.core.imaging.StripBuilder
@@ -84,6 +85,36 @@ class StudioViewModel : ViewModel() {
 
     private var repo: StitchSettingsRepository? = null
     private var settingsSaveJob: Job? = null
+
+    /** Signature template banner (aset), dimuat malas sekali per proses. */
+    private var bannerSigs: List<BannerTemplate.Sig>? = null
+
+    private fun bannerTemplates(context: Context): List<BannerTemplate.Sig> {
+        bannerSigs?.let { return it }
+        val out = mutableListOf<BannerTemplate.Sig>()
+        try {
+            val names = context.assets.list("banners").orEmpty()
+                .filter { it.endsWith(".jpg", ignoreCase = true) || it.endsWith(".png", ignoreCase = true) }
+                .sorted()
+            for (name in names) {
+                try {
+                    context.assets.open("banners/$name").use { inp ->
+                        val bmp = BitmapFactory.decodeStream(inp) ?: continue
+                        try {
+                            if (bmp.width <= 0 || bmp.height <= 0) return@use
+                            val px = IntArray(bmp.width * bmp.height)
+                            bmp.getPixels(px, 0, bmp.width, 0, 0, bmp.width, bmp.height)
+                            out.add(BannerTemplate.Sig(BannerTemplate.downscale(px, bmp.width, bmp.height)))
+                        } finally {
+                            try { bmp.recycle() } catch (t: Throwable) { }
+                        }
+                    }
+                } catch (t: Throwable) { /* satu template rusak: lewati */ }
+            }
+        } catch (t: Throwable) { /* folder aset hilang: tanpa template */ }
+        bannerSigs = out
+        return out
+    }
 
     fun boot(context: Context) {
         if (repo != null) return
@@ -445,7 +476,8 @@ class StudioViewModel : ViewModel() {
                     uris = _state.value.pages.map { it.uri },
                     settings = settings,
                     onProgress = { phase, p -> _state.update { it.copy(phase = phase.label, fraction = p) } },
-                    banner = banner
+                    banner = banner,
+                    bannerTemplates = bannerTemplates(context)
                 ).getOrThrow()
                 val done = out.strips
                 val slices = done.map { strip ->
@@ -553,7 +585,8 @@ class StudioViewModel : ViewModel() {
                         uris = comic.pageUris,
                         settings = base,
                         onProgress = { _, p -> _state.update { it.copy(fraction = (pi + p) / comics.size.toFloat()) } },
-                        banner = banner
+                        banner = banner,
+                        bannerTemplates = bannerTemplates(context)
                     ).getOrThrow().strips
                     val info = writeOut(
                         context = context,
