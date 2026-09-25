@@ -21,10 +21,23 @@ class CutPlannerTest {
             busy[y] = true
             ink[y] = 50
         }
-        val cuts = CutPlanner.plan(RowProfile(busy, ink), maxLen = 100, minLen = 40, margin = 10)
+        val margin = 10
+        val cuts = CutPlanner.plan(
+            RowProfile(busy, ink),
+            maxLen = 200,
+            minLen = 40,
+            overshoot = 50,
+            margin = margin
+        )
         assertTrue(cuts.isNotEmpty())
-        assertTrue(cuts.none { it.y in 80..130 })
-        assertTrue(cuts.none { it.forced })
+        assertTrue("potongan boleh melintasi baris sibuk", cuts.none { it.y in 95 - margin..115 + margin })
+        assertTrue("ada celah polos, tidak perlu paksa", cuts.none { it.forced })
+        var previous = 0
+        cuts.forEach {
+            assertTrue("titik potong harus maju", it.y > previous)
+            previous = it.y
+        }
+        assertTrue("ekor tidak boleh melebihi batas jauh", 400 - previous <= 200)
     }
 
     @Test
