@@ -433,10 +433,17 @@ class StripBuilder(
             // sedikit lebih tinggi daripada memotong tinta atau halaman utuh.
             val overflowDec = (limitDec / 5).coerceIn(128, 2500)
             val window = safe.copyOfRange(eTopDec, eBotDec)
-            val plan = SeamScan.planCuts(
+            val ink = SeamScan.inkDensity(
+                getRow = { yy, out -> bmp.getPixels(out, 0, dw, 0, yy, dw, 1) },
+                width = dw,
+                height = dh,
+                step = cfg.step
+            ).copyOfRange(eTopDec, eBotDec)
+            val plan = SeamScan.planCutsWithInk(
                 safe = window,
+                ink = ink,
                 limit = limitDec,
-                minChunk = limitDec / 2,
+                cfg = cfg,
                 overflow = overflowDec
             )
             if (plan.cuts.isEmpty() && !plan.tailSafe) {

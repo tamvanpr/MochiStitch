@@ -242,8 +242,66 @@ object SeamScan {
         return CutPlan(cuts, tailSafe = true)
     }
 
-    /**
-     * true bila patch piksel mengandung konten (bukan latar datar): sebaran
+    fun inkDensity(
+        getRow: (y: Int, out: IntArray) -> Unit,
+        width: Int,
+        height: Int,
+        step: Int = 2
+    ): FloatArray {
+        val out = FloatArray(height)
+        if (width < 2 || height <= 0) return out
+        val row = IntArray(width)
+        var y = 0
+        while (y < height) {
+            getRow(y, row)
+            var edges = 0
+            var previous = luminance(row[0])
+            for (x in 1 until width) {
+                val current = luminance(row[x])
+                if (absI(current - previous) > EDGE_TAU) edges++
+                previous = current
+            }
+            out[y] = edges.toFloat() / (width - 1)
+            y += step.coerceAtLeast(1)
+        }
+        return out
+    }
+
+    fun planCutsWithInk(
+        safe: BooleanArray,
+        ink: FloatArray,
+        limit: Int,
+        cfg: Config,
+        overflow: Int = 0
+    ): CutPlan {
+        if (limit <= 0 || safe.size <= limit) return CutPlan(emptyList(), true)
+        val maxSearchUp = (limit * cfg.maxSearchDeviationFactor).toInt().coerceAtLeast(1)
+        val cuts = mutableListOf<Int>()
+        var y = 0
+        while (y + limit < safe.size) {
+            val ideal = y + limit
+            fun choose(from: Int, to: Int): Int? {
+                var best: Int? = null
+                var bestScore = Float.MAX_VALUE
+                for (yy in maxOf(y + 1, from)..minOf(safe.lastIndex, to)) {
+                    if (!safe[yy]) continue
+                    val score = absI(yy - ideal).toFloat() + ink.getOrElse(yy) { 1f } * 10000f
+                    if (score < bestScore) {
+                        best = yy
+                        bestScore = score
+                    }
+                }
+                return best
+            }
+            val c = choose(ideal - maxSearchUp, ideal) ?: if (overflow > 0) choose(ideal - maxSearchUp - overflow, ideal) else null
+            if (c == null) return CutPlan(cuts, tailSafe = false)
+            cuts.add(c)
+            y = c
+        }
+        return CutPlan(cuts, tailSafe = true)
+    }
+
+ (bukan latar datar): sebaran
      * kecerahan cukup besar. Dipakai agar margin putih-vs-putih tidak
      * disangka "bersambung".
      */
