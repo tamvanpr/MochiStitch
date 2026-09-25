@@ -541,12 +541,18 @@ class StripBuilder(
         val prof = RowScanner.scanBuffer(patch.px, patch.w, patch.h, edge, range, noisePixels = 3)
         val center = (cutY - top).coerceIn(0, patch.h - 1)
         if (!prof.busy[center]) return cutY to false
+        // Geser ke baris bebas terdekat, tapi wajib ada zona bersih
+        // ±VERIFY_GUARD di sekitarnya (jangan mendarat di sebelah tinta).
         val radius = 48
         for (d in 1..radius) {
             val dn = center - d
-            if (dn >= 0 && !prof.busy[dn]) return (top + dn) to false
+            if (dn - VERIFY_GUARD >= 0 && (dn - VERIFY_GUARD..dn + VERIFY_GUARD).all { !prof.busy[it] }) {
+                return (top + dn) to false
+            }
             val up = center + d
-            if (up < patch.h && !prof.busy[up]) return (top + up) to false
+            if (up + VERIFY_GUARD < patch.h && (up - VERIFY_GUARD..up + VERIFY_GUARD).all { !prof.busy[it] }) {
+                return (top + up) to false
+            }
         }
         return cutY to true
     }
@@ -660,6 +666,7 @@ class StripBuilder(
     private companion object {
         const val PREVIEW_CAP = 2048
         const val SCAN_WIDTH = 480
+        const val VERIFY_GUARD = 8
     }
 
     private fun scaleForPreview(src: Bitmap, cap: Int): Bitmap {

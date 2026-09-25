@@ -33,6 +33,22 @@ class RowScannerTest {
     }
 
     @Test
+    fun faintSentenceIsBusy() {
+        // Kalimat pudar: tiap piksel bedanya kecil dari latar (< ambang tepi
+        // dan < ambang rentang), tapi puluhan piksel menyimpang dari median.
+        val w = 100
+        val h = 10
+        val faint = (0xFF shl 24) or (235 shl 16) or (235 shl 8) or 235
+        val px = IntArray(w * h) { white }
+        for (x in 20..80) px[5 * w + x] = faint
+        val profile = RowScanner.scanBuffer(px, w, h)
+        assertTrue("kalimat pudar harus terdeteksi sibuk", profile.busy[5])
+        for (y in 0 until h) {
+            if (y != 5) assertFalse("baris $y harus bebas", profile.busy[y])
+        }
+    }
+
+    @Test
     fun softGradientIsBusy() {
         val w = 100
         val h = 5
