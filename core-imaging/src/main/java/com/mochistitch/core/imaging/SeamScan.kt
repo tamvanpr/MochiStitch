@@ -323,6 +323,7 @@ object SeamScan {
 
     // ── Metode kompatibilitas mundur untuk unit test ────────────────
 
+    const val EDGE_TAU = 24
     const val BAND_MARGIN = 4
     const val MIN_BAND = 16
     const val VERT_TAU = 20
