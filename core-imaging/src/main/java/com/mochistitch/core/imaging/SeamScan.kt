@@ -372,11 +372,13 @@ object SeamScan {
         getRow(0, cur)
         for (x in 0 until width) prevLum[x] = luminance(cur[x])
         System.arraycopy(cur, 0, prev, 0, width)
+        // Gunakan vertTau = 20 (default v6) untuk backward compat
+        val vertTau = 20
         for (y in 1 until height) {
             getRow(y, cur)
             for (x in 0 until width) {
                 val l = luminance(cur[x])
-                if (absI(l - prevLum[x]) > cfg.vertTau) {
+                if (absI(l - prevLum[x]) > vertTau) {
                     out[y] = false
                     out[y - 1] = false
                 }
@@ -389,11 +391,19 @@ object SeamScan {
 
     /** findBands dengan minBand — pakai config default. */
     fun findBands(safe: BooleanArray, minBand: Int = MIN_BAND): List<IntRange> {
-        val cfg = Config(
-            maxDistance = 1500, sensitivity = 0.5f, margins = 8,
-            step = 3, maxSearchDeviationFactor = 0.4f
-        )
-        return findBands(safe, cfg.copy(minBand = minBand))
+        val band = minBand.coerceAtLeast(1)
+        val out = mutableListOf<IntRange>()
+        var start = -1
+        for (i in safe.indices) {
+            if (safe[i]) {
+                if (start < 0) start = i
+            } else {
+                if (start >= 0 && i - start >= band) out.add(start until i)
+                start = -1
+            }
+        }
+        if (start >= 0 && safe.size - start >= band) out.add(start until safe.size)
+        return out
     }
 
     /** planCuts dengan parameter lama — pakai config default. */
