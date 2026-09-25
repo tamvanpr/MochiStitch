@@ -340,9 +340,7 @@ object SeamScan {
     /** Versi lama rowIsSafe dengan offset/length. */
     fun rowIsSafe(pixels: IntArray, offset: Int, length: Int): Boolean {
         if (length < 2) return true
-        // Cek variasi horizontal (sama seperti v6)
         if (rowMaxStep(pixels, offset, length) > EDGE_TAU) return false
-        // Cek kegelapan (sama seperti v6)
         val med = rowMedianLum(pixels, offset, length)
         if (med < DARK_TAU) return false
         return true
@@ -414,13 +412,31 @@ object SeamScan {
         return out
     }
 
-    /** planCuts dengan parameter lama — pakai config default. */
+    /** planCuts dengan parameter lama — hanya memilih baris dari pita aman. */
     fun planCuts(safe: BooleanArray, limit: Int, minChunk: Int = limit / 2, overflow: Int = 0): CutPlan {
-        val cfg = Config(
-            maxDistance = limit, sensitivity = 0.5f, margins = 8,
-            step = 3, maxSearchDeviationFactor = 0.4f
-        )
-        return planCuts(safe, limit, cfg, overflow = overflow)
+        if (limit <= 0 || safe.size <= limit) return CutPlan(emptyList(), true)
+        val minC = minChunk.coerceAtLeast(1)
+        val bands = findBands(safe, minBand = 1)
+        val cuts = mutableListOf<Int>()
+        var y = 0
+        while (safe.size - y > limit) {
+            val lo = y + minC
+            val hi = y + limit
+            fun pick(from: Int, to: Int): Int? {
+                for (b in bands) {
+                    val a = maxOf(from, b.first)
+                    val z = minOf(to, b.last)
+                    if (a <= z) return (a + z) / 2
+                }
+                return null
+            }
+            val c = pick(lo, hi) ?: if (overflow > 0) pick(hi + 1, hi + overflow) else null
+                ?: return CutPlan(cuts, tailSafe = false)
+            if (c <= y) return CutPlan(cuts, tailSafe = false)
+            cuts.add(c)
+            y = c
+        }
+        return CutPlan(cuts, tailSafe = true)
     }
 
     fun planCuts(safe: BooleanArray, limit: Int, cfg: Config, minChunk: Int = limit / 2, overflow: Int = 0): CutPlan {
@@ -529,13 +545,17 @@ object SeamScan {
         return BooleanArray(horiz.size) { i -> horiz[i] && vert[i] }
     }
 
-    /** rowIsSafe dengan paperLum untuk backward compat — ignore paperLum di v7. */
+    /** rowIsSafe dengan paperLum untuk backward compat. */
     fun rowIsSafe(pixels: IntArray, offset: Int, length: Int, paperLum: Int): Boolean {
-        return rowIsSafe(pixels, offset, length, 0.5f)
+        if (!rowIsSafe(pixels, offset, length)) return false
+        val med = rowMedianLum(pixels, offset, length)
+        return absI(med - paperLum) <= PAPER_TAU
     }
 
     fun rowIsSafe(pixels: IntArray, offset: Int, length: Int, paperLum: Int, sensitivity: Float): Boolean {
-        return rowIsSafe(pixels, offset, length, sensitivity)
+        if (!rowIsSafe(pixels, offset, length, sensitivity)) return false
+        val med = rowMedianLum(pixels, offset, length)
+        return absI(med - paperLum) <= PAPER_TAU
     }
 
     /** Config dengan parameter v6 untuk backward compat. */
