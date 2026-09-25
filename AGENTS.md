@@ -4,6 +4,21 @@ Proyek: MochiStitch (`com.mochistitch.app`) v6 — rombak total mesin potong.
 Platform: Android native, Kotlin + Jetpack Compose
 Purpose: Penggabung halaman komik vertikal (strip webtoon).
 
+## Arsitektur v7 (rencana potong global di atas profil baris)
+
+Prinsip: garis potong hanya boleh lewat baris yang benar-benar polos.
+Seluruh halaman dipindai dulu pada lebar kecil (SCAN_WIDTH 360px) dengan
+RowScanner (busy = ada selisih luminans antar-piksel melewati ambang, ATAU
+rentang min-max baris melewati ambang → menangkap balon, kotak dialog, kotak
+system, dan teks luar balon sekaligus). Profil baris semua halaman digabung
+menjadi satu profil panjang, lalu CutPlanner membuat titik potong GLOBAL —
+batas antar-halaman tidak lagi menjadi potongan paksa. Potongan yang tidak
+punya celah polos ditandai `forced` dan ditandai untuk tinjau manual.
+Margin vertikal (dilasi) dipetakan dari CutStrictness: Longgar 6, Seimbang 10,
+Akurat 14. RowScanner/CutPlanner murni Kotlin + array (unit-testable, tanpa
+Bitmap); tidak ada ML Kit. OpenCV hanya tersisa untuk pencocokan template
+banner (BannerOcv), bukan untuk deteksi balon.
+
 ## Arsitektur v6 (potong hanya di tempat aman — perbaikan akar masalah)
 
 Satu prinsip mesin: garis potong tidak pernah melintasi tinta (balon,

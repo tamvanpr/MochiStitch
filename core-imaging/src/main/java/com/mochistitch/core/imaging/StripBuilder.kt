@@ -2,6 +2,7 @@ package com.mochistitch.core.imaging
 
 import android.content.Context
 import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.net.Uri
 import com.mochistitch.core.common.BannerPolicy
 import com.mochistitch.core.settings.CutStrictness
@@ -12,7 +13,6 @@ import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.InputStream
 import kotlin.math.max
-import kotlin.math.min
 import kotlin.math.roundToInt
 
 /** Satu berkas strip hasil rakitan. */
@@ -91,11 +91,6 @@ class StripBuilder(
             val limit = settings.maxStripHeight
             val wantCut = settings.splitRule == SplitRule.MAX_HEIGHT && limit > 0
 
-            val cfg = when (settings.cutStrictness) {
-                com.mochistitch.core.settings.CutStrictness.LOOSE    -> SeamScan.configLoose()
-                com.mochistitch.core.settings.CutStrictness.BALANCED -> SeamScan.configBalanced()
-                com.mochistitch.core.settings.CutStrictness.STRICT   -> SeamScan.configStrict()
-            }
             // 0) Banner situs: buat BannerPolicy dari settings (hanya sumber
             // yang punya policy — saat ini baozimh) + ketegasan potong dari cfg.
             val policy = if (settings.enableBannerCut) {
@@ -113,21 +108,25 @@ class StripBuilder(
             val bannerResult = bannerCrops(measured, policy, bannerTemplateBitmaps)
             val bannerCrops = bannerResult.crops
 
-            // 1) Halaman raksasa -> segmen di celah aman (v6: vertikal+paper+tengah).
+            // 1) Potong global: seluruh halaman dipindai pada resolusi kecil lalu
+            // titik potong Direncanakan di atas profil gabungan, sehingga batas
+            // antar-halaman tidak lagi menjadi potongan paksa.
+            val globalCuts = if (wantCut) {
+                planGlobalCuts(measured, bannerCrops, stripWidth, limit, settings)
+            } else GlobalPlan(emptyMap(), emptySet())
             val segs = mutableListOf<Seg>()
             measured.forEachIndexed { i, m ->
                 val (cutTop, cutBot) = bannerCrops[i] ?: (0 to 0)
                 val effTop = cutTop.coerceIn(0, m.height)
                 val effBot = (m.height - cutBot).coerceIn(effTop + 1, m.height)
-                val effH = (effBot - effTop).coerceAtLeast(1)
-                val renderedH = (effH.toLong() * stripWidth / m.width.coerceAtLeast(1)).toInt().coerceAtLeast(1)
-                val wasCut = effTop > 0 || effBot < m.height
-                if (wantCut && renderedH > limit) {
-                    segs.addAll(segmentPage(i, m, stripWidth, limit, effTop, effBot, wasCut, cfg))
-                } else {
-                    segs.add(Seg(m.uri, i, effTop, effBot, renderedH, wasCut))
-                }
+                segs.addAll(
+                    segmentsFromCuts(
+                        i, m, stripWidth, effTop, effBot, cutTop > 0 || cutBot > 0,
+                        globalCuts.cuts[i].orEmpty()
+                    )
+                )
             }
+            val forcedSeg = globalCuts.forcedPages
 
             // 2) Pasangan halaman berbeda yang bersambung piksel: tahan satu berkas.
             val byOrder = measured.mapIndexed { i, m -> i to m }.toMap()
@@ -156,9 +155,11 @@ class StripBuilder(
                 val whole = renderer.renderStrip(placements, config).getOrThrow()
 
                 val anyBanner = bundle.sheets.any { sheet -> segs[sheet.order].bannerCut }
-                val flagged = bundle.tallSingle || bundle.seamCut
+                val anyForced = bundle.sheets.any { sheet -> segs[sheet.order].order in forcedSeg }
+                val flagged = bundle.tallSingle || bundle.seamCut || anyForced
                 val reason = when {
                     bundle.tallSingle -> "Melebihi batas ${settings.maxStripHeight}px dan tak ada celah aman — dibiarkan utuh, tangani manual"
+                    anyForced -> "Sebagian titik potong terpaksa paksa (tak ada celah polos di sekitar batas) — periksa manual"
                     bundle.seamCut -> "Batas berkas jatuh di sambungan halaman (melewati batas ukuran) — periksa balon di batas berkas"
                     else -> null
                 }
@@ -379,117 +380,167 @@ class StripBuilder(
     }
 
     /**
-     * Bagi satu halaman raksasa menjadi segmen-segmen ≤ [limit] (rendered)
-     * dengan garis potong di TENGAH celah paper-aware (horizontal + vertikal).
-     * Rentang sumber dibatasi [effTop, effBot) (sesudah crop banner).
-     * Tanpa celah: kembalikan halaman utuh (ditandai tallSingle oleh grouper).
+     * Rencana potong GLOBAL: pindai semua halaman pada lebar kecil, gabungkan
+     * profil barisnya menjadi satu profil panjang, lalu rencanakan titik potong
+     * di atas profil gabungan. Batas antar-halaman karena itu bukan lagi
+     * potongan paksa — halaman 3 bawah dan halaman 4 atas diperlakukan
+     * sebagai satu strip menyambung.
      *
-     * Partisi dijamin eksak: sTop[0]=effTop, sBot[last]=effBot,
-     * sBot[i]=sTop[i+1].
+     * Hasil: peta indeks halaman -> daftar y potong (koordinat sumber).
      */
-    private fun segmentPage(
-        order: Int,
-        m: StripRenderer.Measured,
+    private data class GlobalPlan(
+        val cuts: Map<Int, List<Int>>,
+        val forcedPages: Set<Int>
+    )
+
+    private fun planGlobalCuts(
+        measured: List<StripRenderer.Measured>,
+        bannerCrops: Map<Int, Pair<Int, Int>>,
         stripWidth: Int,
         limit: Int,
-        effTop: Int,
-        effBot: Int,
-        wasCut: Boolean,
-        cfg: SeamScan.Config
-    ): List<Seg> {
-        val effH = (effBot - effTop).coerceAtLeast(1)
-        val renderedH = (effH.toLong() * stripWidth / m.width.coerceAtLeast(1)).toInt().coerceAtLeast(1)
-        if (renderedH <= limit) {
-            return listOf(Seg(m.uri, order, effTop, effBot, renderedH, wasCut))
+        settings: StitchSettings
+    ): GlobalPlan {
+        val scanWidth = SCAN_WIDTH
+        val edge = when (settings.cutStrictness) {
+            CutStrictness.LOOSE -> 30
+            CutStrictness.BALANCED -> 24
+            CutStrictness.STRICT -> 18
         }
-        val bmp = renderer.decodeSampled(m.uri, maxPixels = 16_000_000L, maxSample = scanSample(m))
-            ?: return listOf(Seg(m.uri, order, 0, m.height, renderedH))
-        try {
-            val dw = bmp.width
-            val dh = bmp.height
-            if (dw <= 0 || dh <= 0) {
-                return listOf(Seg(m.uri, order, 0, m.height, renderedH))
-            }
-            // — Pindai v7 (Cropybara-style): cek baris homogen per baris. —
-            val rowBuf = IntArray(dw)
-            val safe = SeamScan.scanSafeRowsV6(
-                getRow = { yy, out -> bmp.getPixels(out, 0, dw, 0, yy, dw, 1) },
-                width = dw,
-                height = dh
-            )
-            ProtectedRegions.find(bmp).forEach { region ->
-                for (y in region) {
-                    if (y in safe.indices) safe[y] = false
-                }
-            }
-            // Batas ke koordinat decode; rencana potong hanya di jendela
-            // efektif [effTop, effBot) (sesudah crop banner).
-            val f = stripWidth.toDouble() / m.width.toDouble()
-            val ks = dh.toDouble() / m.height.toDouble()
-            val eTopDec = (effTop.toDouble() * ks).roundToInt().coerceIn(0, dh)
-            val eBotDec = (effBot.toDouble() * ks).roundToInt().coerceIn(eTopDec + 1, dh)
-            val limitDec = (limit.toDouble() / f * ks).toInt().coerceAtLeast(8)
-            // Boleh lewat batas sedikit demi celah aman: lebih baik berkas
-            // sedikit lebih tinggi daripada memotong tinta atau halaman utuh.
-            val overflowDec = (limitDec / 5).coerceIn(128, 2500)
-            val window = safe.copyOfRange(eTopDec, eBotDec)
-            val ink = SeamScan.inkDensity(
-                getRow = { yy, out -> bmp.getPixels(out, 0, dw, 0, yy, dw, 1) },
-                width = dw,
-                height = dh,
-                step = cfg.step
-            ).copyOfRange(eTopDec, eBotDec)
-            val plan = SeamScan.planCutsWithInk(
-                safe = window,
-                ink = ink,
-                limit = limitDec,
-                cfg = cfg,
-                overflow = overflowDec
-            )
-            if (plan.cuts.isEmpty() && !plan.tailSafe) {
-                return listOf(Seg(m.uri, order, effTop, effBot, renderedH, wasCut))
-            }
-            // — Partisi eksak dalam koordinat sumber (tanpa gap/duplikat). —
-            val dBounds = mutableListOf<Pair<Int, Int>>()
-            var prev = eTopDec
-            for (c in plan.cuts) {
-                val cc = (c + eTopDec).coerceIn(eTopDec + 1, eBotDec)
-                if (cc <= prev) return listOf(Seg(m.uri, order, effTop, effBot, renderedH, wasCut))
-                dBounds.add(prev to cc)
-                prev = cc
-            }
-            dBounds.add(prev to eBotDec)
-            val sBounds = dBounds.map { (dTop, dBot) ->
-                val sTop = (dTop.toDouble() / ks).roundToInt().coerceIn(effTop, effBot)
-                var sBot = (dBot.toDouble() / ks).roundToInt().coerceIn(effTop, effBot)
-                if (sBot <= sTop) sBot = min(effBot, sTop + 1)
-                sTop to sBot
-            }.toMutableList()
-            // Jahit batas agar sBot[i] == sTop[i+1], ujung menutup penuh.
-            for (i in sBounds.indices) {
-                val (t, b) = sBounds[i]
-                val nt = if (i == 0) effTop else sBounds[i - 1].second
-                val nb = if (i == sBounds.lastIndex) effBot else b
-                sBounds[i] = nt.coerceIn(effTop, effBot) to nb.coerceIn(effTop, effBot)
-            }
-            // Buang segmen degenerasi (tinggi 0) bila ada.
-            val clean = sBounds.filter { (t, b) -> b > t }
-            if (clean.isEmpty()) return listOf(Seg(m.uri, order, effTop, effBot, renderedH, wasCut))
-            return clean.map { (sTop, sBot) ->
-                val h = ((sBot - sTop).toLong() * stripWidth / m.width.coerceAtLeast(1)).toInt().coerceAtLeast(1)
-                Seg(m.uri, order, sTop, sBot, h, wasCut)
-            }
-        } finally {
-            try { bmp.recycle() } catch (t: Throwable) { }
+        val range = when (settings.cutStrictness) {
+            CutStrictness.LOOSE -> 52
+            CutStrictness.BALANCED -> 40
+            CutStrictness.STRICT -> 30
         }
+        val margin = when (settings.cutStrictness) {
+            CutStrictness.LOOSE -> 6
+            CutStrictness.BALANCED -> 10
+            CutStrictness.STRICT -> 14
+        }
+        val busy = ArrayList<Boolean>()
+        val ink = ArrayList<Int>()
+        val offsets = IntArray(measured.size)
+        val windows = arrayOfNulls<Window>(measured.size)
+        for ((i, m) in measured.withIndex()) {
+            offsets[i] = busy.size
+            val small = decodeScan(m.uri, scanWidth) ?: continue
+            val profile = try {
+                RowScanner.scan(small, edgeThreshold = edge, rangeThreshold = range)
+            } finally {
+                try { small.recycle() } catch (t: Throwable) { }
+            }
+            val (cutTop, cutBot) = bannerCrops[i] ?: (0 to 0)
+            val effTop = cutTop.coerceIn(0, m.height)
+            val effBot = (m.height - cutBot).coerceIn(effTop + 1, m.height)
+            val sh = profile.busy.size
+            val sTop = (effTop.toDouble() * sh / m.height).toInt().coerceIn(0, sh - 1)
+            val sBot = (effBot.toDouble() * sh / m.height).toInt().coerceIn(sTop + 1, sh)
+            windows[i] = Window(m, effTop, effBot, sTop, sBot, sh)
+            for (y in sTop until sBot) {
+                busy.add(profile.busy[y])
+                ink.add(profile.ink[y])
+            }
+        }
+        if (busy.isEmpty()) return GlobalPlan(emptyMap(), emptySet())
+        val combined = RowProfile(busy.toBooleanArray(), ink.toIntArray())
+        val maxLen = (limit.toLong() * scanWidth / stripWidth.coerceAtLeast(1)).toInt().coerceAtLeast(16)
+        val plan = CutPlanner.plan(
+            profile = combined,
+            maxLen = maxLen,
+            margin = margin,
+            overshoot = (maxLen / 4).coerceAtLeast(8)
+        )
+        if (plan.isEmpty()) return GlobalPlan(emptyMap(), emptySet())
+        val out = LinkedHashMap<Int, MutableList<Int>>()
+        val forced = LinkedHashSet<Int>()
+        for (cut in plan) {
+            val y = cut.y.coerceIn(0, combined.busy.size - 1)
+            val idx = pageIndexAt(offsets, y)
+            val w = windows.getOrNull(idx) ?: continue
+            if (y < w.scanTop || y >= w.scanBot) continue
+            val local = y - w.scanTop
+            val srcY = (w.effTop + local.toDouble() * (w.effBot - w.effTop) / (w.scanBot - w.scanTop)).toInt()
+            val list = out.getOrPut(idx) { mutableListOf() }
+            val minGap = (64L * (w.effBot - w.effTop) / (w.scanBot - w.scanTop)).toInt().coerceAtLeast(1)
+            val last = list.lastOrNull() ?: w.effTop
+            if (srcY - last < minGap) continue
+            if (srcY >= w.effBot - 1) continue
+            list.add(srcY)
+            if (cut.forced) forced.add(idx)
+        }
+        return GlobalPlan(out, forced)
+    }
+
+    private class Window(
+        val measured: StripRenderer.Measured,
+        val effTop: Int,
+        val effBot: Int,
+        val scanTop: Int,
+        val scanBot: Int,
+        val scanHeight: Int
+    )
+
+    private fun pageIndexAt(offsets: IntArray, y: Int): Int {
+        var idx = 0
+        for (i in offsets.indices) if (offsets[i] <= y) idx = i
+        return idx
+    }
+
+    /** Decode kecil (lebar ~[SCAN_WIDTH]) untuk pemindaian profil baris. */
+    private fun decodeScan(uri: Uri, targetWidth: Int): Bitmap? {
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        openStream(uri)?.use { BitmapFactory.decodeStream(it, null, bounds) } ?: return null
+        if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return null
+        var sample = 1
+        while (bounds.outWidth / (sample * 2) >= targetWidth) sample *= 2
+        val opts = BitmapFactory.Options().apply {
+            inSampleSize = sample
+            inPreferredConfig = Bitmap.Config.RGB_565
+        }
+        val raw = openStream(uri)?.use { BitmapFactory.decodeStream(it, null, opts) } ?: return null
+        if (raw.width <= 0) {
+            try { raw.recycle() } catch (t: Throwable) { }
+            return null
+        }
+        if (raw.width == targetWidth) return raw
+        val h = (raw.height.toLong() * targetWidth / raw.width).toInt().coerceAtLeast(1)
+        val scaled = Bitmap.createScaledBitmap(raw, targetWidth, h, true)
+        if (scaled !== raw) {
+            try { raw.recycle() } catch (t: Throwable) { }
+        }
+        return scaled
     }
 
     /**
-     * Sampel pindai: resolusi penuh bila muat (garis tipis seperti ekor
-     * balon tidak boleh lolos), turun ke 2 hanya untuk halaman raksasa.
+     * Bagi satu halaman pada titik potong hasil rencana global. Partisi
+     * dijamin eksak: sTop[0]=effTop, sBot[last]=effBot, sBot[i]=sTop[i+1].
      */
-    private fun scanSample(m: StripRenderer.Measured): Int =
-        if (m.width.toLong() * m.height.toLong() <= 20_000_000L) 1 else 2
+    private fun segmentsFromCuts(
+        order: Int,
+        m: StripRenderer.Measured,
+        stripWidth: Int,
+        effTop: Int,
+        effBot: Int,
+        wasCut: Boolean,
+        cuts: List<Int>
+    ): List<Seg> {
+        fun seg(top: Int, bottom: Int): Seg {
+            val h = ((bottom - top).toLong() * stripWidth / m.width.coerceAtLeast(1)).toInt().coerceAtLeast(1)
+            return Seg(m.uri, order, top, bottom, h, wasCut)
+        }
+        if (cuts.isEmpty()) return listOf(seg(effTop, effBot))
+        val bounds = mutableListOf<Pair<Int, Int>>()
+        var prev = effTop
+        for (c in cuts) {
+            val cc = c.coerceIn(effTop + 1, effBot)
+            if (cc <= prev) continue
+            bounds.add(prev to cc)
+            prev = cc
+        }
+        bounds.add(prev to effBot)
+        val clean = bounds.filter { it.second > it.first }
+        if (clean.isEmpty()) return listOf(seg(effTop, effBot))
+        return clean.map { (t, b) -> seg(t, b) }
+    }
 
     /**
      * v6: peta pasangan indeks-segmen berurutan yang bersambung piksel.
@@ -567,6 +618,7 @@ class StripBuilder(
 
     private companion object {
         const val PREVIEW_CAP = 2048
+        const val SCAN_WIDTH = 360
     }
 
     private fun scaleForPreview(src: Bitmap, cap: Int): Bitmap {
