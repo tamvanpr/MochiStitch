@@ -219,4 +219,105 @@ object SeamScan {
         }
         return CutPlan(cuts, tailSafe = true)
     }
+
+    /**
+     * true bila patch piksel mengandung konten (bukan latar datar): sebaran
+     * kecerahan cukup besar. Dipakai agar margin putih-vs-putih tidak
+     * disangka "bersambung".
+     */
+    fun hasContent(px: IntArray): Boolean {
+        if (px.isEmpty()) return false
+        val stride = maxOf(1, px.size / 512)
+        var mn = Int.MAX_VALUE
+        var mx = Int.MIN_VALUE
+        var i = 0
+        while (i < px.size) {
+            val p = px[i]
+            val s = ((p shr 16) and 0xFF) + ((p shr 8) and 0xFF) + (p and 0xFF)
+            if (s < mn) mn = s
+            if (s > mx) mx = s
+            if (mx - mn > 64) return true
+            i += stride
+        }
+        return mx - mn > 64
+    }
+
+    /**
+     * Pembanding pasangan baris mentah (level rendah, untuk uji).
+     * Untuk keputusan sambungan antar-halaman pakai [seamContinues] yang
+     * hanya membandingkan baris-baris seam yang bersebelahan.
+     */
+    fun rowsContinue(
+        a: IntArray,
+        b: IntArray,
+        tau: Int = 24,
+        minFrac: Double = 0.9
+    ): Boolean {
+        if (a.isEmpty() || b.isEmpty()) return false
+        val n = minOf(a.size, b.size)
+        if (n == 0) return false
+        val ao = (a.size - n) / 2
+        val bo = (b.size - n) / 2
+        val stride = maxOf(1, n / 512)
+        var ok = 0
+        var samples = 0
+        var i = 0
+        while (i < n) {
+            if (pixelDelta(a[ao + i], b[bo + i]) <= tau) ok++
+            samples++
+            i += stride
+        }
+        return samples > 0 && ok.toDouble() / samples.toDouble() >= minFrac
+    }
+
+    /**
+     * v7: uji kesinambungan SEAM yang benar. [bottom] = strip tepi bawah
+     * halaman atas (widthB x hB, row-major), [top] = strip tepi atas halaman
+     * bawah (widthT x hT). Hanya [seamRows] baris terakhir [bottom] vs
+     * [seamRows] baris pertama [top] yang dibandingkan, kolom irisan tengah.
+     */
+    fun seamContinues(
+        bottom: IntArray,
+        bottomW: Int,
+        bottomH: Int,
+        top: IntArray,
+        topW: Int,
+        topH: Int,
+        seamRows: Int = 4,
+        tau: Int = 24,
+        minFrac: Double = 0.9
+    ): Boolean {
+        if (bottom.isEmpty() || top.isEmpty()) return false
+        if (bottomW <= 0 || bottomH <= 0 || topW <= 0 || topH <= 0) return false
+        if (bottom.size < bottomW * bottomH || top.size < topW * topH) return false
+        val rows = minOf(seamRows.coerceAtLeast(1), bottomH, topH)
+        val w = minOf(bottomW, topW)
+        if (w <= 0) return false
+        val bOff = (bottomW - w) / 2
+        val tOff = (topW - w) / 2
+        val stride = maxOf(1, w / 256)
+        var ok = 0
+        var samples = 0
+        for (r in 0 until rows) {
+            val weight = if (r == 0) 2 else 1
+            val bRow = (bottomH - 1 - r) * bottomW + bOff
+            val tRow = r * topW + tOff
+            var x = 0
+            while (x < w) {
+                repeat(weight) {
+                    if (pixelDelta(bottom[bRow + x], top[tRow + x]) <= tau) ok++
+                    samples++
+                }
+                x += stride
+            }
+        }
+        return samples > 0 && ok.toDouble() / samples.toDouble() >= minFrac
+    }
+
+    private fun pixelDelta(a: Int, b: Int): Int {
+        val dr = ((a shr 16) and 0xFF) - ((b shr 16) and 0xFF)
+        val dg = ((a shr 8) and 0xFF) - ((b shr 8) and 0xFF)
+        val db = (a and 0xFF) - (b and 0xFF)
+        return absI(dr) + absI(dg) + absI(db)
+    }
 }
