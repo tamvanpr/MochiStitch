@@ -2,13 +2,21 @@ package com.mochistitch.core.ui
 
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Shapes
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.unit.dp
 import com.mochistitch.core.settings.ThemeMode
 
-/** Palet v3: teal laut dalam + aksen amber. */
+private val AppShapes = Shapes(
+    extraSmall = androidx.compose.foundation.shape.RoundedCornerShape(8.dp),
+    small = androidx.compose.foundation.shape.RoundedCornerShape(12.dp),
+    medium = androidx.compose.foundation.shape.RoundedCornerShape(16.dp),
+    large = androidx.compose.foundation.shape.RoundedCornerShape(24.dp),
+    extraLarge = androidx.compose.foundation.shape.RoundedCornerShape(32.dp)
+)
 val StudioLightScheme = lightColorScheme(
     primary = Color(0xFF0E7C6B),
     onPrimary = Color(0xFFFFFFFF),
@@ -56,6 +64,7 @@ fun StudioTheme(mode: ThemeMode = ThemeMode.SYSTEM, content: @Composable () -> U
     }
     MaterialTheme(
         colorScheme = if (dark) StudioDarkScheme else StudioLightScheme,
+        shapes = AppShapes,
         content = content
     )
 }
