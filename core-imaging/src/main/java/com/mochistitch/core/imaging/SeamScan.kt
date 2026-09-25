@@ -431,7 +431,7 @@ object SeamScan {
                 return null
             }
             val c = pick(lo, hi) ?: if (overflow > 0) pick(hi + 1, hi + overflow) else null
-                ?: return CutPlan(cuts, tailSafe = false)
+            if (c == null) return CutPlan(cuts, tailSafe = false)
             if (c <= y) return CutPlan(cuts, tailSafe = false)
             cuts.add(c)
             y = c
