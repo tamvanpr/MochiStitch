@@ -22,7 +22,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.CollectionItem
+import androidx.compose.material.icons.filled.Apps
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.GridOn
@@ -153,7 +153,7 @@ fun StudioApp(viewModel: StudioViewModel, onExitApp: () -> Unit) {
                         BadgedBox(badge = {
                             if (state.slices.isNotEmpty()) Badge()
                         }) {
-                            Icon(Icons.Default.CollectionItem, contentDescription = null)
+                            Icon(Icons.Default.Apps, contentDescription = null)
                         }
                     },
                     label = { Text("Hasil") }
@@ -373,8 +373,8 @@ fun StudioApp(viewModel: StudioViewModel, onExitApp: () -> Unit) {
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Text(pub.projectTitle, fontWeight = FontWeight.Bold)
-                    if (pub.path.isNotEmpty()) {
-                        Text(pub.path, style = MaterialTheme.typography.bodySmall)
+                    if (!pub.path.isNullOrEmpty()) {
+                        Text(pub.path!!, style = MaterialTheme.typography.bodySmall)
                     }
                     Text(
                         "${pub.packs} berkas · ${(pub.bytes / 1024)} KB",
