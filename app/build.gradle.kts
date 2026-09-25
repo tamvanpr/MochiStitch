@@ -98,6 +98,7 @@ dependencies {
     implementation(project(":core-download"))
 
     implementation(libs.androidx.core.ktx)
+    implementation("androidx.core:core-splashscreen:1.2.0")
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.androidx.activity.compose)
