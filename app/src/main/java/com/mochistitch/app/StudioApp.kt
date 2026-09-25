@@ -70,6 +70,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -316,8 +317,8 @@ fun StudioApp(viewModel: StudioViewModel, onExitApp: () -> Unit) {
                     LinearProgressIndicator(
                         progress = { state.fraction.coerceIn(0f, 1f) },
                         modifier = Modifier.fillMaxWidth(),
-                        color = MaterialTheme.colorScheme.tertiary,
-                        trackColor = MaterialTheme.colorScheme.surfaceContainerHighest
+                        color = Color(0xFF0E7C6B),
+                        trackColor = Color(0xFFD8EAE5)
                     )
                 }
             }

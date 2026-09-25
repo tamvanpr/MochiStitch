@@ -117,52 +117,37 @@ object SeamScan {
         cfg: Config
     ): BooleanArray {
         val out = BooleanArray(height) { false }
-        if (width <= 0 || height <= 0) return out
-        val threshold = (255.0 * (1.0 - cfg.sensitivity.coerceIn(0f, 1f))).toInt().coerceAtLeast(0)
         val margin = cfg.margins.coerceAtLeast(0)
+        if (width <= margin * 2 || height <= 0) return out
+        val threshold = (255.0 * (1.0 - cfg.sensitivity.coerceIn(0f, 1f))).toInt().coerceAtLeast(0)
         val step = cfg.step.coerceAtLeast(1)
         val buf = IntArray(width)
-        // Sample every `step` rows for efficiency
+        fun rowSafe(y: Int): Boolean {
+            if (y < 0 || y >= height) return false
+            getRow(y, buf)
+            var previous = luminance(buf[margin])
+            for (x in margin + 1 until width - margin) {
+                val current = luminance(buf[x])
+                if (absI(current - previous) > threshold) return false
+                previous = current
+            }
+            return rowMedianLum(buf, 0, width) >= 30
+        }
         var y = 0
         while (y < height) {
-            getRow(y, buf)
-            // Check if this row is safe
-            var safe = true
-            var prev = luminance(buf[margin])
-            var x = margin + 1
-            while (x < width - margin) {
-                val cur = luminance(buf[x])
-                if (absI(cur - prev) > threshold) {
-                    safe = false
-                    break
-                }
-                prev = cur
-                x++
-            }
-            if (safe && width - margin * 2 > 0 && rowMedianLum(buf, 0, width) >= 30) {
-                out[y] = true
-            }
-            y += step
-        }
-        // Fill in between sampled rows for continuity
-        for (y in 1 until height) {
-            if (!out[y] && y - 1 >= 0 && out[y - 1]) {
-                // Check if adjacent row is also safe
-                getRow(y, buf)
-                var safe = true
-                var prev = luminance(buf[margin])
-                var x = margin + 1
-                while (x < width - margin) {
-                    val cur = luminance(buf[x])
-                    if (absI(cur - prev) > threshold) {
-                        safe = false
+            if (rowSafe(y)) {
+                val from = maxOf(0, y - 2)
+                val to = minOf(height - 1, y + 2)
+                var bandSafe = true
+                for (yy in from..to) {
+                    if (!rowSafe(yy)) {
+                        bandSafe = false
                         break
                     }
-                    prev = cur
-                    x++
                 }
-                if (safe) out[y] = true
+                if (bandSafe) out[y] = true
             }
+            y += step
         }
         return out
     }
