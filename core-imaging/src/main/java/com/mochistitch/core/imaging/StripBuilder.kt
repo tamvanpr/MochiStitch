@@ -412,11 +412,10 @@ class StripBuilder(
             }
             // — Pindai v7 (Cropybara-style): cek baris homogen per baris. —
             val rowBuf = IntArray(dw)
-            val safe = SeamScan.scanSafeRows(
+            val safe = SeamScan.scanSafeRowsV6(
                 getRow = { yy, out -> bmp.getPixels(out, 0, dw, 0, yy, dw, 1) },
                 width = dw,
-                height = dh,
-                cfg = cfg
+                height = dh
             )
             // Batas ke koordinat decode; rencana potong hanya di jendela
             // efektif [effTop, effBot) (sesudah crop banner).
@@ -429,7 +428,12 @@ class StripBuilder(
             // sedikit lebih tinggi daripada memotong tinta atau halaman utuh.
             val overflowDec = (limitDec / 5).coerceIn(128, 2500)
             val window = safe.copyOfRange(eTopDec, eBotDec)
-            val plan = SeamScan.planCuts(window, limitDec, cfg, overflow = overflowDec)
+            val plan = SeamScan.planCuts(
+                safe = window,
+                limit = limitDec,
+                minChunk = limitDec / 2,
+                overflow = overflowDec
+            )
             if (plan.cuts.isEmpty() && !plan.tailSafe) {
                 return listOf(Seg(m.uri, order, effTop, effBot, renderedH, wasCut))
             }

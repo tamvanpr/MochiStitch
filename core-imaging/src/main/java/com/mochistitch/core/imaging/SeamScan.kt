@@ -166,8 +166,36 @@ object SeamScan {
         return out
     }
 
-    /**
-     * Rencana potongan v7 (Cropybara-style).
+    fun scanSafeRowsV6(
+        getRow: (y: Int, out: IntArray) -> Unit,
+        width: Int,
+        height: Int
+    ): BooleanArray {
+        if (width <= 0 || height <= 0) return BooleanArray(height)
+        val horizontal = BooleanArray(height)
+        val samples = mutableListOf<IntArray>()
+        val row = IntArray(width)
+        var y = 0
+        while (y < height) {
+            getRow(y, row)
+            horizontal[y] = rowIsSafe(row, 0, width)
+            if (samples.size < 24 && y % maxOf(1, height / 24) == 0) samples.add(row.copyOf())
+            y++
+        }
+        val paper = estimatePaper(samples)
+        y = 0
+        while (y < height) {
+            if (horizontal[y]) {
+                getRow(y, row)
+                horizontal[y] = rowIsSafe(row, 0, width, paper)
+            }
+            y++
+        }
+        val vertical = rowsVertSafe(width, height, getRow, VERT_TAU)
+        return combineSafe(horizontal, vertical)
+    }
+
+
      * Cari baris aman dengan mencari ke atas dari titik ideal, dengan fallback.
      */
     fun planCuts(
