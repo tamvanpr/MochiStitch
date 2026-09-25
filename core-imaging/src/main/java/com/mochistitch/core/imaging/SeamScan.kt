@@ -197,18 +197,18 @@ object SeamScan {
                 cuts.add(foundCut)
                 y = foundCut
             } else if (overflow > 0) {
-                // Fallback: perluas pencarian ke atas lagi
                 val extendedEnd = maxOf(y + 1, ideal - maxSearchUp - overflow)
+                var extendedCut: Int? = null
                 for (yy in searchStart downTo extendedEnd) {
                     if (yy >= 0 && safe[yy]) {
-                        cuts.add(yy)
-                        y = yy
+                        extendedCut = yy
                         break
                     }
                 }
-                if (y == 0 && cuts.isEmpty()) return CutPlan(cuts, tailSafe = false)
+                if (extendedCut == null) return CutPlan(cuts, tailSafe = false)
+                cuts.add(extendedCut)
+                y = extendedCut
             } else {
-                // Fallback ke titik ideal
                 if (ideal < safe.size) {
                     cuts.add(ideal)
                     y = ideal
