@@ -301,7 +301,8 @@ object SeamScan {
         return CutPlan(cuts, tailSafe = true)
     }
 
- (bukan latar datar): sebaran
+    /**
+     * true bila patch piksel mengandung konten (bukan latar datar): sebaran
      * kecerahan cukup besar. Dipakai agar margin putih-vs-putih tidak
      * disangka "bersambung".
      */
