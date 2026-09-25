@@ -66,7 +66,7 @@ object SeamScan {
     /** Preset akurat: sensitivitas tinggi, hanya potong di baris sangat homogen. */
     fun configStrict() = Config(
         maxDistance = 1000,
-        sensitivity = 0.95f,
+        sensitivity = 0.98f,
         margins = 6,
         step = 1,
         maxSearchDeviationFactor = 0.5f
@@ -136,8 +136,8 @@ object SeamScan {
         var y = 0
         while (y < height) {
             if (rowSafe(y)) {
-                val from = maxOf(0, y - 2)
-                val to = minOf(height - 1, y + 2)
+                val from = maxOf(0, y - 6)
+                val to = minOf(height - 1, y + 6)
                 var bandSafe = true
                 for (yy in from..to) {
                     if (!rowSafe(yy)) {
