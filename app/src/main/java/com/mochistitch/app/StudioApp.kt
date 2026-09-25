@@ -212,8 +212,7 @@ fun StudioApp(viewModel: StudioViewModel, onExitApp: () -> Unit) {
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
                     titleContentColor = MaterialTheme.colorScheme.onSurface
-                ),
-                tonalElevation = 1.dp
+                )
             )
         }
     ) { innerPadding ->
