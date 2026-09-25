@@ -48,18 +48,18 @@ object SeamScan {
     /** Preset longgar: sensitivitas rendah, cocok untuk halaman dengan banyak variasi. */
     fun configLoose() = Config(
         maxDistance = 2000,
-        sensitivity = 0.3f,
-        margins = 10,
-        step = 4,
+        sensitivity = 0.98f,
+        margins = 8,
+        step = 1,
         maxSearchDeviationFactor = 0.3f
     )
 
     /** Preset seimbang: rekomendasi default — sensitivitas sedang. */
     fun configBalanced() = Config(
         maxDistance = 1500,
-        sensitivity = 0.85f,
+        sensitivity = 0.98f,
         margins = 8,
-        step = 2,
+        step = 1,
         maxSearchDeviationFactor = 0.4f
     )
 
@@ -145,7 +145,21 @@ object SeamScan {
                         break
                     }
                 }
-                if (bandSafe) out[y] = true
+                if (bandSafe) {
+                    getRow(y, buf)
+                    val center = buf.copyOf()
+                    for (yy in from..to) {
+                        getRow(yy, buf)
+                        for (x in margin until width - margin) {
+                            if (absI(luminance(center[x]) - luminance(buf[x])) > threshold) {
+                                bandSafe = false
+                                break
+                            }
+                        }
+                        if (!bandSafe) break
+                    }
+                    if (bandSafe) out[y] = true
+                }
             }
             y += step
         }
