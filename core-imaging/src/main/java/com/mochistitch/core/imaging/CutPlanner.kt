@@ -16,6 +16,24 @@ object CutPlanner {
      * di dalam balon BUKAN tempat potong yang aman.
      */
     fun safeBands(busy: BooleanArray, margin: Int, minBand: Int): List<Band> {
+        val blocked = blockedRows(busy, margin)
+        val h = busy.size
+        val bands = mutableListOf<Band>()
+        var s = -1
+        for (y in 0 until h) {
+            if (!blocked[y]) {
+                if (s < 0) s = y
+            } else if (s >= 0) {
+                if (y - s >= minBand) bands += Band(s, y)
+                s = -1
+            }
+        }
+        if (s >= 0 && h - s >= minBand) bands += Band(s, h)
+        return bands
+    }
+
+    /** Baris yang terlarang: sibuk atau berjarak <= [margin] dari baris sibuk. */
+    fun blockedRows(busy: BooleanArray, margin: Int): BooleanArray {
         val h = busy.size
         val blocked = BooleanArray(h)
         var lastBusy = -margin - 1
@@ -23,17 +41,7 @@ object CutPlanner {
             if (busy[y]) lastBusy = y
             if (y - lastBusy <= margin) blocked[y] = true
         }
-        val bands = mutableListOf<Band>()
-        var s = -1
-        for (y in 0..h) {
-            val free = y == h || !blocked[y]
-            if (free && s < 0) s = y
-            if (!free && s >= 0) {
-                if (y - s >= minBand) bands += Band(s, y)
-                s = -1
-            }
-        }
-        return bands
+        return blocked
     }
 
     fun plan(
@@ -45,6 +53,7 @@ object CutPlanner {
         minBand: Int = margin * 2
     ): List<PlannedCut> {
         val h = profile.busy.size
+        val blocked = blockedRows(profile.busy, margin)
         val bands = safeBands(profile.busy, margin, minBand)
         val cuts = mutableListOf<PlannedCut>()
         var start = 0
@@ -59,13 +68,25 @@ object CutPlanner {
                 val lo = start + minLen
                 val hi = min(target, h - 1)
                 if (lo > hi) break
-                var bestY = lo
+                var bestY = -1
                 var bestScore = Long.MAX_VALUE
                 for (y in lo..hi) {
+                    if (blocked[y]) continue
                     val score = profile.ink[y] * 1000L + (target - y)
                     if (score < bestScore) {
                         bestScore = score
                         bestY = y
+                    }
+                }
+                if (bestY < 0) {
+                    bestY = lo
+                    bestScore = Long.MAX_VALUE
+                    for (y in lo..hi) {
+                        val score = profile.ink[y] * 1000L + (target - y)
+                        if (score < bestScore) {
+                            bestScore = score
+                            bestY = y
+                        }
                     }
                 }
                 cuts += PlannedCut(bestY, forced = true)

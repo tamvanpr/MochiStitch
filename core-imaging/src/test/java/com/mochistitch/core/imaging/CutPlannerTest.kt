@@ -49,6 +49,26 @@ class CutPlannerTest {
     }
 
     @Test
+    fun lastBandIsNotLost() {
+        val busy = BooleanArray(400) { it in 95..115 }
+        val bands = CutPlanner.safeBands(busy, margin = 10, minBand = 20)
+        assertTrue("pita aman di ujung bawah harus ikut dihitung", bands.any { it.end == 400 })
+        assertTrue("pita sempit bukan tempat potong aman", bands.none { it.size < 20 })
+    }
+
+    @Test
+    fun cleanProfileNeedsNoForcedCut() {
+        val cuts = CutPlanner.plan(
+            RowProfile(BooleanArray(600), IntArray(600)),
+            maxLen = 100,
+            minLen = 40,
+            margin = 4
+        )
+        assertFalse(cuts.isEmpty())
+        assertTrue("strip polos tidak perlu potongan paksa", cuts.none { it.forced })
+    }
+
+    @Test
     fun cutPositionsAdvance() {
         val busy = BooleanArray(600)
         val cuts = CutPlanner.plan(RowProfile(busy, IntArray(600)), maxLen = 100, minLen = 40, margin = 4)
