@@ -194,8 +194,8 @@ object SeamScan {
         val vertical = rowsVertSafe(width, height, getRow, VERT_TAU)
         return combineSafe(horizontal, vertical)
     }
-
-
+    /**
+     * Rencana potongan v7 (Cropybara-style).
      * Cari baris aman dengan mencari ke atas dari titik ideal, dengan fallback.
      */
     fun planCuts(
@@ -378,12 +378,28 @@ object SeamScan {
     fun rowsVertSafe(
         width: Int,
         height: Int,
-        getRow: (y: Int, out: IntArray) -> Unit
+        getRow: (y: Int, out: IntArray) -> Unit,
+        tau: Int = VERT_TAU
     ): BooleanArray {
-        return rowsVertSafe(width, height, getRow, Config(
-            maxDistance = 1500, sensitivity = 0.5f, margins = 8,
-            step = 3, maxSearchDeviationFactor = 0.4f
-        ))
+        val out = BooleanArray(height) { true }
+        if (width <= 0 || height <= 0) return out
+        val prev = IntArray(width)
+        val cur = IntArray(width)
+        val prevLum = IntArray(width)
+        getRow(0, cur)
+        for (x in 0 until width) prevLum[x] = luminance(cur[x])
+        for (y in 1 until height) {
+            getRow(y, cur)
+            for (x in 0 until width) {
+                val current = luminance(cur[x])
+                if (absI(current - prevLum[x]) > tau) {
+                    out[y] = false
+                    out[y - 1] = false
+                }
+                prevLum[x] = current
+            }
+        }
+        return out
     }
 
     fun rowsVertSafe(
