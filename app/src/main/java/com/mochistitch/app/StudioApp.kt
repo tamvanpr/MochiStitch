@@ -307,6 +307,12 @@ fun StudioApp(viewModel: StudioViewModel, onExitApp: () -> Unit) {
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
+                    Text(
+                        "${(state.fraction.coerceIn(0f, 1f) * 100).toInt()}%",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.tertiary,
+                        fontWeight = FontWeight.Bold
+                    )
                     LinearProgressIndicator(
                         progress = { state.fraction.coerceIn(0f, 1f) },
                         modifier = Modifier.fillMaxWidth(),

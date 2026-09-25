@@ -57,18 +57,18 @@ object SeamScan {
     /** Preset seimbang: rekomendasi default — sensitivitas sedang. */
     fun configBalanced() = Config(
         maxDistance = 1500,
-        sensitivity = 0.5f,
+        sensitivity = 0.85f,
         margins = 8,
-        step = 3,
+        step = 2,
         maxSearchDeviationFactor = 0.4f
     )
 
     /** Preset akurat: sensitivitas tinggi, hanya potong di baris sangat homogen. */
     fun configStrict() = Config(
         maxDistance = 1000,
-        sensitivity = 0.7f,
+        sensitivity = 0.95f,
         margins = 6,
-        step = 2,
+        step = 1,
         maxSearchDeviationFactor = 0.5f
     )
 
