@@ -297,6 +297,7 @@ fun SettingsPanel(
                         }
                     )
                 }
+                    }
         }
         }
     }
