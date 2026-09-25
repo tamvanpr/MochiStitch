@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -394,35 +395,41 @@ private fun InputStep(viewModel: StudioViewModel, modifier: Modifier = Modifier)
         modifier = modifier.padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        Row(
+        LazyRow(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            FilledTonalButton(
-                onClick = {
-                    pickImages.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
-                },
-                modifier = Modifier.weight(1f)
-            ) {
-                Icon(Icons.Default.Image, contentDescription = null, modifier = Modifier.size(18.dp))
-                Spacer(Modifier.size(6.dp))
-                Text("Gambar")
+            item {
+                FilledTonalButton(
+                    onClick = {
+                        pickImages.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+                    },
+                    modifier = Modifier.width(148.dp)
+                ) {
+                    Icon(Icons.Default.Image, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.size(6.dp))
+                    Text("Gambar")
+                }
             }
-            FilledTonalButton(
-                onClick = { pickArchive.launch(arrayOf("*/*")) },
-                modifier = Modifier.weight(1f)
-            ) {
-                Icon(Icons.Default.Unarchive, contentDescription = null, modifier = Modifier.size(18.dp))
-                Spacer(Modifier.size(6.dp))
-                Text("Arsip")
+            item {
+                FilledTonalButton(
+                    onClick = { pickArchive.launch(arrayOf("*/*")) },
+                    modifier = Modifier.width(148.dp)
+                ) {
+                    Icon(Icons.Default.Unarchive, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.size(6.dp))
+                    Text("Arsip")
+                }
             }
-            FilledTonalButton(
-                onClick = { urlText = ""; showUrlDialog = true },
-                modifier = Modifier.weight(1f)
-            ) {
-                Icon(Icons.Default.Download, contentDescription = null, modifier = Modifier.size(18.dp))
-                Spacer(Modifier.size(6.dp))
-                Text("Unduh")
+            item {
+                FilledTonalButton(
+                    onClick = { urlText = ""; showUrlDialog = true },
+                    modifier = Modifier.width(148.dp)
+                ) {
+                    Icon(Icons.Default.Download, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.size(6.dp))
+                    Text("Unduh")
+                }
             }
         }
 
