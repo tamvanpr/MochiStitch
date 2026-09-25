@@ -10,6 +10,11 @@ data class Band(val start: Int, val end: Int) {
 data class PlannedCut(val y: Int, val forced: Boolean)
 
 object CutPlanner {
+    /**
+     * Pita aman = baris bebas setelah dilasi [margin]. Pita yang lebih
+     * sempit dari [minBand] diabaikan: celah sekecil jarak antar-baris teks
+     * di dalam balon BUKAN tempat potong yang aman.
+     */
     fun safeBands(busy: BooleanArray, margin: Int, minBand: Int): List<Band> {
         val h = busy.size
         val blocked = BooleanArray(h)
@@ -37,7 +42,7 @@ object CutPlanner {
         minLen: Int = maxLen / 3,
         overshoot: Int = maxLen / 4,
         margin: Int = 8,
-        minBand: Int = 2
+        minBand: Int = margin * 2
     ): List<PlannedCut> {
         val h = profile.busy.size
         val bands = safeBands(profile.busy, margin, minBand)
