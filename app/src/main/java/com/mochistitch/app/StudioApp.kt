@@ -44,7 +44,6 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Divider
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -400,7 +399,7 @@ private fun InputStep(viewModel: StudioViewModel, modifier: Modifier = Modifier)
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             item {
-                FilledTonalButton(
+                OutlinedButton(
                     onClick = {
                         pickImages.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
                     },
@@ -412,7 +411,7 @@ private fun InputStep(viewModel: StudioViewModel, modifier: Modifier = Modifier)
                 }
             }
             item {
-                FilledTonalButton(
+                OutlinedButton(
                     onClick = { pickArchive.launch(arrayOf("*/*")) },
                     modifier = Modifier.width(148.dp)
                 ) {
@@ -422,7 +421,7 @@ private fun InputStep(viewModel: StudioViewModel, modifier: Modifier = Modifier)
                 }
             }
             item {
-                FilledTonalButton(
+                Button(
                     onClick = { urlText = ""; showUrlDialog = true },
                     modifier = Modifier.width(148.dp)
                 ) {
