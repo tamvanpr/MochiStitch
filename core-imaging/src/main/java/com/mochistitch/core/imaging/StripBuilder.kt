@@ -417,6 +417,11 @@ class StripBuilder(
                 width = dw,
                 height = dh
             )
+            ProtectedRegions.find(bmp).forEach { region ->
+                for (y in region) {
+                    if (y in safe.indices) safe[y] = false
+                }
+            }
             // Batas ke koordinat decode; rencana potong hanya di jendela
             // efektif [effTop, effBot) (sesudah crop banner).
             val f = stripWidth.toDouble() / m.width.toDouble()
