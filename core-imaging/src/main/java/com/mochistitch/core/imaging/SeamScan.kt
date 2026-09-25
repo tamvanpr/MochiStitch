@@ -45,13 +45,13 @@ object SeamScan {
     )
 
     /** Preset longgar: minim potongan, paling aman dari salah tebas. */
-    fun configLoose() = Config(edgeTau = 18, vertTau = 15, minBand = 10, bandMargin = 2, darkTau = 32, paperTau = 36)
+    fun configLoose() = Config(edgeTau = 12, vertTau = 10, minBand = 20, bandMargin = 6, darkTau = 24, paperTau = 28)
 
-    /** Preset seimbang: rekomendasi default. */
-    fun configBalanced() = Config(edgeTau = 24, vertTau = 20, minBand = 16, bandMargin = 4, darkTau = 40, paperTau = 48)
+    /** Preset seimbang: rekomendasi default — sangat konservatif. */
+    fun configBalanced() = Config(edgeTau = 16, vertTau = 12, minBand = 28, bandMargin = 8, darkTau = 32, paperTau = 36)
 
     /** Preset akurat: potong lebih sering, threshold ketat. */
-    fun configStrict() = Config(edgeTau = 36, vertTau = 30, minBand = 24, bandMargin = 6, darkTau = 52, paperTau = 60)
+    fun configStrict() = Config(edgeTau = 24, vertTau = 18, minBand = 36, bandMargin = 10, darkTau = 40, paperTau = 44)
 
     /** Ambang tepi horizontal: langkah luminansi antar piksel tetangga. */
     const val EDGE_TAU = 24

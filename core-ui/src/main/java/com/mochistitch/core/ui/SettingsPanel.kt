@@ -250,6 +250,8 @@ fun SettingsPanel(
                 shape = RoundedCornerShape(12.dp),
                 modifier = Modifier.fillMaxWidth()
             )
+            Note("RAW: baozimh · wmanhua · jjabtoon · koudaimh · jjaptoon · goodtoon · manwa")
+            Note("EN: mangadex · mangapill · comick · mangageko · demonic · likemanga · mangabats · xcomic")
         }
 
         SettingsGroup("Tema Aplikasi") {

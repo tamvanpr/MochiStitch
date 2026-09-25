@@ -184,35 +184,15 @@ fun StudioApp(viewModel: StudioViewModel, onExitApp: () -> Unit) {
         topBar = {
             TopAppBar(
                 title = {
-                    Column {
-                        Text(
-                            "MochiStitch",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold
-                        )
-                        Text(
-                            when (state.screen) {
-                                StudioScreen.INPUT -> "Masukkan halaman"
-                                StudioScreen.RESULT -> "Hasil rakitan"
-                                StudioScreen.QUEUE -> "Antrean batch"
-                                StudioScreen.SETTINGS -> "Setelan"
-                            },
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                },
-                navigationIcon = {
-                    IconButton(onClick = { viewModel.travel(StudioScreen.INPUT) }) {
-                        Icon(
-                            Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Kembali"
-                        )
-                    }
+                    Text(
+                        "MochiStitch",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
+                    )
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
-                    titleContentColor = MaterialTheme.colorScheme.onSurface
+                    containerColor = MaterialTheme.colorScheme.primaryContainer,
+                    titleContentColor = MaterialTheme.colorScheme.onPrimaryContainer
                 )
             )
         }
@@ -305,21 +285,21 @@ fun StudioApp(viewModel: StudioViewModel, onExitApp: () -> Unit) {
                 ) {
                     Surface(
                         shape = CircleShape,
-                        color = MaterialTheme.colorScheme.primaryContainer,
-                        modifier = Modifier.size(64.dp)
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(80.dp)
                     ) {
                         Box(contentAlignment = Alignment.Center) {
                             Icon(
                                 imageVector = Icons.Default.Image,
                                 contentDescription = null,
-                                tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                                modifier = Modifier.size(32.dp)
+                                tint = MaterialTheme.colorScheme.onPrimary,
+                                modifier = Modifier.size(48.dp)
                             )
                         }
                     }
                     Text(
                         "MochiStitch",
-                        style = MaterialTheme.typography.titleLarge,
+                        style = MaterialTheme.typography.headlineSmall,
                         fontWeight = FontWeight.Bold
                     )
                     Text(
@@ -331,7 +311,7 @@ fun StudioApp(viewModel: StudioViewModel, onExitApp: () -> Unit) {
                         progress = { state.fraction.coerceIn(0f, 1f) },
                         modifier = Modifier.fillMaxWidth(),
                         color = MaterialTheme.colorScheme.primary,
-                        trackColor = MaterialTheme.colorScheme.primaryContainer
+                        trackColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
                     )
                 }
             }
@@ -414,22 +394,10 @@ private fun InputStep(viewModel: StudioViewModel, modifier: Modifier = Modifier)
             modifier = Modifier.fillMaxWidth()
         ) {
             Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text(
-                    "Tambah halaman",
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
                 SourceRow(
-                    icon = {
-                        Icon(
-                            Icons.Default.Image,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary
-                        )
-                    },
+                    icon = { Icon(Icons.Default.Image, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
                     title = "Gambar",
-                    desc = "Pilih dari galeri perangkat"
+                    desc = "Galeri perangkat"
                 ) {
                     pickImages.launch(
                         PickVisualMediaRequest(
@@ -439,13 +407,7 @@ private fun InputStep(viewModel: StudioViewModel, modifier: Modifier = Modifier)
                 }
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                 SourceRow(
-                    icon = {
-                        Icon(
-                            Icons.Default.Unarchive,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary
-                        )
-                    },
+                    icon = { Icon(Icons.Default.Unarchive, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
                     title = "Arsip",
                     desc = "ZIP · CBZ · RAR · CBR · 7Z · CB7"
                 ) {
@@ -453,15 +415,9 @@ private fun InputStep(viewModel: StudioViewModel, modifier: Modifier = Modifier)
                 }
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                 SourceRow(
-                    icon = {
-                        Icon(
-                            Icons.Default.Download,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary
-                        )
-                    },
+                    icon = { Icon(Icons.Default.Download, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
                     title = "Unduh",
-                    desc = "Tempel URL chapter/series"
+                    desc = "RAW + EN sources"
                 ) {
                     urlText = ""
                     showUrlDialog = true
@@ -470,6 +426,7 @@ private fun InputStep(viewModel: StudioViewModel, modifier: Modifier = Modifier)
         }
 
         if (state.pages.isEmpty()) {
+            Spacer(modifier = Modifier.weight(1f))
             Card(
                 colors = CardDefaults.cardColors(
                     containerColor = MaterialTheme.colorScheme.surfaceVariant
@@ -477,7 +434,7 @@ private fun InputStep(viewModel: StudioViewModel, modifier: Modifier = Modifier)
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Text(
-                    "Belum ada halaman. Tambah lewat Gambar, Arsip, atau Unduh di atas untuk mulai.",
+                    "Belum ada halaman",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(20.dp)
@@ -485,11 +442,6 @@ private fun InputStep(viewModel: StudioViewModel, modifier: Modifier = Modifier)
             }
             Spacer(modifier = Modifier.weight(1f))
         } else {
-            Text(
-                "${state.pages.size} halaman",
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.Bold
-            )
             PageStrip(
                 pages = state.pages,
                 onShiftUp = viewModel::shiftEarlier,
@@ -503,10 +455,7 @@ private fun InputStep(viewModel: StudioViewModel, modifier: Modifier = Modifier)
             horizontalArrangement = Arrangement.spacedBy(12.dp),
             modifier = Modifier.fillMaxWidth()
         ) {
-            TextButton(
-                onClick = viewModel::wipePages,
-                enabled = state.pages.isNotEmpty()
-            ) {
+            TextButton(onClick = viewModel::wipePages, enabled = state.pages.isNotEmpty()) {
                 Text("Bersihkan")
             }
             Spacer(modifier = Modifier.weight(1f))
