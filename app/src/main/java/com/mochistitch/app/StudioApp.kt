@@ -105,7 +105,7 @@ fun StudioApp(viewModel: StudioViewModel, onExitApp: () -> Unit) {
     }
 
     var pendingWrite by remember { mutableStateOf<(() -> Unit)?>(null) }
-    val writePermissionLauncher = remember_launcherForActivityResult(
+    val writePermissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { granted ->
         val action = pendingWrite
@@ -394,10 +394,10 @@ private fun InputStep(viewModel: StudioViewModel, modifier: Modifier = Modifier)
     var showUrlDialog by remember { mutableStateOf(false) }
     var urlText by remember { mutableStateOf("") }
 
-    val pickImages = remember_launcherForActivityResult(ActivityResultContracts.PickMultipleVisualMedia()) { uris ->
+    val pickImages = rememberLauncherForActivityResult(ActivityResultContracts.PickMultipleVisualMedia()) { uris ->
         if (uris.isNotEmpty()) viewModel.takeImages(uris, ctx)
     }
-    val pickArchive = remember_launcherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+    val pickArchive = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) viewModel.takeArchive(uri, ctx)
     }
 
