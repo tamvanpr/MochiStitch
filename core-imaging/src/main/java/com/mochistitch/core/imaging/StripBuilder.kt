@@ -410,50 +410,14 @@ class StripBuilder(
             if (dw <= 0 || dh <= 0) {
                 return listOf(Seg(m.uri, order, 0, m.height, renderedH))
             }
-            // — Pindai v6: masker horizontal + vertikal + paper. —
-            val horiz = BooleanArray(dh)
-            val chunk = 64
-            val buf = IntArray(dw * chunk)
-            // Kumpulkan sampel baris untuk estimasi kertas.
-            val paperSamples = mutableListOf<IntArray>()
-            var y = 0
-            while (y < dh) {
-                val rows = min(chunk, dh - y)
-                bmp.getPixels(buf, 0, dw, 0, y, dw, rows)
-                for (r in 0 until rows) {
-                    horiz[y + r] = SeamScan.rowIsSafe(buf, r * dw, dw, cfg)
-                    if (paperSamples.size < 24 && (y + r) % max(1, dh / 24) == 0) {
-                        paperSamples.add(buf.copyOfRange(r * dw, r * dw + dw))
-                    }
-                }
-                y += rows
-            }
-            val paper = SeamScan.estimatePaper(paperSamples)
-            // Terapkan paper-aware: baris yang median-nya jauh dari kertas
-            // (mis. abu screentone pekat / tinta merata yang lolos cek
-            // horizontal) ditandai tidak aman.
-            y = 0
-            while (y < dh) {
-                val rows = min(chunk, dh - y)
-                bmp.getPixels(buf, 0, dw, 0, y, dw, rows)
-                for (r in 0 until rows) {
-                    if (horiz[y + r]) {
-                        horiz[y + r] = SeamScan.rowIsSafe(buf, r * dw, dw, paper, cfg)
-                    }
-                }
-                y += rows
-            }
-            // Masker vertikal: butuh akses baris acak — baca per baris via
-            // getPixels 1-baris (murah pada bitmap pindai ≤16MP).
+            // — Pindai v7 (Cropybara-style): cek baris homogen per baris. —
             val rowBuf = IntArray(dw)
-            val vert = SeamScan.rowsVertSafe(dw, dh, getRow = { yy, out ->
-                bmp.getPixels(out, 0, dw, 0, yy, dw, 1)
-            }, cfg = cfg)
-            // Hindari alokasi ganda: pakai rowBuf agar lambda tidak
-            // mengalokasi sendiri (diabaikan, getPixels menulis ke out).
-            @Suppress("UNUSED_VARIABLE")
-            val keep = rowBuf
-            val safe = SeamScan.combineSafe(horiz, vert)
+            val safe = SeamScan.scanSafeRows(
+                getRow = { yy, out -> bmp.getPixels(out, 0, dw, 0, yy, dw, 1) },
+                width = dw,
+                height = dh,
+                cfg = cfg
+            )
             // Batas ke koordinat decode; rencana potong hanya di jendela
             // efektif [effTop, effBot) (sesudah crop banner).
             val f = stripWidth.toDouble() / m.width.toDouble()
