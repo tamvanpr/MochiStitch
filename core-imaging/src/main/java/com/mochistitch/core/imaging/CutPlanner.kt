@@ -59,38 +59,48 @@ object CutPlanner {
         var start = 0
         while (h - start > maxLen) {
             val target = start + maxLen
-            val pick = bands.lastOrNull { it.center in (start + minLen)..target }
-                ?: bands.firstOrNull { it.center in (target + 1)..(target + overshoot) }
-            if (pick != null) {
-                cuts += PlannedCut(pick.center, forced = false)
-                start = pick.center
-            } else {
-                val lo = start + minLen
-                val hi = min(target, h - 1)
-                if (lo > hi) break
-                var bestY = -1
-                var bestScore = Long.MAX_VALUE
-                for (y in lo..hi) {
-                    if (blocked[y]) continue
-                    val score = profile.ink[y] * 1000L + (target - y)
-                    if (score < bestScore) {
-                        bestScore = score
-                        bestY = y
-                    }
+            val lo = start + minLen
+            val latestFree = (lo..target).lastOrNull { !blocked[it] }
+            if (latestFree != null) {
+                val y = if (latestFree == target) {
+                    target
+                } else {
+                    (latestFree - 2).coerceAtLeast(lo)
                 }
-                if (bestY < 0) {
-                    bestY = lo
-                    bestScore = Long.MAX_VALUE
+                cuts += PlannedCut(y, forced = false)
+                start = y
+            } else {
+                val ahead = bands.firstOrNull { it.center in (target + 1)..(target + overshoot) }
+                if (ahead != null) {
+                    cuts += PlannedCut(ahead.center, forced = false)
+                    start = ahead.center
+                } else {
+                    val hi = min(target, h - 1)
+                    if (lo > hi) break
+                    var bestY = -1
+                    var bestScore = Long.MAX_VALUE
                     for (y in lo..hi) {
+                        if (blocked[y]) continue
                         val score = profile.ink[y] * 1000L + (target - y)
                         if (score < bestScore) {
                             bestScore = score
                             bestY = y
                         }
                     }
+                    if (bestY < 0) {
+                        bestY = lo
+                        bestScore = Long.MAX_VALUE
+                        for (y in lo..hi) {
+                            val score = profile.ink[y] * 1000L + (target - y)
+                            if (score < bestScore) {
+                                bestScore = score
+                                bestY = y
+                            }
+                        }
+                    }
+                    cuts += PlannedCut(bestY, forced = true)
+                    start = bestY
                 }
-                cuts += PlannedCut(bestY, forced = true)
-                start = bestY
             }
         }
         return cuts
