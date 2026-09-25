@@ -334,13 +334,20 @@ object SeamScan {
     const val SEAM_ROWS = 4
 
     /** Versi lama rowIsSafe tanpa parameter cfg — pakai default sensitivity 0.5. */
-    fun rowIsSafe(pixels: IntArray): Boolean = rowIsSafe(pixels, 0, pixels.size, 0.5f)
+    fun rowIsSafe(pixels: IntArray): Boolean = rowIsSafe(pixels, 0, pixels.size)
 
     /** Versi lama rowIsSafe dengan offset/length. */
-    fun rowIsSafe(pixels: IntArray, offset: Int, length: Int): Boolean =
-        rowIsSafe(pixels, offset, length, 0.5f)
+    fun rowIsSafe(pixels: IntArray, offset: Int, length: Int): Boolean {
+        if (length < 2) return true
+        // Cek variasi horizontal (sama seperti v6)
+        if (rowMaxStep(pixels, offset, length) > EDGE_TAU) return false
+        // Cek kegelapan (sama seperti v6)
+        val med = rowMedianLum(pixels, offset, length)
+        if (med < DARK_TAU) return false
+        return true
+    }
 
-    /** Versi lama rowIsSafe dengan sensitivity. */
+    /** Versi lama rowIsSafe dengan sensitivity (v7). */
     fun rowIsSafe(pixels: IntArray, offset: Int, length: Int, sensitivity: Float): Boolean {
         if (length < 2) return true
         return rowIsSafe(pixels, offset, length, sensitivity, 0)
