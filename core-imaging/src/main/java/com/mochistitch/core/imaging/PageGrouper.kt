@@ -17,8 +17,14 @@ import com.mochistitch.core.settings.SplitRule
  */
 object PageGrouper {
 
-    /** [renderedHeight] = tinggi lembar setelah diskala ke lebar strip. */
-    data class Sheet(val order: Int, val renderedHeight: Int)
+    /**
+     * [renderedHeight] = tinggi lembar setelah diskala ke lebar strip.
+     * [safeBreak] = tepi ATAS lembar ini boleh menjadi batas antar-berkas
+     * (tepi hasil potongan terencana yang sudah terverifikasi aman).
+     * Tepi batas halaman asli = false: batas berkas tidak boleh jatuh di
+     * sana kecuali terpaksa (ditandai [Bundle.seamCut]).
+     */
+    data class Sheet(val order: Int, val renderedHeight: Int, val safeBreak: Boolean = true)
 
     data class Bundle(
         val sheets: List<Sheet>,
@@ -38,6 +44,9 @@ object PageGrouper {
      *   order-b. null = tanpa informasi sambungan (perilaku lama).
      * @param hardCap tinggi maksimum mutlak satu berkas saat menahan
      *   pasangan bersambung (0 = tanpa penahanan).
+     *   Lembar dengan [Sheet.safeBreak] = false ikut ditahan sampai
+     *   [hardCap]; bila tetap tak muat, batas paksa ditandai
+     *   [Bundle.seamCut].
      */
     fun group(
         sheets: List<Sheet>,
@@ -88,6 +97,12 @@ object PageGrouper {
                     // Tahan: gabung pasangan bersambung walau melewati batas lunak.
                     current.add(sheet)
                     height += sheet.renderedHeight
+                } else if (!sheet.safeBreak && height + sheet.renderedHeight <= cap) {
+                    // Tepi atas lembar ini bukan potongan terencana (batas
+                    // halaman asli): tahan dalam berkas yang sama agar batas
+                    // berkas tidak membelah konten yang belum dicek.
+                    current.add(sheet)
+                    height += sheet.renderedHeight
                 } else {
                     // Putus di batas aman terakhir (mundur), bukan di tengah
                     // sambungan — kecuali seluruh berkas memang satu sambungan.
@@ -98,8 +113,9 @@ object PageGrouper {
                     val rest = current.subList(cutAt, oldSize).toList()
                     current = (rest + sheet).toMutableList()
                     height = rest.sumOf { it.renderedHeight } + sheet.renderedHeight
-                    // Berkas baru ditandai hanya bila batasnya jatuh di sambungan.
-                    seamCut = cutAt == oldSize && pairLinked
+                    // Berkas baru ditandai bila batasnya jatuh di sambungan
+                    // ATAU di tepi yang belum terverifikasi aman.
+                    seamCut = cutAt == oldSize && (pairLinked || !sheet.safeBreak)
                 }
             } else {
                 current.add(sheet)

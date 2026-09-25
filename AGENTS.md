@@ -19,6 +19,17 @@ Akurat 14. RowScanner/CutPlanner murni Kotlin + array (unit-testable, tanpa
 Bitmap); tidak ada ML Kit. OpenCV hanya tersisa untuk pencocokan template
 banner (BannerOcv), bukan untuk deteksi balon.
 
+Tambahan v7b (anti-bocor):
+- Pindai memakai nearest-neighbor (tanpa filter) pada lebar 480px agar garis
+  tipis/ekor balon tidak terhapus blur downscale.
+- Setiap titik potong terencana diverifikasi ulang pada resolusi penuh
+  (`verifyCut`: patch ±64 baris via region-decode); bila sibuk, geser ke
+  baris bebas terdekat (±48px), bila tak ada tandai forced.
+- Batas antar-berkas output HANYA boleh jatuh di tepi potongan terencana
+  (`Seg.cutTop` → `Sheet.safeBreak`): tepi batas-halaman-asli ditahan dalam
+  berkas yang sama sampai batas keras 1,5x; bila tetap tak muat, putus paksa
+  dan tandai `seamCut` untuk tinjau manual.
+
 ## Arsitektur v6 (potong hanya di tempat aman — perbaikan akar masalah)
 
 Satu prinsip mesin: garis potong tidak pernah melintasi tinta (balon,

@@ -63,7 +63,9 @@ class StripBuilder(
         val srcTop: Int,
         val srcBottom: Int,
         val renderedH: Int,
-        val bannerCut: Boolean = false
+        val bannerCut: Boolean = false,
+        /** Tepi atas segmen ini adalah hasil potongan terencana yang aman. */
+        val cutTop: Boolean = false
     )
 
     /** Hasil rakitan + catatan banner (null = kebijakan banner tak dipakai). */
@@ -131,7 +133,11 @@ class StripBuilder(
             // 2) Pasangan halaman berbeda yang bersambung piksel: tahan satu berkas.
             val byOrder = measured.mapIndexed { i, m -> i to m }.toMap()
             val linked = continuityMap(segs, byOrder)
-            val sheets = segs.mapIndexed { idx, s -> PageGrouper.Sheet(order = idx, renderedHeight = s.renderedH) }
+            // Batas antar-berkas hanya boleh jatuh di tepi potongan
+            // terencana (cutTop); tepi batas halaman asli ditahan/ditandai.
+            val sheets = segs.mapIndexed { idx, s ->
+                PageGrouper.Sheet(order = idx, renderedHeight = s.renderedH, safeBreak = s.cutTop)
+            }
             // Batas keras: pinning pasangan bersambung tak boleh lebih dari 1,5x batas.
             val hardCap = limit + limit / 2
             val bundles = PageGrouper.group(
@@ -459,13 +465,14 @@ class StripBuilder(
             if (y < w.scanTop || y >= w.scanBot) continue
             val local = y - w.scanTop
             val srcY = (w.effTop + local.toDouble() * (w.effBot - w.effTop) / (w.scanBot - w.scanTop)).toInt()
+            val (finalY, badVerify) = verifyCut(measured[idx], srcY, edge, range)
             val list = out.getOrPut(idx) { mutableListOf() }
             val minGap = (64L * (w.effBot - w.effTop) / (w.scanBot - w.scanTop)).toInt().coerceAtLeast(1)
             val last = list.lastOrNull() ?: w.effTop
-            if (srcY - last < minGap) continue
-            if (srcY >= w.effBot - 1) continue
-            list.add(srcY)
-            if (cut.forced) forced.add(idx)
+            if (finalY - last < minGap) continue
+            if (finalY >= w.effBot - 1) continue
+            list.add(finalY)
+            if (cut.forced || badVerify) forced.add(idx)
         }
         return GlobalPlan(out, forced)
     }
@@ -485,7 +492,7 @@ class StripBuilder(
         return idx
     }
 
-    /** Decode kecil (lebar ~[SCAN_WIDTH]) untuk pemindaian profil baris. */
+    /** Decode pindai (lebar ~[SCAN_WIDTH], tanpa filter agar garis tipis awet). */
     private fun decodeScan(uri: Uri, targetWidth: Int): Bitmap? {
         val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
         openStream(uri)?.use { BitmapFactory.decodeStream(it, null, bounds) } ?: return null
@@ -503,11 +510,45 @@ class StripBuilder(
         }
         if (raw.width == targetWidth) return raw
         val h = (raw.height.toLong() * targetWidth / raw.width).toInt().coerceAtLeast(1)
-        val scaled = Bitmap.createScaledBitmap(raw, targetWidth, h, true)
+        val scaled = Bitmap.createScaledBitmap(raw, targetWidth, h, false)
         if (scaled !== raw) {
             try { raw.recycle() } catch (t: Throwable) { }
         }
         return scaled
+    }
+
+    /**
+     * Verifikasi resolusi-penuh satu titik potong: pindaian kecil bisa
+     * meloloskan garis tipis (ekor balon). Bila baris potong ternyata
+     * sibuk, geser ke baris bebas terdekat (±48px); bila tak ada,
+     * pertahankan posisi dan tandai gagal verifikasi.
+     */
+    private fun verifyCut(
+        m: StripRenderer.Measured,
+        cutY: Int,
+        edge: Int,
+        range: Int
+    ): Pair<Int, Boolean> {
+        val half = 64
+        val top = (cutY - half).coerceAtLeast(0)
+        val bottom = (cutY + half).coerceAtMost(m.height)
+        if (bottom - top < 8) return cutY to false
+        val patch = try {
+            renderer.edgePatch(m.uri, m.width, m.height, top, bottom)
+        } catch (t: Throwable) {
+            null
+        } ?: return cutY to false
+        val prof = RowScanner.scanBuffer(patch.px, patch.w, patch.h, edge, range, noisePixels = 3)
+        val center = (cutY - top).coerceIn(0, patch.h - 1)
+        if (!prof.busy[center]) return cutY to false
+        val radius = 48
+        for (d in 1..radius) {
+            val dn = center - d
+            if (dn >= 0 && !prof.busy[dn]) return (top + dn) to false
+            val up = center + d
+            if (up < patch.h && !prof.busy[up]) return (top + up) to false
+        }
+        return cutY to true
     }
 
     /**
@@ -523,11 +564,11 @@ class StripBuilder(
         wasCut: Boolean,
         cuts: List<Int>
     ): List<Seg> {
-        fun seg(top: Int, bottom: Int): Seg {
+        fun seg(top: Int, bottom: Int, cutTop: Boolean): Seg {
             val h = ((bottom - top).toLong() * stripWidth / m.width.coerceAtLeast(1)).toInt().coerceAtLeast(1)
-            return Seg(m.uri, order, top, bottom, h, wasCut)
+            return Seg(m.uri, order, top, bottom, h, wasCut, cutTop)
         }
-        if (cuts.isEmpty()) return listOf(seg(effTop, effBot))
+        if (cuts.isEmpty()) return listOf(seg(effTop, effBot, false))
         val bounds = mutableListOf<Pair<Int, Int>>()
         var prev = effTop
         for (c in cuts) {
@@ -538,8 +579,8 @@ class StripBuilder(
         }
         bounds.add(prev to effBot)
         val clean = bounds.filter { it.second > it.first }
-        if (clean.isEmpty()) return listOf(seg(effTop, effBot))
-        return clean.map { (t, b) -> seg(t, b) }
+        if (clean.isEmpty()) return listOf(seg(effTop, effBot, false))
+        return clean.mapIndexed { idx, (t, b) -> seg(t, b, idx > 0) }
     }
 
     /**
@@ -618,7 +659,7 @@ class StripBuilder(
 
     private companion object {
         const val PREVIEW_CAP = 2048
-        const val SCAN_WIDTH = 360
+        const val SCAN_WIDTH = 480
     }
 
     private fun scaleForPreview(src: Bitmap, cap: Int): Bitmap {

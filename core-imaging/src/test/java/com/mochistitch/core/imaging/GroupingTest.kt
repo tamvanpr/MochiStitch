@@ -89,6 +89,38 @@ class GroupingTest {
     }
 
     @Test
+    fun testUnsafeEdgeIsHeldBelowHardCap() {
+        // B tepi-tak-terencana: batas berkas tidak boleh jatuh di B|atas,
+        // jadi B ditahan sampai batas keras.
+        val input = listOf(
+            Sheet(0, 600, safeBreak = true),
+            Sheet(1, 600, safeBreak = false),
+            Sheet(2, 600, safeBreak = true)
+        )
+        val groups = PageGrouper.group(input, SplitRule.MAX_HEIGHT, 1000, 10, linked = null, hardCap = 1500)
+        assertEquals(2, groups.size)
+        assertEquals(listOf(0, 1), groups[0].sheets.map { it.order })
+        assertEquals(listOf(2), groups[1].sheets.map { it.order })
+        assertFalse(groups[0].seamCut)
+        assertFalse(groups[1].seamCut)
+    }
+
+    @Test
+    fun testUnsafeEdgeOverHardCapIsFlagged() {
+        // B tak-terencana dan tak muat ditahan: putus paksa + ditandai.
+        val input = listOf(
+            Sheet(0, 600, safeBreak = true),
+            Sheet(1, 900, safeBreak = false)
+        )
+        val groups = PageGrouper.group(input, SplitRule.MAX_HEIGHT, 1000, 10, linked = null, hardCap = 1100)
+        assertEquals(2, groups.size)
+        assertEquals(listOf(0), groups[0].sheets.map { it.order })
+        assertEquals(listOf(1), groups[1].sheets.map { it.order })
+        assertFalse(groups[0].seamCut)
+        assertTrue(groups[1].seamCut)
+    }
+
+    @Test
     fun testCountRule() {
         val groups = PageGrouper.group(sheets(50, 50, 50, 50, 50), SplitRule.PAGES_PER_PACK, 100000, 2)
         assertEquals(3, groups.size)
