@@ -1,6 +1,7 @@
 package com.mochistitch.core.ui
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -60,14 +61,14 @@ fun SettingsPanel(
     onChange: (StitchSettings) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    Column(
+    LazyColumn(
         modifier = modifier
             .fillMaxSize()
-            .verticalScroll(rememberScrollState())
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        SettingsGroup("Kemasan & Gambar") {
+        item {
+            SettingsGroup("Kemasan & Gambar") {
             SettingsSubLabel("Kemasan default")
             ChipRow {
                 PackFormat.entries.forEach { pack ->
@@ -110,8 +111,10 @@ fun SettingsPanel(
                 )
             }
         }
+        }
 
-        SettingsGroup("Nama Berkas") {
+        item {
+            SettingsGroup("Nama Berkas") {
             OutlinedTextField(
                 value = settings.seriesTitle,
                 onValueChange = { onChange(settings.copy(seriesTitle = it)) },
@@ -144,8 +147,10 @@ fun SettingsPanel(
             Text("Contoh: $sample", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
             Note("Arsip dari arsip: nama output SAMA dengan nama input.")
         }
+        }
 
-        SettingsGroup("Bagi Strip") {
+        item {
+            SettingsGroup("Bagi Strip") {
             SettingsSubLabel("Aturan bagi (selalu di batas halaman)")
             ChipRow {
                 SplitRule.entries.forEach { rule ->
@@ -188,8 +193,10 @@ fun SettingsPanel(
                 )
             }
         }
+        }
 
-        SettingsGroup("Halaman Raksasa") {
+        item {
+            SettingsGroup("Halaman Raksasa") {
             ToggleRow(
                 title = "Penanda tinjau manual",
                 desc = "Halaman yang melebihi batas dibiarkan utuh dan ditandai di pratinjau.",
@@ -197,8 +204,10 @@ fun SettingsPanel(
                 onFlip = { onChange(settings.copy(showReviewFlags = it)) }
             )
         }
+        }
 
-        SettingsGroup("Tampilan Strip") {
+        item {
+            SettingsGroup("Tampilan Strip") {
             SettingsSubLabel("Warna bingkai")
             ChipRow {
                 MatteColor.entries.forEach { matte ->
@@ -214,8 +223,10 @@ fun SettingsPanel(
                 }
             }
         }
+        }
 
-        SettingsGroup("Potong Cerdas") {
+        item {
+            SettingsGroup("Potong Cerdas") {
             SettingsSubLabel("Ketegasan potongan")
             ChipRow {
                 CutStrictness.entries.forEach { preset ->
@@ -238,8 +249,10 @@ fun SettingsPanel(
                 }
             )
         }
+        }
 
-        SettingsGroup("Sumber Unduhan") {
+        item {
+            SettingsGroup("Sumber Unduhan") {
             SettingsSubLabel("RAW")
             Text(
                 "Baozimh · Wmanhua · JJABToon · KoudaiMH · JJAPToon · GoodToon · Manwa",
@@ -253,8 +266,10 @@ fun SettingsPanel(
                 color = MaterialTheme.colorScheme.onSurface
             )
         }
+        }
 
-        SettingsGroup("Unduhan Mentah") {
+        item {
+            SettingsGroup("Unduhan Mentah") {
             OutlinedTextField(
                 value = settings.workerUrl,
                 onValueChange = { onChange(settings.copy(workerUrl = it.trim())) },
@@ -266,8 +281,10 @@ fun SettingsPanel(
                 modifier = Modifier.fillMaxWidth()
             )
         }
+        }
 
-        SettingsGroup("Tema Aplikasi") {
+        item {
+            SettingsGroup("Tema Aplikasi") {
             ChipRow {
                 ThemeMode.entries.forEach { mode ->
                     OptionChip(
@@ -280,7 +297,7 @@ fun SettingsPanel(
                         }
                     )
                 }
-            }
+        }
         }
     }
 }
