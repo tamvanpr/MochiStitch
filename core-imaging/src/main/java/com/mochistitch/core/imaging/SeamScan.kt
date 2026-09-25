@@ -320,4 +320,213 @@ object SeamScan {
         val db = (a and 0xFF) - (b and 0xFF)
         return absI(dr) + absI(dg) + absI(db)
     }
+
+    // ── Metode kompatibilitas mundur untuk unit test ────────────────
+
+    const val BAND_MARGIN = 4
+    const val MIN_BAND = 16
+    const val VERT_TAU = 20
+    const val LINK_TAU = 24
+    const val LINK_MIN_FRAC = 0.9
+    const val CONTENT_SPREAD_TAU = 64
+    const val PAPER_TAU = 48
+    const val DARK_TAU = 40
+    const val SEAM_ROWS = 4
+
+    /** Versi lama rowIsSafe tanpa parameter cfg — pakai default sensitivity 0.5. */
+    fun rowIsSafe(pixels: IntArray): Boolean = rowIsSafe(pixels, 0, pixels.size, 0.5f)
+
+    /** Versi lama rowIsSafe dengan offset/length. */
+    fun rowIsSafe(pixels: IntArray, offset: Int, length: Int): Boolean =
+        rowIsSafe(pixels, offset, length, 0.5f)
+
+    /** Versi lama rowIsSafe dengan sensitivity. */
+    fun rowIsSafe(pixels: IntArray, offset: Int, length: Int, sensitivity: Float): Boolean {
+        if (length < 2) return true
+        return rowIsSafe(pixels, offset, length, sensitivity, 0)
+    }
+
+    /** rowsVertSafe sederhana untuk test — tandai baris yang beda vertikal > tau. */
+    fun rowsVertSafe(
+        width: Int,
+        height: Int,
+        getRow: (y: Int, out: IntArray) -> Unit
+    ): BooleanArray {
+        return rowsVertSafe(width, height, getRow, Config(
+            maxDistance = 1500, sensitivity = 0.5f, margins = 8,
+            step = 3, maxSearchDeviationFactor = 0.4f
+        ))
+    }
+
+    fun rowsVertSafe(
+        width: Int,
+        height: Int,
+        getRow: (y: Int, out: IntArray) -> Unit,
+        cfg: Config
+    ): BooleanArray {
+        val out = BooleanArray(height) { true }
+        if (width <= 0 || height <= 0) return out
+        val prev = IntArray(width)
+        val cur = IntArray(width)
+        val prevLum = IntArray(width)
+        getRow(0, cur)
+        for (x in 0 until width) prevLum[x] = luminance(cur[x])
+        System.arraycopy(cur, 0, prev, 0, width)
+        for (y in 1 until height) {
+            getRow(y, cur)
+            for (x in 0 until width) {
+                val l = luminance(cur[x])
+                if (absI(l - prevLum[x]) > cfg.vertTau) {
+                    out[y] = false
+                    out[y - 1] = false
+                }
+                prevLum[x] = l
+            }
+            System.arraycopy(cur, 0, prev, 0, width)
+        }
+        return out
+    }
+
+    /** findBands dengan minBand — pakai config default. */
+    fun findBands(safe: BooleanArray, minBand: Int = MIN_BAND): List<IntRange> {
+        val cfg = Config(
+            maxDistance = 1500, sensitivity = 0.5f, margins = 8,
+            step = 3, maxSearchDeviationFactor = 0.4f
+        )
+        return findBands(safe, cfg.copy(minBand = minBand))
+    }
+
+    /** planCuts dengan parameter lama — pakai config default. */
+    fun planCuts(safe: BooleanArray, limit: Int, minChunk: Int = limit / 2, overflow: Int = 0): CutPlan {
+        val cfg = Config(
+            maxDistance = limit, sensitivity = 0.5f, margins = 8,
+            step = 3, maxSearchDeviationFactor = 0.4f
+        )
+        return planCuts(safe, limit, cfg, overflow = overflow)
+    }
+
+    fun planCuts(safe: BooleanArray, limit: Int, cfg: Config, minChunk: Int = limit / 2, overflow: Int = 0): CutPlan {
+        if (limit <= 0 || safe.size <= limit) return CutPlan(emptyList(), true)
+        val minC = minChunk.coerceAtLeast(1)
+        val maxSearchUp = (limit * cfg.maxSearchDeviationFactor).toInt().coerceAtLeast(1)
+        val cuts = mutableListOf<Int>()
+        var y = 0
+        while (y + limit < safe.size) {
+            val ideal = y + limit
+            val searchStart = ideal
+            val searchEnd = maxOf(y + 1, ideal - maxSearchUp)
+            var foundCut: Int? = null
+            for (yy in searchStart downTo searchEnd) {
+                if (yy < safe.size && safe[yy]) {
+                    foundCut = yy
+                    break
+                }
+            }
+            if (foundCut != null) {
+                cuts.add(foundCut)
+                y = foundCut
+            } else if (overflow > 0) {
+                val extendedEnd = maxOf(y + 1, ideal - maxSearchUp - overflow)
+                for (yy in searchStart downTo extendedEnd) {
+                    if (yy >= 0 && safe[yy]) {
+                        cuts.add(yy)
+                        y = yy
+                        break
+                    }
+                }
+                if (y == 0 && cuts.isEmpty()) return CutPlan(cuts, tailSafe = false)
+            } else {
+                if (ideal < safe.size) {
+                    cuts.add(ideal)
+                    y = ideal
+                } else {
+                    break
+                }
+            }
+        }
+        return CutPlan(cuts, tailSafe = true)
+    }
+
+    /** estimatePaper untuk backward compat — tidak dipakai di v7 tapi test mungkin butuh. */
+    fun estimatePaper(rows: List<IntArray>): Int {
+        if (rows.isEmpty()) return 255
+        val hist = IntArray(16)
+        for (row in rows) {
+            if (row.isEmpty()) continue
+            val stride = maxOf(1, row.size / 64)
+            var i = 0
+            while (i < row.size) {
+                hist[((luminance(row[i]) * 16) shr 8).coerceIn(0, 15)]++
+                i += stride
+            }
+        }
+        var best = 15
+        var bestCount = -1
+        for (b in 15 downTo 0) {
+            val boosted = if (b >= 12) hist[b] * 2 else hist[b]
+            if (boosted > bestCount) {
+                bestCount = boosted
+                best = b
+            }
+        }
+        return (best * 16 + 8).coerceIn(0, 255)
+    }
+
+    /** rowMedianLum untuk backward compat. */
+    fun rowMedianLum(pixels: IntArray, offset: Int, length: Int): Int {
+        if (length <= 0) return 255
+        val stride = maxOf(1, length / 256)
+        var count = 0
+        val buf = IntArray((length + stride - 1) / stride)
+        var i = offset
+        val end = offset + length
+        while (i < end) {
+            buf[count++] = luminance(pixels[i])
+            i += stride
+        }
+        buf.sort(0, count)
+        return buf[count / 2]
+    }
+
+    /** rowMaxStep untuk backward compat. */
+    fun rowMaxStep(pixels: IntArray, offset: Int, length: Int): Int {
+        if (length < 2) return 0
+        var prev = luminance(pixels[offset])
+        var mx = 0
+        val end = offset + length
+        var i = offset + 1
+        while (i < end) {
+            val cur = luminance(pixels[i])
+            val d = absI(cur - prev)
+            if (d > mx) mx = d
+            prev = cur
+            i++
+        }
+        return mx
+    }
+
+    /** combineSafe untuk backward compat. */
+    fun combineSafe(horiz: BooleanArray, vert: BooleanArray): BooleanArray {
+        require(horiz.size == vert.size)
+        return BooleanArray(horiz.size) { i -> horiz[i] && vert[i] }
+    }
+
+    /** rowIsSafe dengan paperLum untuk backward compat — ignore paperLum di v7. */
+    fun rowIsSafe(pixels: IntArray, offset: Int, length: Int, paperLum: Int): Boolean {
+        return rowIsSafe(pixels, offset, length, 0.5f)
+    }
+
+    fun rowIsSafe(pixels: IntArray, offset: Int, length: Int, paperLum: Int, sensitivity: Float): Boolean {
+        return rowIsSafe(pixels, offset, length, sensitivity)
+    }
+
+    /** Config dengan parameter v6 untuk backward compat. */
+    data class V6Config(
+        val edgeTau: Int,
+        val vertTau: Int,
+        val minBand: Int,
+        val bandMargin: Int,
+        val darkTau: Int,
+        val paperTau: Int
+    )
 }
