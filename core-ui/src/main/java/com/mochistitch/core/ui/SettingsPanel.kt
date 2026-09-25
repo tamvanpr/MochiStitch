@@ -20,6 +20,7 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Divider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -64,10 +65,10 @@ fun SettingsPanel(
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
             .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp)
+        verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        Group("Kemasan & Gambar") {
-            SubLabel("Kemasan default: ZIP")
+        SettingsGroup("Kemasan & Gambar") {
+            SettingsSubLabel("Kemasan default")
             ChipRow {
                 PackFormat.entries.forEach { pack ->
                     OptionChip(
@@ -81,7 +82,8 @@ fun SettingsPanel(
                     )
                 }
             }
-            SubLabel("Gambar potongan")
+            Divider(color = MaterialTheme.colorScheme.outlineVariant)
+            SettingsSubLabel("Gambar potongan")
             ChipRow {
                 ImageFormat.entries.forEach { fmt ->
                     OptionChip(
@@ -109,7 +111,7 @@ fun SettingsPanel(
             }
         }
 
-        Group("Nama Berkas") {
+        SettingsGroup("Nama Berkas") {
             OutlinedTextField(
                 value = settings.seriesTitle,
                 onValueChange = { onChange(settings.copy(seriesTitle = it)) },
@@ -143,8 +145,8 @@ fun SettingsPanel(
             Note("Arsip dari arsip: nama output SAMA dengan nama input.")
         }
 
-        Group("Bagi Strip") {
-            SubLabel("Aturan bagi (selalu di batas halaman)")
+        SettingsGroup("Bagi Strip") {
+            SettingsSubLabel("Aturan bagi (selalu di batas halaman)")
             ChipRow {
                 SplitRule.entries.forEach { rule ->
                     OptionChip(
@@ -167,7 +169,6 @@ fun SettingsPanel(
                 )
             }
             if (settings.splitRule == SplitRule.PAGES_PER_PACK) {
-                // State teks lokal agar kolom bisa dikosongkan total tanpa mental.
                 var pagesText by remember(settings.pagesPerPack) {
                     mutableStateOf(settings.pagesPerPack.toString())
                 }
@@ -188,7 +189,7 @@ fun SettingsPanel(
             }
         }
 
-        Group("Halaman Raksasa") {
+        SettingsGroup("Halaman Raksasa") {
             ToggleRow(
                 title = "Penanda tinjau manual",
                 desc = "Halaman yang melebihi batas dibiarkan utuh dan ditandai di pratinjau.",
@@ -197,8 +198,8 @@ fun SettingsPanel(
             )
         }
 
-        Group("Tampilan Strip") {
-            SubLabel("Warna bingkai")
+        SettingsGroup("Tampilan Strip") {
+            SettingsSubLabel("Warna bingkai")
             ChipRow {
                 MatteColor.entries.forEach { matte ->
                     OptionChip(
@@ -214,8 +215,8 @@ fun SettingsPanel(
             }
         }
 
-        Group("Potong Cerdas") {
-            SubLabel("Ketegasan potongan")
+        SettingsGroup("Potong Cerdas") {
+            SettingsSubLabel("Ketegasan potongan")
             ChipRow {
                 CutStrictness.entries.forEach { preset ->
                     OptionChip(
@@ -238,7 +239,7 @@ fun SettingsPanel(
             )
         }
 
-        Group("Unduhan Mentah") {
+        SettingsGroup("Unduhan Mentah") {
             OutlinedTextField(
                 value = settings.workerUrl,
                 onValueChange = { onChange(settings.copy(workerUrl = it.trim())) },
@@ -251,7 +252,8 @@ fun SettingsPanel(
             )
         }
 
-        Group("Tema Aplikasi") {            ChipRow {
+        SettingsGroup("Tema Aplikasi") {
+            ChipRow {
                 ThemeMode.entries.forEach { mode ->
                     OptionChip(
                         active = settings.themeMode == mode,
@@ -269,22 +271,32 @@ fun SettingsPanel(
 }
 
 @Composable
-private fun Group(title: String, body: @Composable () -> Unit) {
+private fun SettingsGroup(title: String, body: @Composable () -> Unit) {
     Card(
-        shape = RoundedCornerShape(14.dp),
+        shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
         modifier = Modifier.fillMaxWidth()
     ) {
-        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Text(title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Text(
+                title,
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface
+            )
             body()
         }
     }
 }
 
 @Composable
-private fun SubLabel(text: String) {
-    Text(text, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+private fun SettingsSubLabel(text: String) {
+    Text(
+        text,
+        style = MaterialTheme.typography.labelMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        fontWeight = FontWeight.Medium
+    )
 }
 
 @OptIn(ExperimentalLayoutApi::class)
@@ -298,25 +310,36 @@ private fun OptionChip(active: Boolean, onTap: () -> Unit, text: String) {
     Surface(
         selected = active,
         onClick = onTap,
-        shape = RoundedCornerShape(10.dp),
+        shape = RoundedCornerShape(20.dp),
         color = if (active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceContainerHigh,
         contentColor = if (active) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
     ) {
-        Row(modifier = Modifier.padding(horizontal = 14.dp, vertical = 9.dp), verticalAlignment = Alignment.CenterVertically) {
+        Row(
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
             if (active) {
-                Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(16.dp))
+                Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(14.dp))
                 Spacer(modifier = Modifier.width(6.dp))
             }
-            Text(text, style = MaterialTheme.typography.labelMedium, fontWeight = if (active) FontWeight.Bold else FontWeight.Medium)
+            Text(
+                text,
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = if (active) FontWeight.SemiBold else FontWeight.Normal
+            )
         }
     }
 }
 
 @Composable
 private fun ToggleRow(title: String, desc: String, checked: Boolean, onFlip: (Boolean) -> Unit) {
-    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
         Column(modifier = Modifier.weight(1f)) {
-            Text(title, fontWeight = FontWeight.SemiBold)
+            Text(title, fontWeight = FontWeight.Medium)
             Text(desc, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         Switch(checked = checked, onCheckedChange = onFlip)
@@ -325,9 +348,21 @@ private fun ToggleRow(title: String, desc: String, checked: Boolean, onFlip: (Bo
 
 @Composable
 private fun Note(text: String) {
-    Surface(color = MaterialTheme.colorScheme.surfaceContainerHigh, shape = RoundedCornerShape(8.dp), modifier = Modifier.fillMaxWidth()) {
-        Row(modifier = Modifier.padding(10.dp), verticalAlignment = Alignment.Top) {
-            Icon(Icons.Default.Info, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(16.dp))
+    Surface(
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+        shape = RoundedCornerShape(12.dp),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Row(
+            modifier = Modifier.padding(12.dp),
+            verticalAlignment = Alignment.Top
+        ) {
+            Icon(
+                Icons.Default.Info,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(16.dp)
+            )
             Spacer(modifier = Modifier.width(8.dp))
             Text(text, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
