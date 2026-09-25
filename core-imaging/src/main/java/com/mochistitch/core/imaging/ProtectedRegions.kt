@@ -17,7 +17,9 @@ object ProtectedRegions {
     fun find(bitmap: Bitmap): List<IntRange> {
         if (bitmap.width <= 0 || bitmap.height <= 0) return emptyList()
         val regions = mutableListOf<IntRange>()
+        var guardAvailable = false
         if (runCatching { OpenCVLoader.initDebug() }.getOrDefault(false)) {
+            guardAvailable = true
             val rgba = Mat()
             val gray = Mat()
             val blur = Mat()
@@ -63,6 +65,7 @@ object ProtectedRegions {
         }
         runCatching {
             val recognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
+            guardAvailable = true
             try {
                 val result = Tasks.await(recognizer.process(InputImage.fromBitmap(bitmap, 0)))
                 result.textBlocks.forEach { block ->
@@ -75,6 +78,7 @@ object ProtectedRegions {
                 recognizer.close()
             }
         }
+        if (!guardAvailable) return listOf(0 until bitmap.height)
         return regions
     }
 }
