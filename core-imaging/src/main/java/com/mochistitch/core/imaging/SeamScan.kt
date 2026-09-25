@@ -139,7 +139,7 @@ object SeamScan {
                 prev = cur
                 x++
             }
-            if (safe && width - margin * 2 > 0) {
+            if (safe && width - margin * 2 > 0 && rowMedianLum(buf, 0, width) >= 30) {
                 out[y] = true
             }
             y += step
@@ -209,12 +209,7 @@ object SeamScan {
                 cuts.add(extendedCut)
                 y = extendedCut
             } else {
-                if (ideal < safe.size) {
-                    cuts.add(ideal)
-                    y = ideal
-                } else {
-                    break
-                }
+                return CutPlan(cuts, tailSafe = false)
             }
         }
         return CutPlan(cuts, tailSafe = true)

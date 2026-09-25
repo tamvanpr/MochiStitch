@@ -43,6 +43,7 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Divider
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -285,14 +286,14 @@ fun StudioApp(viewModel: StudioViewModel, onExitApp: () -> Unit) {
                     Surface(
                         shape = CircleShape,
                         color = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(80.dp)
+                        modifier = Modifier.size(112.dp)
                     ) {
                         Box(contentAlignment = Alignment.Center) {
                             Icon(
                                 imageVector = Icons.Default.Image,
                                 contentDescription = null,
                                 tint = MaterialTheme.colorScheme.onPrimary,
-                                modifier = Modifier.size(48.dp)
+                                modifier = Modifier.size(72.dp)
                             )
                         }
                     }
@@ -309,8 +310,8 @@ fun StudioApp(viewModel: StudioViewModel, onExitApp: () -> Unit) {
                     LinearProgressIndicator(
                         progress = { state.fraction.coerceIn(0f, 1f) },
                         modifier = Modifier.fillMaxWidth(),
-                        color = MaterialTheme.colorScheme.primary,
-                        trackColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
+                        color = MaterialTheme.colorScheme.tertiary,
+                        trackColor = MaterialTheme.colorScheme.surfaceContainerHighest
                     )
                 }
             }
@@ -386,41 +387,35 @@ private fun InputStep(viewModel: StudioViewModel, modifier: Modifier = Modifier)
         modifier = modifier.padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        Card(
-            colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surfaceVariant
-            ),
-            modifier = Modifier.fillMaxWidth()
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                SourceRow(
-                    icon = { Icon(Icons.Default.Image, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
-                    title = "Gambar",
-                    desc = "Galeri perangkat"
-                ) {
-                    pickImages.launch(
-                        PickVisualMediaRequest(
-                            ActivityResultContracts.PickVisualMedia.ImageOnly
-                        )
-                    )
-                }
-                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-                SourceRow(
-                    icon = { Icon(Icons.Default.Unarchive, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
-                    title = "Arsip",
-                    desc = "ZIP · CBZ · RAR · CBR · 7Z · CB7"
-                ) {
-                    pickArchive.launch(arrayOf("*/*"))
-                }
-                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-                SourceRow(
-                    icon = { Icon(Icons.Default.Download, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
-                    title = "Unduh",
-                    desc = "RAW + EN sources"
-                ) {
-                    urlText = ""
-                    showUrlDialog = true
-                }
+            FilledTonalButton(
+                onClick = {
+                    pickImages.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+                },
+                modifier = Modifier.weight(1f)
+            ) {
+                Icon(Icons.Default.Image, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.size(6.dp))
+                Text("Gambar")
+            }
+            FilledTonalButton(
+                onClick = { pickArchive.launch(arrayOf("*/*")) },
+                modifier = Modifier.weight(1f)
+            ) {
+                Icon(Icons.Default.Unarchive, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.size(6.dp))
+                Text("Arsip")
+            }
+            FilledTonalButton(
+                onClick = { urlText = ""; showUrlDialog = true },
+                modifier = Modifier.weight(1f)
+            ) {
+                Icon(Icons.Default.Download, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.size(6.dp))
+                Text("Unduh")
             }
         }
 

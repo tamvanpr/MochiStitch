@@ -239,6 +239,21 @@ fun SettingsPanel(
             )
         }
 
+        SettingsGroup("Sumber Unduhan") {
+            SettingsSubLabel("RAW")
+            Text(
+                "Baozimh · Wmanhua · JJABToon · KoudaiMH · JJAPToon · GoodToon · Manwa",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            SettingsSubLabel("EN")
+            Text(
+                "MangaDex · MangaPill · Comick · MangaGeko · Demonic · LikeManga · MangaBats · XComic",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+        }
+
         SettingsGroup("Unduhan Mentah") {
             OutlinedTextField(
                 value = settings.workerUrl,
@@ -250,8 +265,6 @@ fun SettingsPanel(
                 shape = RoundedCornerShape(12.dp),
                 modifier = Modifier.fillMaxWidth()
             )
-            Note("RAW: baozimh · wmanhua · jjabtoon · koudaimh · jjaptoon · goodtoon · manwa")
-            Note("EN: mangadex · mangapill · comick · mangageko · demonic · likemanga · mangabats · xcomic")
         }
 
         SettingsGroup("Tema Aplikasi") {
