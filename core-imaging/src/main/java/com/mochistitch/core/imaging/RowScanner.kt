@@ -108,7 +108,5 @@ object RowScanner {
     private fun luma(c: Int): Int =
         (((c shr 16) and 0xFF) * 77 + ((c shr 8) and 0xFF) * 150 + (c and 0xFF) * 29) shr 8
 
-    private companion object {
-        const val MEDIAN_DEVIATION = 16
-    }
+    private const val MEDIAN_DEVIATION = 16
 }
