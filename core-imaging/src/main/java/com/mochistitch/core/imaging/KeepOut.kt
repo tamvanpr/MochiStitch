@@ -135,8 +135,8 @@ object KeepOut {
      */
     fun textZones(
         structured: BooleanArray,
-        gap: Int = 20,
-        expand: Int = 20
+        gap: Int = 16,
+        expand: Int = 12
     ): BooleanArray {
         val h = structured.size
         val out = BooleanArray(h)

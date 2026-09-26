@@ -37,9 +37,10 @@ Tambahan v7b (anti-bocor):
   potongan paksa yang jatuh di zona larangan DIBATALKAN (halaman dibiarkan
   utuh/kelebihan tinggi + ditandai).
 - Zona teks: baris "terstruktur" (>=3 run gelap dengan run terpanjang
-  >=4px = kalimat; arsir = 1-2 run; screentone = run 1-3px) dikelompokkan bila celah <= 20 baris lalu
-  diperlebar ±20 (dinding + ekor balon). Menangkap interior balon berekor
-  yang lolos flood fill, plus kalimat/SFX di luar balon.
+  >=4px = kalimat; arsir = 1-2 run; screentone = run 1-3px) dikelompokkan bila celah <= 16 baris lalu
+  diperlebar ±12 (dinding + ekor balon). Zona ini hanya memblokir
+  perencanaan; yang DIBATALKAN hanya potongan paksa tepat di interior
+  terkurung (flood fill).
 - Pemetaan potong global ke koordinat sumber memakai offset halaman
   (koordinat lokal vs global pernah tertukar sehingga potongan terencana
   di luar halaman pertama terbuang diam-diam).

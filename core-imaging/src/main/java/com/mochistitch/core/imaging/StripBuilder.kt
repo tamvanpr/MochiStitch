@@ -470,8 +470,10 @@ class StripBuilder(
         }
         if (busy.isEmpty()) return GlobalPlan(emptyMap(), emptySet(), scanned, measured.size)
         // Zona teks global: kelompok baris terstruktur (kunci pada teks,
-        // bukan garis pinggir) + perluasan dinding balon. OR ke busy dan
-        // ke daftar larangan potong paksa.
+        // bukan garis pinggir) + perluasan dinding balon. OR ke busy saja
+        // (bukan ke larangan-batal): baris bebas di zona perluasan masih
+        // boleh dipotong darurat + ditandai; yang DIBATALKAN hanya
+        // potongan paksa tepat di interior terkurung (keepAll).
         val zones = KeepOut.textZones(structAll.toBooleanArray())
         val busyArr = busy.toBooleanArray()
         for (y in busyArr.indices) {
@@ -479,9 +481,6 @@ class StripBuilder(
         }
         val combined = RowProfile(busyArr, ink.toIntArray())
         val keepAll = keep.toBooleanArray()
-        for (y in keepAll.indices) {
-            if (zones[y]) keepAll[y] = true
-        }
         val maxLen = (limit.toLong() * scanWidth / stripWidth.coerceAtLeast(1)).toInt().coerceAtLeast(16)
         val plan = CutPlanner.plan(
             profile = combined,
