@@ -10,6 +10,8 @@ data class Band(val start: Int, val end: Int) {
 data class PlannedCut(val y: Int, val forced: Boolean)
 
 object CutPlanner {
+    private const val BAND_EDGE_BACKOFF = 2
+
     /**
      * Pita aman = baris bebas setelah dilasi [margin]. Pita yang lebih
      * sempit dari [minBand] diabaikan: celah sekecil jarak antar-baris teks
@@ -44,6 +46,13 @@ object CutPlanner {
         return blocked
     }
 
+    /**
+     * Rencana potong: di tiap jendela [start+minLen, start+maxLen] pilih
+     * CELAH AMAN TERLEBAR (bukan yang terakhir) lalu potong di dekat ujung
+     * terjauhnya. Celah lebar = jarak maksimal dari tinta di kedua sisi,
+     * jadi kecil kemungkinan mendarat di teks yang lolos deteksi — dan
+     * posisi potong tidak lagi terpaku di kelipatan batas ukuran.
+     */
     fun plan(
         profile: RowProfile,
         maxLen: Int,
@@ -60,13 +69,21 @@ object CutPlanner {
         while (h - start > maxLen) {
             val target = start + maxLen
             val lo = start + minLen
-            val latestFree = (lo..target).lastOrNull { !blocked[it] }
-            if (latestFree != null) {
-                val y = if (latestFree == target) {
-                    target
-                } else {
-                    (latestFree - 2).coerceAtLeast(lo)
+            var bestStart = -1
+            var bestEnd = -1
+            var bestSize = -1
+            for (b in bands) {
+                val s = maxOf(b.start, lo)
+                val e = minOf(b.end, target + 1)
+                val size = e - s
+                if (size >= minBand && size >= bestSize) {
+                    bestSize = size
+                    bestStart = s
+                    bestEnd = e
                 }
+            }
+            if (bestStart >= 0) {
+                val y = (bestEnd - 1 - BAND_EDGE_BACKOFF).coerceAtLeast(bestStart)
                 cuts += PlannedCut(y, forced = false)
                 start = y
             } else {

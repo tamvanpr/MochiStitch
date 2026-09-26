@@ -1,5 +1,6 @@
 package com.mochistitch.core.imaging
 
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -46,6 +47,21 @@ class CutPlannerTest {
         val cuts = CutPlanner.plan(RowProfile(busy, IntArray(300)), maxLen = 100, minLen = 40, margin = 4)
         assertTrue(cuts.isNotEmpty())
         assertTrue(cuts.all { it.forced })
+    }
+
+    @Test
+    fun widestGapWins() {
+        // Blok besar di tengah: celah (0,146) vs (265,400) — potong di
+        // dekat ujung terjauh celah terlebar dalam jendela, bukan di batas.
+        val busy = BooleanArray(400) { it in 150..260 }
+        val cuts = CutPlanner.plan(
+            RowProfile(busy, IntArray(400)),
+            maxLen = 200,
+            minLen = 40,
+            margin = 4
+        )
+        assertEquals(listOf(143, 341), cuts.map { it.y })
+        assertTrue(cuts.none { it.forced })
     }
 
     @Test
