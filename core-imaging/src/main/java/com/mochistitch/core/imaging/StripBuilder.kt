@@ -182,8 +182,11 @@ class StripBuilder(
             val forcedPages = globalCuts.forcedPages.size
             val forcedBounds = bundles.count { it.seamCut }
             val cutNote = if (wantCut) {
-                "Rencana potong: $planned titik ($forcedPages halaman paksa; " +
-                    "pindai ${globalCuts.scannedPages}/${globalCuts.totalPages} halaman) · " +
+                "Rencana potong: $planned titik ($forcedPages halaman paksa: " +
+                    "${globalCuts.planForced} perencana + ${globalCuts.verifyForced} verifikasi; " +
+                    "pindai ${globalCuts.scannedPages}/${globalCuts.totalPages} halaman; " +
+                    "sibuk ${globalCuts.busyPct}% larang ${globalCuts.keepPct}% " +
+                    "zona ${globalCuts.zonePct}% pita ${globalCuts.bandCount}) · " +
                     "Berkas: ${bundles.size} (${forcedBounds} batas paksa)."
             } else {
                 "Rencana potong: nonaktif (aturan ${settings.splitRule})."
@@ -409,7 +412,13 @@ class StripBuilder(
         val cuts: Map<Int, List<Int>>,
         val forcedPages: Set<Int>,
         val scannedPages: Int = 0,
-        val totalPages: Int = 0
+        val totalPages: Int = 0,
+        val planForced: Int = 0,
+        val verifyForced: Int = 0,
+        val busyPct: Int = 0,
+        val keepPct: Int = 0,
+        val zonePct: Int = 0,
+        val bandCount: Int = 0
     )
 
     private fun planGlobalCuts(
@@ -481,6 +490,18 @@ class StripBuilder(
         }
         val combined = RowProfile(busyArr, ink.toIntArray())
         val keepAll = keep.toBooleanArray()
+        // Telemetri profil untuk diagnostik: pecahan sibuk/larang/zona + pita.
+        val profStats = if (busyArr.isEmpty()) {
+            intArrayOf(0, 0, 0, 0)
+        } else {
+            val bands = CutPlanner.safeBands(busyArr, margin, margin)
+            intArrayOf(
+                busyArr.count { it } * 100 / busyArr.size,
+                keepAll.count { it } * 100 / keepAll.size,
+                zones.count { it } * 100 / zones.size,
+                bands.size
+            )
+        }
         val maxLen = (limit.toLong() * scanWidth / stripWidth.coerceAtLeast(1)).toInt().coerceAtLeast(16)
         val plan = CutPlanner.plan(
             profile = combined,
@@ -488,9 +509,11 @@ class StripBuilder(
             margin = margin,
             overshoot = (maxLen / 4).coerceAtLeast(8)
         )
-        if (plan.isEmpty()) return GlobalPlan(emptyMap(), emptySet(), scanned, measured.size)
+        if (plan.isEmpty()) return GlobalPlan(emptyMap(), emptySet(), scanned, measured.size, 0, 0, profStats[0], profStats[1], profStats[2], profStats[3])
         val out = LinkedHashMap<Int, MutableList<Int>>()
         val forced = LinkedHashSet<Int>()
+        var planForced = 0
+        var verifyForced = 0
         for (cut in plan) {
             val y = cut.y.coerceIn(0, combined.busy.size - 1)
             val idx = pageIndexAt(offsets, y)
@@ -504,6 +527,7 @@ class StripBuilder(
             // ditandai, daripada balon terpotong.
             if (cut.forced && keepAll[y]) {
                 forced.add(idx)
+                planForced++
                 continue
             }
             val local = ly - w.scanTop
@@ -516,8 +540,9 @@ class StripBuilder(
             if (finalY >= w.effBot - 1) continue
             list.add(finalY)
             if (cut.forced || badVerify) forced.add(idx)
+            if (cut.forced) planForced++ else if (badVerify) verifyForced++
         }
-        return GlobalPlan(out, forced, scanned, measured.size)
+        return GlobalPlan(out, forced, scanned, measured.size, planForced, verifyForced, profStats[0], profStats[1], profStats[2], profStats[3])
     }
 
     /**
