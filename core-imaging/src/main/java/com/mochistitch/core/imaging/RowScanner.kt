@@ -3,7 +3,12 @@ package com.mochistitch.core.imaging
 import android.graphics.Bitmap
 import kotlin.math.abs
 
-data class RowProfile(val busy: BooleanArray, val ink: IntArray, val structured: BooleanArray = BooleanArray(busy.size))
+data class RowProfile(
+    val busy: BooleanArray,
+    val ink: IntArray,
+    val structured: BooleanArray = BooleanArray(busy.size),
+    val maxRun: IntArray = IntArray(busy.size)
+)
 
 object RowScanner {
     fun scan(
@@ -21,14 +26,16 @@ object RowScanner {
         val busy = BooleanArray(h)
         val ink = IntArray(h)
         val structured = BooleanArray(h)
+        val maxRun = IntArray(h)
         for (y in 0 until h) {
             bmp.getPixels(row, 0, w, 0, y, w, 1)
-            val (b, c, s) = scanRow(row, w, edgeThreshold, rangeThreshold, ignoreBorder, noisePixels, 0, lumBuf, hist)
-            busy[y] = b
-            ink[y] = c
-            structured[y] = s
+            val r = scanRow(row, w, edgeThreshold, rangeThreshold, ignoreBorder, noisePixels, 0, lumBuf, hist)
+            busy[y] = r.busy
+            ink[y] = r.ink
+            structured[y] = r.structured
+            maxRun[y] = r.maxRun
         }
-        return RowProfile(busy, ink, structured)
+        return RowProfile(busy, ink, structured, maxRun)
     }
 
     fun scanBuffer(
@@ -46,13 +53,15 @@ object RowScanner {
         val busy = BooleanArray(h)
         val ink = IntArray(h)
         val structured = BooleanArray(h)
+        val maxRun = IntArray(h)
         for (y in 0 until h) {
-            val (b, c, s) = scanRow(px, w, edgeThreshold, rangeThreshold, ignoreBorder, noisePixels, y * w, lumBuf, hist)
-            busy[y] = b
-            ink[y] = c
-            structured[y] = s
+            val r = scanRow(px, w, edgeThreshold, rangeThreshold, ignoreBorder, noisePixels, y * w, lumBuf, hist)
+            busy[y] = r.busy
+            ink[y] = r.ink
+            structured[y] = r.structured
+            maxRun[y] = r.maxRun
         }
-        return RowProfile(busy, ink, structured)
+        return RowProfile(busy, ink, structured, maxRun)
     }
 
     /**
@@ -61,9 +70,16 @@ object RowScanner {
      * median baris (kalimat pudar/tipis: tiap piksel bedanya kecil, tapi ada
      * puluhan piksel yang beda dari latar).
      *
-     * Plus sinyal "terstruktur": run gelap horizontal >= [minRun] (goresan
-     * teks/garis, bukan titik screentone yang run-nya 1-3px).
+     * Plus sinyal "terstruktur" (banyak run gelap pendek = goresan teks,
+     * bukan titik screentone) dan run gelap terpanjang per baris.
      */
+    private data class RowScan(
+        val busy: Boolean,
+        val ink: Int,
+        val structured: Boolean,
+        val maxRun: Int
+    )
+
     private fun scanRow(
         px: IntArray,
         w: Int,
@@ -73,9 +89,8 @@ object RowScanner {
         noisePixels: Int,
         base: Int,
         lumBuf: IntArray,
-        hist: IntArray,
-        minRun: Int = 5
-    ): Triple<Boolean, Int, Boolean> {
+        hist: IntArray
+    ): RowScan {
         val x0 = (w * ignoreBorder).toInt().coerceIn(0, w - 1)
         val x1 = (w - x0).coerceIn(x0 + 1, w)
         hist.fill(0)
@@ -95,7 +110,8 @@ object RowScanner {
             prev = l
         }
         if (count > noisePixels || hi - lo > rangeThreshold) {
-            return Triple(true, count, longDarkRun(lumBuf, x0, x1, lo, MIN_STRUCT_RUN))
+            val runs = darkRuns(lumBuf, x0, x1, lo)
+            return RowScan(true, count, runs.runs >= MIN_STRUCT_RUNS && runs.maxRun >= MIN_STRUCT_RUN, runs.maxRun)
         }
         val n = x1 - x0
         var acc = 0
@@ -113,23 +129,25 @@ object RowScanner {
             if (abs(lumBuf[x] - median) > MEDIAN_DEVIATION) dev++
         }
         val busy = dev > maxOf(2, n / 100)
-        return Triple(busy, count, busy && longDarkRun(lumBuf, x0, x1, lo, MIN_STRUCT_RUN))
+        if (!busy) return RowScan(false, count, false, 0)
+        val runs = darkRuns(lumBuf, x0, x1, lo)
+        return RowScan(true, count, runs.runs >= MIN_STRUCT_RUNS && runs.maxRun >= MIN_STRUCT_RUN, runs.maxRun)
     }
 
+    private data class RunInfo(val runs: Int, val maxRun: Int)
+
     /**
-     * True bila baris punya >= [MIN_STRUCT_RUNS] run gelap dengan run
-     * terpanjang >= [MIN_STRUCT_RUN]. Kalimat = banyak goresan (run
-     * 4-12px); arsir = 1-2 garis panjang; screentone = banyak run 1-3px.
-     * Uji terhadap ujung gelap (bukan tengah) agar baris screentone —
-     * yang terang-gelapnya selang-seling — tidak ikut lolos.
+     * Run gelap (dekat ujung tergelap baris): kalimat = banyak goresan
+     * (run 4-12px); arsir = 1-2 garis panjang; screentone = banyak run
+     * 1-3px. Uji terhadap ujung gelap (bukan tengah) agar baris
+     * screentone — yang terang-gelapnya selang-seling — tidak ikut lolos.
      */
-    private fun longDarkRun(
+    private fun darkRuns(
         lumBuf: IntArray,
         x0: Int,
         x1: Int,
-        lo: Int,
-        minRun: Int
-    ): Boolean {
+        lo: Int
+    ): RunInfo {
         val darkBelow = lo + MEDIAN_DEVIATION
         var run = 0
         var runs = 0
@@ -147,7 +165,7 @@ object RowScanner {
             runs++
             if (run > maxRun) maxRun = run
         }
-        return runs >= MIN_STRUCT_RUNS && maxRun >= minRun
+        return RunInfo(runs, maxRun)
     }
 
     private fun luma(c: Int): Int =
