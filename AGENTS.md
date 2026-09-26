@@ -103,7 +103,7 @@ flag tinjau.
   halaman + NCC murni sebagai fallback bila native gagal + gerbang
   konsistensi BannerGate sebagai pendamping; selalu ada catatan
   keputusan), BannerGate, BannerTemplate, BannerOcv (opencv:4.5.3),
-  FileNamer. Preview hasil diskalakan ke <=2048px.
+  FileNamer. Preview hasil diskalakan ke <=1280px.
 - `core-settings/` — DataStore; tanpa smartCut/strictness/paper/fit
 - `core-ui/` — tema M3, PageStrip (thumb Fit), SettingsPanel,
   SlicePreview (kemasan dipilih sebelum tombol Terbitkan)

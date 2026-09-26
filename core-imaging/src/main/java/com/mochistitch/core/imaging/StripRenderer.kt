@@ -151,7 +151,18 @@ class StripRenderer(private val openStream: (Uri) -> InputStream?) {
             }
             val stripHeight = max(1, items.sumOf { it.third })
 
-            val strip = Bitmap.createBitmap(stripWidth, stripHeight, Bitmap.Config.RGB_565)
+            val strip = try {
+                Bitmap.createBitmap(stripWidth, stripHeight, Bitmap.Config.RGB_565)
+            } catch (oom: OutOfMemoryError) {
+                System.gc()
+                try {
+                    Bitmap.createBitmap(stripWidth, stripHeight, Bitmap.Config.RGB_565)
+                } catch (oom2: OutOfMemoryError) {
+                    return@withContext Result.failure(
+                        IllegalStateException("Memori tidak cukup untuk strip ${stripWidth}x$stripHeight.")
+                    )
+                }
+            }
             val canvas = Canvas(strip)
             canvas.drawColor(config.matte.colorInt)
             val paint = Paint(Paint.FILTER_BITMAP_FLAG)

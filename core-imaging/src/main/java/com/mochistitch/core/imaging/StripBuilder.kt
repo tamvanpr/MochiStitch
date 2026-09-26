@@ -176,6 +176,10 @@ class StripBuilder(
                         bannerCut = anyBanner
                     )
                 )
+                // Rakit batch puluhan halaman mengaduk bitmap besar
+                // berulang-ulang (fragmentasi heap): beri kesempatan GC
+                // merapat setiap selesai satu berkas.
+                System.gc()
             }
             onProgress(BuildPhase.ASSEMBLING, 1.0f)
             val planned = globalCuts.cuts.values.sumOf { it.size }
@@ -830,7 +834,7 @@ class StripBuilder(
     }
 
     private companion object {
-        const val PREVIEW_CAP = 2048
+        const val PREVIEW_CAP = 1280
         const val SCAN_WIDTH = 480
         const val VERIFY_GUARD = 8
         const val EDGE_TOUCH_DARK = 28
