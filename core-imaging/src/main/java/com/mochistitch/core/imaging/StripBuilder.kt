@@ -435,6 +435,7 @@ class StripBuilder(
         val busy = ArrayList<Boolean>()
         val ink = ArrayList<Int>()
         val keep = ArrayList<Boolean>()
+        val structAll = ArrayList<Boolean>()
         val offsets = IntArray(measured.size)
         val windows = arrayOfNulls<Window>(measured.size)
         for ((i, m) in measured.withIndex()) {
@@ -459,11 +460,23 @@ class StripBuilder(
                 busy.add(profile.busy[y] || keepRows.getOrElse(y) { false })
                 ink.add(profile.ink[y])
                 keep.add(keepRows.getOrElse(y) { false })
+                structAll.add(profile.structured.getOrElse(y) { false })
             }
         }
         if (busy.isEmpty()) return GlobalPlan(emptyMap(), emptySet())
-        val combined = RowProfile(busy.toBooleanArray(), ink.toIntArray())
+        // Zona teks global: kelompok baris terstruktur (kunci pada teks,
+        // bukan garis pinggir) + perluasan dinding balon. OR ke busy dan
+        // ke daftar larangan potong paksa.
+        val zones = KeepOut.textZones(structAll.toBooleanArray())
+        val busyArr = busy.toBooleanArray()
+        for (y in busyArr.indices) {
+            if (zones[y]) busyArr[y] = true
+        }
+        val combined = RowProfile(busyArr, ink.toIntArray())
         val keepAll = keep.toBooleanArray()
+        for (y in keepAll.indices) {
+            if (zones[y]) keepAll[y] = true
+        }
         val maxLen = (limit.toLong() * scanWidth / stripWidth.coerceAtLeast(1)).toInt().coerceAtLeast(16)
         val plan = CutPlanner.plan(
             profile = combined,

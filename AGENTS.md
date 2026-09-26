@@ -34,6 +34,10 @@ Tambahan v7b (anti-bocor):
   dihitung via flood fill dari tepi pada salinan 240px, lalu OR ke profil
   busy; potongan paksa yang jatuh di zona larangan DIBATALKAN (halaman
   dibiarkan utuh/kelebihan tinggi + ditandai).
+- Zona teks: baris "terstruktur" (run gelap >= 5px = goresan, bukan titik
+  screentone 1-3px) dikelompokkan bila celah <= 20 baris lalu diperlebar
+  ±20 (dinding + ekor balon). Menangkap interior balon berekor yang lolos
+  flood fill, plus kalimat/SFX di luar balon.
 - Potong di TENGAH celah, bukan ujungnya (anti menempel balon).
 - continuityMap + touchesEdge: goresan tegak yang menyentuh batas halaman
   menahan pasangan halaman satu berkas (anti balon terbelah antar-file).

@@ -3,7 +3,7 @@ package com.mochistitch.core.imaging
 import android.graphics.Bitmap
 import kotlin.math.abs
 
-data class RowProfile(val busy: BooleanArray, val ink: IntArray)
+data class RowProfile(val busy: BooleanArray, val ink: IntArray, val structured: BooleanArray = BooleanArray(busy.size))
 
 object RowScanner {
     fun scan(
@@ -20,13 +20,15 @@ object RowScanner {
         val hist = IntArray(256)
         val busy = BooleanArray(h)
         val ink = IntArray(h)
+        val structured = BooleanArray(h)
         for (y in 0 until h) {
             bmp.getPixels(row, 0, w, 0, y, w, 1)
-            val (b, c) = scanRow(row, w, edgeThreshold, rangeThreshold, ignoreBorder, noisePixels, 0, lumBuf, hist)
+            val (b, c, s) = scanRow(row, w, edgeThreshold, rangeThreshold, ignoreBorder, noisePixels, 0, lumBuf, hist)
             busy[y] = b
             ink[y] = c
+            structured[y] = s
         }
-        return RowProfile(busy, ink)
+        return RowProfile(busy, ink, structured)
     }
 
     fun scanBuffer(
@@ -43,12 +45,14 @@ object RowScanner {
         val hist = IntArray(256)
         val busy = BooleanArray(h)
         val ink = IntArray(h)
+        val structured = BooleanArray(h)
         for (y in 0 until h) {
-            val (b, c) = scanRow(px, w, edgeThreshold, rangeThreshold, ignoreBorder, noisePixels, y * w, lumBuf, hist)
+            val (b, c, s) = scanRow(px, w, edgeThreshold, rangeThreshold, ignoreBorder, noisePixels, y * w, lumBuf, hist)
             busy[y] = b
             ink[y] = c
+            structured[y] = s
         }
-        return RowProfile(busy, ink)
+        return RowProfile(busy, ink, structured)
     }
 
     /**
@@ -56,6 +60,9 @@ object RowScanner {
      * rentang min-max (glow/gradasi), dan porsi piksel yang menyimpang dari
      * median baris (kalimat pudar/tipis: tiap piksel bedanya kecil, tapi ada
      * puluhan piksel yang beda dari latar).
+     *
+     * Plus sinyal "terstruktur": run gelap horizontal >= [minRun] (goresan
+     * teks/garis, bukan titik screentone yang run-nya 1-3px).
      */
     private fun scanRow(
         px: IntArray,
@@ -66,8 +73,9 @@ object RowScanner {
         noisePixels: Int,
         base: Int,
         lumBuf: IntArray,
-        hist: IntArray
-    ): Pair<Boolean, Int> {
+        hist: IntArray,
+        minRun: Int = 5
+    ): Triple<Boolean, Int, Boolean> {
         val x0 = (w * ignoreBorder).toInt().coerceIn(0, w - 1)
         val x1 = (w - x0).coerceIn(x0 + 1, w)
         hist.fill(0)
@@ -86,7 +94,9 @@ object RowScanner {
             if (l > hi) hi = l
             prev = l
         }
-        if (count > noisePixels || hi - lo > rangeThreshold) return true to count
+        if (count > noisePixels || hi - lo > rangeThreshold) {
+            return Triple(true, count, longDarkRun(lumBuf, x0, x1, lo, minRun))
+        }
         val n = x1 - x0
         var acc = 0
         var median = 0
@@ -102,7 +112,34 @@ object RowScanner {
         for (x in x0 until x1) {
             if (abs(lumBuf[x] - median) > MEDIAN_DEVIATION) dev++
         }
-        return (dev > maxOf(2, n / 100)) to count
+        val busy = dev > maxOf(2, n / 100)
+        return Triple(busy, count, busy && longDarkRun(lumBuf, x0, x1, lo, minRun))
+    }
+
+    /**
+     * Run piksel GELAP (dekat ujung tergelap baris) sepanjang >= [minRun].
+     * Goresan teks/garis: run 5px+. Titik screentone: run 1-3px. Uji
+     * terhadap ujung gelap (bukan tengah) agar baris screentone — yang
+     * terang-gelapnya selang-seling — tidak ikut lolos.
+     */
+    private fun longDarkRun(
+        lumBuf: IntArray,
+        x0: Int,
+        x1: Int,
+        lo: Int,
+        minRun: Int
+    ): Boolean {
+        val darkBelow = lo + MEDIAN_DEVIATION
+        var run = 0
+        for (x in x0 until x1) {
+            if (lumBuf[x] <= darkBelow) {
+                run++
+                if (run >= minRun) return true
+            } else {
+                run = 0
+            }
+        }
+        return false
     }
 
     private fun luma(c: Int): Int =

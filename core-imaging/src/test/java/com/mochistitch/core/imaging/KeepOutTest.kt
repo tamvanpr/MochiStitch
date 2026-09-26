@@ -63,4 +63,29 @@ class KeepOutTest {
         }
         assertTrue(KeepOut.enclosed(px, w, h).none { it })
     }
+
+    @Test
+    fun textZonesClusterAndExpand() {
+        val structured = BooleanArray(100)
+        for (y in 10..12) structured[y] = true
+        for (y in 20..21) structured[y] = true
+        for (y in 70..71) structured[y] = true
+        val zones = KeepOut.textZones(structured, gap = 20, expand = 20)
+        assertTrue(zones[0])
+        assertTrue(zones[41])
+        assertFalse(zones[42])
+        assertTrue(zones[50])
+        assertTrue(zones[91])
+        assertFalse(zones[92])
+    }
+
+    @Test
+    fun singleStructuredRowGetsNoExpand() {
+        val structured = BooleanArray(100)
+        structured[50] = true
+        val zones = KeepOut.textZones(structured, gap = 20, expand = 20)
+        assertTrue(zones[50])
+        assertFalse(zones[49])
+        assertFalse(zones[51])
+    }
 }

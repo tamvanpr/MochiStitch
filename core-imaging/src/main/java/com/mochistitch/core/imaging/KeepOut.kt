@@ -78,6 +78,40 @@ object KeepOut {
         }
     }
 
+    /**
+     * Zona teks: baris-baris "terstruktur" (goresan, bukan screentone)
+     * dikelompokkan bila celah antar-run <= [gap], lalu tiap kelompok
+     * diperlebar ±[expand] (dinding balon + ekor). Interior balon berekor
+     * — yang lolos dari flood fill karena garis pinggirnya bocor —
+     * tertangkap di sini karena kuncinya teks di dalamnya, bukan garisnya.
+     * Kelompok satu baris tak diperlebar (cukup dilasi margin biasa).
+     */
+    fun textZones(
+        structured: BooleanArray,
+        gap: Int = 20,
+        expand: Int = 20
+    ): BooleanArray {
+        val h = structured.size
+        val out = BooleanArray(h)
+        var i = 0
+        while (i < h) {
+            while (i < h && !structured[i]) i++
+            if (i >= h) break
+            var j = i
+            var k = j + 1
+            while (k < h && !structured[k]) k++
+            while (k < h && k - j - 1 <= gap) {
+                j = k
+                k = j + 1
+                while (k < h && !structured[k]) k++
+            }
+            val pad = if (j > i) expand else 0
+            for (y in (i - pad).coerceAtLeast(0)..(j + pad).coerceAtMost(h - 1)) out[y] = true
+            i = j + 1
+        }
+        return out
+    }
+
     private fun paperLuma(px: IntArray, w: Int, h: Int): Int {
         val samples = IntArray(2 * (w + h))
         var n = 0

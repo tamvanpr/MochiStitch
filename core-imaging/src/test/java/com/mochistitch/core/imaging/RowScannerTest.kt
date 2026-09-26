@@ -49,6 +49,29 @@ class RowScannerTest {
     }
 
     @Test
+    fun structuredMarksStrokesNotDots() {
+        val w = 100
+        // Baris goresan: run abu-abu 21px -> terstruktur.
+        val stroke = IntArray(w * 3) { white }
+        for (x in 20..40) stroke[1 * w + x] = gray
+        val ps = RowScanner.scanBuffer(stroke, w, 3)
+        assertTrue(ps.busy[1])
+        assertTrue("goresan harus terstruktur", ps.structured[1])
+        // Baris screentone: titik selang-seling -> sibuk tapi tak terstruktur.
+        val dots = IntArray(w * 3) { white }
+        for (x in 0 until w) {
+            if ((x / 2) % 2 == 0) dots[1 * w + x] = black
+        }
+        val pd = RowScanner.scanBuffer(dots, w, 3)
+        assertTrue(pd.busy[1])
+        assertFalse("titik screentone tak boleh terstruktur", pd.structured[1])
+        // Baris datar -> keduanya mati.
+        val flat = RowScanner.scanBuffer(IntArray(w * 3) { white }, w, 3)
+        assertFalse(flat.busy[1])
+        assertFalse(flat.structured[1])
+    }
+
+    @Test
     fun softGradientIsBusy() {
         val w = 100
         val h = 5
