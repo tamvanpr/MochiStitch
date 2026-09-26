@@ -95,7 +95,7 @@ object RowScanner {
             prev = l
         }
         if (count > noisePixels || hi - lo > rangeThreshold) {
-            return Triple(true, count, count >= MIN_STRUCT_INK && longDarkRun(lumBuf, x0, x1, lo, minRun))
+            return Triple(true, count, longDarkRun(lumBuf, x0, x1, lo, MIN_STRUCT_RUN))
         }
         val n = x1 - x0
         var acc = 0
@@ -113,14 +113,15 @@ object RowScanner {
             if (abs(lumBuf[x] - median) > MEDIAN_DEVIATION) dev++
         }
         val busy = dev > maxOf(2, n / 100)
-        return Triple(busy, count, busy && count >= MIN_STRUCT_INK && longDarkRun(lumBuf, x0, x1, lo, minRun))
+        return Triple(busy, count, busy && longDarkRun(lumBuf, x0, x1, lo, MIN_STRUCT_RUN))
     }
 
     /**
-     * Run piksel GELAP (dekat ujung tergelap baris) sepanjang >= [minRun].
-     * Goresan teks/garis: run 5px+. Titik screentone: run 1-3px. Uji
-     * terhadap ujung gelap (bukan tengah) agar baris screentone — yang
-     * terang-gelapnya selang-seling — tidak ikut lolos.
+     * True bila baris punya >= [MIN_STRUCT_RUNS] run gelap dengan run
+     * terpanjang >= [MIN_STRUCT_RUN]. Kalimat = banyak goresan (run
+     * 4-12px); arsir = 1-2 garis panjang; screentone = banyak run 1-3px.
+     * Uji terhadap ujung gelap (bukan tengah) agar baris screentone —
+     * yang terang-gelapnya selang-seling — tidak ikut lolos.
      */
     private fun longDarkRun(
         lumBuf: IntArray,
@@ -131,20 +132,28 @@ object RowScanner {
     ): Boolean {
         val darkBelow = lo + MEDIAN_DEVIATION
         var run = 0
+        var runs = 0
+        var maxRun = 0
         for (x in x0 until x1) {
             if (lumBuf[x] <= darkBelow) {
                 run++
-                if (run >= minRun) return true
-            } else {
+            } else if (run > 0) {
+                runs++
+                if (run > maxRun) maxRun = run
                 run = 0
             }
         }
-        return false
+        if (run > 0) {
+            runs++
+            if (run > maxRun) maxRun = run
+        }
+        return runs >= MIN_STRUCT_RUNS && maxRun >= minRun
     }
 
     private fun luma(c: Int): Int =
         (((c shr 16) and 0xFF) * 77 + ((c shr 8) and 0xFF) * 150 + (c and 0xFF) * 29) shr 8
 
     private const val MEDIAN_DEVIATION = 16
-    private const val MIN_STRUCT_INK = 6
+    private const val MIN_STRUCT_RUNS = 3
+    private const val MIN_STRUCT_RUN = 4
 }

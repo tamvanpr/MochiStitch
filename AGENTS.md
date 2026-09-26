@@ -36,8 +36,8 @@ Tambahan v7b (anti-bocor):
   bingkai panel raksasa dikecualikan agar isi panel tetap boleh dipotong;
   potongan paksa yang jatuh di zona larangan DIBATALKAN (halaman dibiarkan
   utuh/kelebihan tinggi + ditandai).
-- Zona teks: baris "terstruktur" (run gelap >= 5px DAN >= 6 tepi = goresan,
-  bukan titik screentone/arsir) dikelompokkan bila celah <= 20 baris lalu
+- Zona teks: baris "terstruktur" (>=3 run gelap dengan run terpanjang
+  >=4px = kalimat; arsir = 1-2 run; screentone = run 1-3px) dikelompokkan bila celah <= 20 baris lalu
   diperlebar ±20 (dinding + ekor balon). Menangkap interior balon berekor
   yang lolos flood fill, plus kalimat/SFX di luar balon.
 - Pemetaan potong global ke koordinat sumber memakai offset halaman

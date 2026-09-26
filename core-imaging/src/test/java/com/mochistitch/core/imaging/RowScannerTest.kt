@@ -51,12 +51,14 @@ class RowScannerTest {
     @Test
     fun structuredMarksStrokesNotDots() {
         val w = 100
-        // Baris goresan: run abu-abu 21px -> terstruktur.
+        // Baris kalimat: 3 goresan (run terpanjang 13px) -> terstruktur.
         val stroke = IntArray(w * 3) { white }
-        for (x in 20..40) stroke[1 * w + x] = gray
+        for (x in 10..16) stroke[1 * w + x] = gray
+        for (x in 30..42) stroke[1 * w + x] = gray
+        for (x in 60..66) stroke[1 * w + x] = gray
         val ps = RowScanner.scanBuffer(stroke, w, 3)
         assertTrue(ps.busy[1])
-        assertTrue("goresan harus terstruktur", ps.structured[1])
+        assertTrue("kalimat harus terstruktur", ps.structured[1])
         // Baris screentone: titik selang-seling -> sibuk tapi tak terstruktur.
         val dots = IntArray(w * 3) { white }
         for (x in 0 until w) {
