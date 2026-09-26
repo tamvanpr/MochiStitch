@@ -115,7 +115,7 @@ class StripBuilder(
             // antar-halaman tidak lagi menjadi potongan paksa.
             val globalCuts = if (wantCut) {
                 planGlobalCuts(measured, bannerCrops, stripWidth, limit, settings)
-            } else GlobalPlan(emptyMap(), emptySet())
+            } else GlobalPlan(emptyMap(), emptySet(), 0, measured.size)
             val segs = mutableListOf<Seg>()
             measured.forEachIndexed { i, m ->
                 val (cutTop, cutBot) = bannerCrops[i] ?: (0 to 0)
@@ -182,7 +182,8 @@ class StripBuilder(
             val forcedPages = globalCuts.forcedPages.size
             val forcedBounds = bundles.count { it.seamCut }
             val cutNote = if (wantCut) {
-                "Rencana potong: $planned titik (${forcedPages} halaman paksa) · " +
+                "Rencana potong: $planned titik (${forcedPages.size} halaman paksa; " +
+                    "pindai ${globalCuts.scannedPages}/${globalCuts.totalPages} halaman) · " +
                     "Berkas: ${bundles.size} (${forcedBounds} batas paksa)."
             } else {
                 "Rencana potong: nonaktif (aturan ${settings.splitRule})."
@@ -406,7 +407,9 @@ class StripBuilder(
      */
     private data class GlobalPlan(
         val cuts: Map<Int, List<Int>>,
-        val forcedPages: Set<Int>
+        val forcedPages: Set<Int>,
+        val scannedPages: Int = 0,
+        val totalPages: Int = 0
     )
 
     private fun planGlobalCuts(
@@ -438,9 +441,11 @@ class StripBuilder(
         val structAll = ArrayList<Boolean>()
         val offsets = IntArray(measured.size)
         val windows = arrayOfNulls<Window>(measured.size)
+        var scanned = 0
         for ((i, m) in measured.withIndex()) {
             offsets[i] = busy.size
             val small = decodeScan(m.uri, scanWidth) ?: continue
+            scanned++
             val profile: RowProfile
             val keepRows: BooleanArray
             try {
@@ -463,7 +468,7 @@ class StripBuilder(
                 structAll.add(profile.structured.getOrElse(y) { false })
             }
         }
-        if (busy.isEmpty()) return GlobalPlan(emptyMap(), emptySet())
+        if (busy.isEmpty()) return GlobalPlan(emptyMap(), emptySet(), scanned, measured.size)
         // Zona teks global: kelompok baris terstruktur (kunci pada teks,
         // bukan garis pinggir) + perluasan dinding balon. OR ke busy dan
         // ke daftar larangan potong paksa.
@@ -484,7 +489,7 @@ class StripBuilder(
             margin = margin,
             overshoot = (maxLen / 4).coerceAtLeast(8)
         )
-        if (plan.isEmpty()) return GlobalPlan(emptyMap(), emptySet())
+        if (plan.isEmpty()) return GlobalPlan(emptyMap(), emptySet(), scanned, measured.size)
         val out = LinkedHashMap<Int, MutableList<Int>>()
         val forced = LinkedHashSet<Int>()
         for (cut in plan) {
@@ -513,7 +518,7 @@ class StripBuilder(
             list.add(finalY)
             if (cut.forced || badVerify) forced.add(idx)
         }
-        return GlobalPlan(out, forced)
+        return GlobalPlan(out, forced, scanned, measured.size)
     }
 
     /**
@@ -559,6 +564,11 @@ class StripBuilder(
 
     /** Decode pindai (lebar ~[SCAN_WIDTH], tanpa filter agar garis tipis awet). */
     private fun decodeScan(uri: Uri, targetWidth: Int): Bitmap? {
+        decodeScanDirect(uri, targetWidth)?.let { return it }
+        return decodeScanSampled(uri, targetWidth)
+    }
+
+    private fun decodeScanDirect(uri: Uri, targetWidth: Int): Bitmap? {
         val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
         openStream(uri)?.use { BitmapFactory.decodeStream(it, null, bounds) } ?: return null
         if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return null
@@ -580,6 +590,34 @@ class StripBuilder(
             try { raw.recycle() } catch (t: Throwable) { }
         }
         return scaled
+    }
+
+    /**
+     * Cadangan bila decode langsung gagal: pakai decodeSampled teruji
+     * (dipakai juga oleh banner + render) lalu skala ke lebar pindai.
+     */
+    private fun decodeScanSampled(uri: Uri, targetWidth: Int): Bitmap? {
+        val raw = try {
+            renderer.decodeSampled(uri, maxPixels = 4_000_000L)
+        } catch (t: Throwable) {
+            null
+        } ?: return null
+        if (raw.width <= 0 || raw.height <= 0) {
+            try { raw.recycle() } catch (t: Throwable) { }
+            return null
+        }
+        if (raw.width == targetWidth) return raw
+        return try {
+            val h = (raw.height.toLong() * targetWidth / raw.width).toInt().coerceAtLeast(1)
+            val scaled = Bitmap.createScaledBitmap(raw, targetWidth, h, false)
+            if (scaled !== raw) {
+                try { raw.recycle() } catch (t: Throwable) { }
+            }
+            scaled
+        } catch (t: Throwable) {
+            try { raw.recycle() } catch (t: Throwable) { }
+            null
+        }
     }
 
     /**
