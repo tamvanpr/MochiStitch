@@ -34,7 +34,7 @@ object CutPlanner {
         return bands
     }
 
-    /** Baris yang terlarang: sibuk atau berjarak <= [margin] dari baris sibuk. */
+    /** Baris yang terlarang: sibuk atau berjarak <= [margin] dari baris sibuk (dua arah). */
     fun blockedRows(busy: BooleanArray, margin: Int): BooleanArray {
         val h = busy.size
         val blocked = BooleanArray(h)
@@ -42,6 +42,11 @@ object CutPlanner {
         for (y in 0 until h) {
             if (busy[y]) lastBusy = y
             if (y - lastBusy <= margin) blocked[y] = true
+        }
+        var nextBusy = h + margin + 1
+        for (y in h - 1 downTo 0) {
+            if (busy[y]) nextBusy = y
+            if (nextBusy - y <= margin) blocked[y] = true
         }
         return blocked
     }
