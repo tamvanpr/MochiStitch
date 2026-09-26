@@ -32,6 +32,17 @@ class KeepOutTest {
     }
 
     @Test
+    fun smallTailGapIsClosed() {
+        // Celah ekor 5px di sisi bawah: ditutup morfologi -> interior tetap terlarang.
+        val w = 120
+        val h = 80
+        val px = boxed(w, h, 10, 8, 50, 30)
+        for (x in 28..32) px[30 * w + x] = white
+        val keep = KeepOut.enclosed(px, w, h)
+        assertTrue("celah ekor kecil harus tertutup", keep[19])
+    }
+
+    @Test
     fun openBoxIsNotKeepOut() {
         // Kotak tanpa sisi bawah = corong ke tepi = bukan ruangan terkurung.
         val w = 120

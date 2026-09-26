@@ -29,39 +29,19 @@ object KeepOut {
         for (i in 0 until w * h) {
             bright[i] = luma(px[i]) >= paper - brightTolerance
         }
-        val reached = BooleanArray(w * h)
-        val queue = ArrayDeque<Int>()
-        for (x in 0 until w) {
-            if (bright[x]) {
-                reached[x] = true
-                queue.add(x)
-            }
-            val b = (h - 1) * w + x
-            if (bright[b] && !reached[b]) {
-                reached[b] = true
-                queue.add(b)
-            }
+        // Penutup morfologis: erosi menutup celah kecil (ekor balon,
+        // garis bingkai putus) agar interior tak bocor saat flood fill,
+        // lalu hasil didilatasi kembali dalam mask terang asli.
+        val eroded = erode(bright, w, h, CLOSE_R)
+        val reached = flood(eroded, w, h)
+        val seeds = BooleanArray(w * h)
+        for (i in 0 until w * h) {
+            seeds[i] = eroded[i] && !reached[i]
         }
-        for (y in 0 until h) {
-            val l = y * w
-            if (bright[l] && !reached[l]) {
-                reached[l] = true
-                queue.add(l)
-            }
-            val r = l + w - 1
-            if (bright[r] && !reached[r]) {
-                reached[r] = true
-                queue.add(r)
-            }
-        }
-        while (queue.isNotEmpty()) {
-            val i = queue.removeFirst()
-            val x = i % w
-            val y = i / w
-            if (x > 0) visit(bright, reached, queue, i - 1)
-            if (x < w - 1) visit(bright, reached, queue, i + 1)
-            if (y > 0) visit(bright, reached, queue, i - w)
-            if (y < h - 1) visit(bright, reached, queue, i + w)
+        val grown = dilate(seeds, w, h, CLOSE_R)
+        val shut = BooleanArray(w * h)
+        for (i in 0 until w * h) {
+            shut[i] = grown[i] && bright[i]
         }
         val out = BooleanArray(h)
         // Labeli komponen terkurung; buang yang raksasa (isi panel/art).
@@ -69,7 +49,7 @@ object KeepOut {
         var nextLabel = 0
         val areas = ArrayList<Int>()
         for (i in 0 until w * h) {
-            if (!bright[i] || reached[i] || label[i] != 0) continue
+            if (!shut[i] || label[i] != 0) continue
             nextLabel++
             var area = 0
             val stack = ArrayDeque<Int>()
@@ -80,10 +60,10 @@ object KeepOut {
                 area++
                 val x = c % w
                 val y = c / w
-                if (x > 0) pushLabel(bright, reached, label, stack, nextLabel, c - 1)
-                if (x < w - 1) pushLabel(bright, reached, label, stack, nextLabel, c + 1)
-                if (y > 0) pushLabel(bright, reached, label, stack, nextLabel, c - w)
-                if (y < h - 1) pushLabel(bright, reached, label, stack, nextLabel, c + w)
+                if (x > 0) pushShut(shut, label, stack, nextLabel, c - 1)
+                if (x < w - 1) pushShut(shut, label, stack, nextLabel, c + 1)
+                if (y > 0) pushShut(shut, label, stack, nextLabel, c - w)
+                if (y < h - 1) pushShut(shut, label, stack, nextLabel, c + w)
             }
             areas.add(area)
         }
@@ -104,15 +84,104 @@ object KeepOut {
         return out
     }
 
-    private fun pushLabel(
-        bright: BooleanArray,
-        reached: BooleanArray,
+    private fun erode(src: BooleanArray, w: Int, h: Int, rounds: Int): BooleanArray {
+        var cur = src
+        repeat(rounds) {
+            val dst = BooleanArray(w * h)
+            for (y in 0 until h) {
+                for (x in 0 until w) {
+                    var all = true
+                    for (dy in -1..1) {
+                        for (dx in -1..1) {
+                            val xx = x + dx
+                            val yy = y + dy
+                            if (xx < 0 || yy < 0 || xx >= w || yy >= h || !cur[yy * w + xx]) {
+                                all = false
+                                break
+                            }
+                        }
+                        if (!all) break
+                    }
+                    dst[y * w + x] = all
+                }
+            }
+            cur = dst
+        }
+        return cur
+    }
+
+    private fun dilate(src: BooleanArray, w: Int, h: Int, rounds: Int): BooleanArray {
+        var cur = src
+        repeat(rounds) {
+            val dst = BooleanArray(w * h)
+            for (y in 0 until h) {
+                for (x in 0 until w) {
+                    var any = false
+                    for (dy in -1..1) {
+                        for (dx in -1..1) {
+                            val xx = x + dx
+                            val yy = y + dy
+                            if (xx >= 0 && yy >= 0 && xx < w && yy < h && cur[yy * w + xx]) {
+                                any = true
+                                break
+                            }
+                        }
+                        if (any) break
+                    }
+                    dst[y * w + x] = any
+                }
+            }
+            cur = dst
+        }
+        return cur
+    }
+
+    private fun flood(mask: BooleanArray, w: Int, h: Int): BooleanArray {
+        val reached = BooleanArray(w * h)
+        val queue = ArrayDeque<Int>()
+        for (x in 0 until w) {
+            if (mask[x]) {
+                reached[x] = true
+                queue.add(x)
+            }
+            val b = (h - 1) * w + x
+            if (mask[b] && !reached[b]) {
+                reached[b] = true
+                queue.add(b)
+            }
+        }
+        for (y in 0 until h) {
+            val l = y * w
+            if (mask[l] && !reached[l]) {
+                reached[l] = true
+                queue.add(l)
+            }
+            val r = l + w - 1
+            if (mask[r] && !reached[r]) {
+                reached[r] = true
+                queue.add(r)
+            }
+        }
+        while (queue.isNotEmpty()) {
+            val i = queue.removeFirst()
+            val x = i % w
+            val y = i / w
+            if (x > 0) visit(mask, reached, queue, i - 1)
+            if (x < w - 1) visit(mask, reached, queue, i + 1)
+            if (y > 0) visit(mask, reached, queue, i - w)
+            if (y < h - 1) visit(mask, reached, queue, i + w)
+        }
+        return reached
+    }
+
+    private fun pushShut(
+        shut: BooleanArray,
         label: IntArray,
         stack: ArrayDeque<Int>,
         value: Int,
         i: Int
     ) {
-        if (bright[i] && !reached[i] && label[i] == 0) {
+        if (shut[i] && label[i] == 0) {
             label[i] = value
             stack.add(i)
         }
@@ -178,4 +247,5 @@ object KeepOut {
         (((c shr 16) and 0xFF) * 77 + ((c shr 8) and 0xFF) * 150 + (c and 0xFF) * 29) shr 8
 
     private const val MIN_PAPER_LUMA = 110
+    private const val CLOSE_R = 3
 }

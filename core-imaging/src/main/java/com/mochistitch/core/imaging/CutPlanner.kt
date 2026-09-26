@@ -52,10 +52,14 @@ object CutPlanner {
     }
 
     /**
-     * Rencana potong: di tiap jendela [start+minLen, start+maxLen] potong
-     * pada baris TERAKHIR yang punya zona bersih ±clearance (margin+4) —
-     * berkas terisi penuh sampai dekat batas, tapi tak menempel tinta.
-     * Posisi potong tidak terpaku di kelipatan batas ukuran.
+     * Rencana potong per jendela [start+minLen, start+maxLen], berjenjang:
+     * 1. Baris terakhir berzona bersih di dekat batas (<= maxLen/4 di
+     *    bawah target): penuh + aman.
+     * 2. Baris bebas bertinta paling sedikit di bawah batas (DITANDAI):
+     *    penuh + jujur.
+     * 3. Tengah celah aman terlebar (bersih, mungkin pendek).
+     * 4. Overshoot: baris aman paling awal lewat batas (sedikit lewat).
+     * 5. Baris bertinta paling sedikit (DITANDAI, terakhir).
      */
     fun plan(
         profile: RowProfile,
@@ -103,6 +107,27 @@ object CutPlanner {
                 if (flagged != null) {
                     cuts += flagged
                     start = flagged.y
+                    continue
+                }
+                // Tengah celah aman terlebar dalam jendela (bersih,
+                // mungkin di bawah batas).
+                var bestStart = -1
+                var bestEnd = -1
+                var bestSize = -1
+                for (b in bands) {
+                    val s = maxOf(b.start, lo)
+                    val e = minOf(b.end, target + 1)
+                    val size = e - s
+                    if (size >= minBand && size >= bestSize) {
+                        bestSize = size
+                        bestStart = s
+                        bestEnd = e
+                    }
+                }
+                if (bestStart >= 0) {
+                    val y = (bestStart + bestEnd) / 2
+                    cuts += PlannedCut(y, forced = false)
+                    start = y
                     continue
                 }
                 // Overshoot: potong di baris aman paling AWAL lewat batas

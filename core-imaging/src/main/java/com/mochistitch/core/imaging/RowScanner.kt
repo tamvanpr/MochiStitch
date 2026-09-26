@@ -109,7 +109,7 @@ object RowScanner {
             if (l > hi) hi = l
             prev = l
         }
-        if (count > noisePixels || hi - lo > rangeThreshold) {
+        if (count > noisePixels || (hi - lo > rangeThreshold && count > 0)) {
             val runs = darkRuns(lumBuf, x0, x1, lo)
             return RowScan(true, count, runs.runs >= MIN_STRUCT_RUNS && runs.maxRun >= MIN_STRUCT_RUN, runs.maxRun)
         }
@@ -125,10 +125,24 @@ object RowScanner {
             }
         }
         var dev = 0
+        var centralDev = 0
+        var maxBin = 0
+        val cx0 = x0 + n / 4
+        val cx1 = x1 - n / 4
         for (x in x0 until x1) {
-            if (abs(lumBuf[x] - median) > MEDIAN_DEVIATION) dev++
+            if (abs(lumBuf[x] - median) > MEDIAN_DEVIATION) {
+                dev++
+                if (x in cx0 until cx1) centralDev++
+            }
         }
-        val busy = dev > maxOf(2, n / 100)
+        for (v in 0..255) {
+            if (hist[v] > maxBin) maxBin = hist[v]
+        }
+        // Baris sibuk bila banyak menyimpang DENGAN populasi dominan
+        // (teks pudar: dua gugus sempit) atau simpangan terpusat di tengah
+        // (kalimat). Gradasi mulus (sebaran merata) bukan konten.
+        val busy = dev > maxOf(2, n / 100) &&
+            (centralDev * 4 >= dev || maxBin * 5 >= n * 2)
         if (!busy) return RowScan(false, count, false, 0)
         val runs = darkRuns(lumBuf, x0, x1, lo)
         return RowScan(true, count, runs.runs >= MIN_STRUCT_RUNS && runs.maxRun >= MIN_STRUCT_RUN, runs.maxRun)
