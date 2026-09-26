@@ -178,7 +178,17 @@ class StripBuilder(
                 )
             }
             onProgress(BuildPhase.ASSEMBLING, 1.0f)
-            Result.success(BuildOutput(strips, bannerResult.note))
+            val planned = globalCuts.cuts.values.sumOf { it.size }
+            val forcedPages = globalCuts.forcedPages.size
+            val forcedBounds = bundles.count { it.seamCut }
+            val cutNote = if (wantCut) {
+                "Rencana potong: $planned titik (${forcedPages} halaman paksa) · " +
+                    "Berkas: ${bundles.size} (${forcedBounds} batas paksa)."
+            } else {
+                "Rencana potong: nonaktif (aturan ${settings.splitRule})."
+            }
+            val note = listOfNotNull(bannerResult.note, cutNote).joinToString(" ")
+            Result.success(BuildOutput(strips, note))
         } catch (e: Throwable) {
             Result.failure(e)
         }
