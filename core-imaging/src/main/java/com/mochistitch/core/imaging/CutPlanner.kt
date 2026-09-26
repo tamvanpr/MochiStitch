@@ -64,7 +64,7 @@ object CutPlanner {
         minLen: Int = maxLen / 3,
         overshoot: Int = maxLen / 4,
         margin: Int = 8,
-        minBand: Int = margin * 2
+        minBand: Int = margin
     ): List<PlannedCut> {
         val h = profile.busy.size
         val blocked = blockedRows(profile.busy, margin)
@@ -92,10 +92,14 @@ object CutPlanner {
                 cuts += PlannedCut(y, forced = false)
                 start = y
             } else {
-                val ahead = bands.firstOrNull { it.center in (target + 1)..(target + overshoot) }
-                if (ahead != null) {
-                    cuts += PlannedCut(ahead.center, forced = false)
-                    start = ahead.center
+                // Overshoot: potong di baris aman paling AWAL lewat batas
+                // (bukan tengah pita) agar berkas hanya sedikit melewati
+                // batas, bukan melompat jauh.
+                val over = bands.firstOrNull { it.end > target + 1 && it.start <= target + overshoot }
+                if (over != null) {
+                    val y = maxOf(over.start, target + 1).coerceAtMost(over.end - 1)
+                    cuts += PlannedCut(y, forced = false)
+                    start = y
                 } else {
                     val hi = min(target, h - 1)
                     if (lo > hi) break
