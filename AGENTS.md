@@ -32,12 +32,17 @@ Tambahan v7b (anti-bocor):
 - Batas keras penahanan tepi tak-terencana: 1,25x batas lunak.
 - Keep-Out Mask (Tier 0 CUT-SAFETY): daerah terang terkurung (dalam balon)
   dihitung via flood fill dari tepi pada salinan 240px, lalu OR ke profil
-  busy; potongan paksa yang jatuh di zona larangan DIBATALKAN (halaman
-  dibiarkan utuh/kelebihan tinggi + ditandai).
-- Zona teks: baris "terstruktur" (run gelap >= 5px = goresan, bukan titik
-  screentone 1-3px) dikelompokkan bila celah <= 20 baris lalu diperlebar
-  ±20 (dinding + ekor balon). Menangkap interior balon berekor yang lolos
-  flood fill, plus kalimat/SFX di luar balon.
+  busy; hanya komponen terkurung KECIL (<=20% luas gambar) yang dihitung —
+  bingkai panel raksasa dikecualikan agar isi panel tetap boleh dipotong;
+  potongan paksa yang jatuh di zona larangan DIBATALKAN (halaman dibiarkan
+  utuh/kelebihan tinggi + ditandai).
+- Zona teks: baris "terstruktur" (run gelap >= 5px DAN >= 6 tepi = goresan,
+  bukan titik screentone/arsir) dikelompokkan bila celah <= 20 baris lalu
+  diperlebar ±20 (dinding + ekor balon). Menangkap interior balon berekor
+  yang lolos flood fill, plus kalimat/SFX di luar balon.
+- Pemetaan potong global ke koordinat sumber memakai offset halaman
+  (koordinat lokal vs global pernah tertukar sehingga potongan terencana
+  di luar halaman pertama terbuang diam-diam).
 - Potong di TENGAH celah, bukan ujungnya (anti menempel balon).
 - continuityMap + touchesEdge: goresan tegak yang menyentuh batas halaman
   menahan pasangan halaman satu berkas (anti balon terbelah antar-file).

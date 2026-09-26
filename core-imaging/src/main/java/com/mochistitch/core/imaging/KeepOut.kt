@@ -6,6 +6,10 @@ object KeepOut {
      * gambar) = bagian dalam balon / kotak dialog. Baris yang sebagian
      * besarnya terkurung dilarang untuk potong.
      *
+     * Hanya komponen terkurung yang KECIL (<= [maxAreaFrac] luas gambar)
+     * yang dihitung: bingkai panel menutup region raksasa (isi panel =
+     * art yang boleh dipotong), sedangkan balon berukuran kecil.
+     *
      * Murni array (unit-testable, tanpa Bitmap). Panggil dengan gambar
      * kecil (lebar ~240px) lalu petakan hasilnya ke skala pindai.
      */
@@ -14,7 +18,8 @@ object KeepOut {
         w: Int,
         h: Int,
         brightTolerance: Int = 28,
-        minFraction: Float = 0.04f
+        minFraction: Float = 0.04f,
+        maxAreaFrac: Float = 0.20f
     ): BooleanArray {
         val none = BooleanArray(h)
         if (w <= 0 || h <= 0 || px.size < w * h) return none
@@ -59,16 +64,58 @@ object KeepOut {
             if (y < h - 1) visit(bright, reached, queue, i + w)
         }
         val out = BooleanArray(h)
+        // Labeli komponen terkurung; buang yang raksasa (isi panel/art).
+        val label = IntArray(w * h)
+        var nextLabel = 0
+        val areas = ArrayList<Int>()
+        for (i in 0 until w * h) {
+            if (!bright[i] || reached[i] || label[i] != 0) continue
+            nextLabel++
+            var area = 0
+            val stack = ArrayDeque<Int>()
+            stack.add(i)
+            label[i] = nextLabel
+            while (stack.isNotEmpty()) {
+                val c = stack.removeLast()
+                area++
+                val x = c % w
+                val y = c / w
+                if (x > 0) pushLabel(bright, reached, label, stack, nextLabel, c - 1)
+                if (x < w - 1) pushLabel(bright, reached, label, stack, nextLabel, c + 1)
+                if (y > 0) pushLabel(bright, reached, label, stack, nextLabel, c - w)
+                if (y < h - 1) pushLabel(bright, reached, label, stack, nextLabel, c + w)
+            }
+            areas.add(area)
+        }
+        val maxArea = (w.toLong() * h * maxAreaFrac).toInt()
+        val big = BooleanArray(nextLabel + 1)
+        for (l in 1..nextLabel) {
+            if (areas[l - 1] > maxArea) big[l] = true
+        }
         for (y in 0 until h) {
             var enclosedCount = 0
             val base = y * w
             for (x in 0 until w) {
-                val i = base + x
-                if (bright[i] && !reached[i]) enclosedCount++
+                val li = label[base + x]
+                if (li != 0 && !big[li]) enclosedCount++
             }
             out[y] = enclosedCount.toFloat() / w > minFraction
         }
         return out
+    }
+
+    private fun pushLabel(
+        bright: BooleanArray,
+        reached: BooleanArray,
+        label: IntArray,
+        stack: ArrayDeque<Int>,
+        value: Int,
+        i: Int
+    ) {
+        if (bright[i] && !reached[i] && label[i] == 0) {
+            label[i] = value
+            stack.add(i)
+        }
     }
 
     private fun visit(bright: BooleanArray, reached: BooleanArray, queue: ArrayDeque<Int>, i: Int) {

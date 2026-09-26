@@ -491,7 +491,10 @@ class StripBuilder(
             val y = cut.y.coerceIn(0, combined.busy.size - 1)
             val idx = pageIndexAt(offsets, y)
             val w = windows.getOrNull(idx) ?: continue
-            if (y < w.scanTop || y >= w.scanBot) continue
+            // y adalah koordinat GLOBAL profil gabungan; ubah ke lokal
+            // halaman dulu sebelum dibandingkan ke jendela pindai.
+            val ly = y - offsets[idx]
+            if (ly < w.scanTop || ly >= w.scanBot) continue
             // Potongan paksa yang jatuh di zona larangan (dalam balon)
             // DIBATALKAN: halaman dibiarkan utuh/kelebihan tinggi dan
             // ditandai, daripada balon terpotong.
@@ -499,7 +502,7 @@ class StripBuilder(
                 forced.add(idx)
                 continue
             }
-            val local = y - w.scanTop
+            val local = ly - w.scanTop
             val srcY = (w.effTop + local.toDouble() * (w.effBot - w.effTop) / (w.scanBot - w.scanTop)).toInt()
             val (finalY, badVerify) = verifyCut(measured[idx], srcY, edge, range)
             val list = out.getOrPut(idx) { mutableListOf() }

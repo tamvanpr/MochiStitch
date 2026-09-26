@@ -95,7 +95,7 @@ object RowScanner {
             prev = l
         }
         if (count > noisePixels || hi - lo > rangeThreshold) {
-            return Triple(true, count, longDarkRun(lumBuf, x0, x1, lo, minRun))
+            return Triple(true, count, count >= MIN_STRUCT_INK && longDarkRun(lumBuf, x0, x1, lo, minRun))
         }
         val n = x1 - x0
         var acc = 0
@@ -113,7 +113,7 @@ object RowScanner {
             if (abs(lumBuf[x] - median) > MEDIAN_DEVIATION) dev++
         }
         val busy = dev > maxOf(2, n / 100)
-        return Triple(busy, count, busy && longDarkRun(lumBuf, x0, x1, lo, minRun))
+        return Triple(busy, count, busy && count >= MIN_STRUCT_INK && longDarkRun(lumBuf, x0, x1, lo, minRun))
     }
 
     /**
@@ -146,4 +146,5 @@ object RowScanner {
         (((c shr 16) and 0xFF) * 77 + ((c shr 8) and 0xFF) * 150 + (c and 0xFF) * 29) shr 8
 
     private const val MEDIAN_DEVIATION = 16
+    private const val MIN_STRUCT_INK = 6
 }

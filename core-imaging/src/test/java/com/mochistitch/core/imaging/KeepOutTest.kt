@@ -23,8 +23,8 @@ class KeepOutTest {
 
     @Test
     fun enclosedBoxInteriorIsKeepOut() {
-        val w = 60
-        val h = 40
+        val w = 120
+        val h = 80
         val keep = KeepOut.enclosed(boxed(w, h, 10, 8, 50, 30), w, h)
         assertTrue("tengah kotak harus terlarang", keep[19])
         assertFalse("atas kotak (latar luar) harus bebas", keep[2])
@@ -34,8 +34,8 @@ class KeepOutTest {
     @Test
     fun openBoxIsNotKeepOut() {
         // Kotak tanpa sisi bawah = corong ke tepi = bukan ruangan terkurung.
-        val w = 60
-        val h = 40
+        val w = 120
+        val h = 80
         val px = boxed(w, h, 10, 8, 50, 30)
         for (x in 10..50) px[30 * w + x] = white
         val keep = KeepOut.enclosed(px, w, h)
