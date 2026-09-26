@@ -182,7 +182,7 @@ class StripBuilder(
             val forcedPages = globalCuts.forcedPages.size
             val forcedBounds = bundles.count { it.seamCut }
             val cutNote = if (wantCut) {
-                "Rencana potong: $planned titik (${forcedPages.size} halaman paksa; " +
+                "Rencana potong: $planned titik ($forcedPages halaman paksa; " +
                     "pindai ${globalCuts.scannedPages}/${globalCuts.totalPages} halaman) · " +
                     "Berkas: ${bundles.size} (${forcedBounds} batas paksa)."
             } else {
