@@ -10,6 +10,7 @@ import android.provider.OpenableColumns
 import androidx.core.content.FileProvider
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import coil.imageLoader
 import com.mochistitch.core.archive.ArchiveItem
 import com.mochistitch.core.archive.ArchiveKit
 import com.mochistitch.core.common.ComicProject
@@ -447,6 +448,11 @@ class StudioViewModel : ViewModel() {
             slice.cachePath?.let { path ->
                 try { File(path).delete() } catch (t: Throwable) { }
             }
+            try {
+                slice.bitmap?.let { bmp ->
+                    if (!bmp.isRecycled) bmp.recycle()
+                }
+            } catch (t: Throwable) { }
         }
         _state.update { it.copy(slices = emptyList()) }
     }
@@ -468,6 +474,12 @@ class StudioViewModel : ViewModel() {
         _state.update { it.copy(busy = true, phase = "Menata halaman", fraction = 0f, failure = null, published = null) }
         viewModelScope.launch {
             try {
+                // Bebaskan cache thumbnail sebelum rakitan batch: puluhan
+                // thumbnail + bitmap strip raksasa tidak muat bareng di heap.
+                try {
+                    context.imageLoader.memoryCache?.clear()
+                } catch (t: Throwable) { }
+                System.gc()
                 val settings = _state.value.settings
                 val banner = _state.value.comics
                     .firstOrNull { it.id == _state.value.activeComicId }
