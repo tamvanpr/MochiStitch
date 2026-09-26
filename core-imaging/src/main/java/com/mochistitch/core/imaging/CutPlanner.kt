@@ -10,6 +10,8 @@ data class Band(val start: Int, val end: Int) {
 data class PlannedCut(val y: Int, val forced: Boolean)
 
 object CutPlanner {
+    private const val CLEARANCE_EXTRA = 4
+
     /**
      * Pita aman = baris bebas setelah dilasi [margin]. Pita yang lebih
      * sempit dari [minBand] diabaikan: celah sekecil jarak antar-baris teks
@@ -50,11 +52,10 @@ object CutPlanner {
     }
 
     /**
-     * Rencana potong: di tiap jendela [start+minLen, start+maxLen] pilih
-     * CELAH AMAN TERLEBAR (bukan yang terakhir) lalu potong di dekat ujung
-     * terjauhnya. Celah lebar = jarak maksimal dari tinta di kedua sisi,
-     * jadi kecil kemungkinan mendarat di teks yang lolos deteksi — dan
-     * posisi potong tidak lagi terpaku di kelipatan batas ukuran.
+     * Rencana potong: di tiap jendela [start+minLen, start+maxLen] potong
+     * pada baris TERAKHIR yang punya zona bersih ±clearance (margin+4) —
+     * berkas terisi penuh sampai dekat batas, tapi tak menempel tinta.
+     * Posisi potong tidak terpaku di kelipatan batas ukuran.
      */
     fun plan(
         profile: RowProfile,
@@ -67,28 +68,33 @@ object CutPlanner {
         val h = profile.busy.size
         val blocked = blockedRows(profile.busy, margin)
         val bands = safeBands(profile.busy, margin, minBand)
+        val clearance = margin + CLEARANCE_EXTRA
         val cuts = mutableListOf<PlannedCut>()
         var start = 0
         while (h - start > maxLen) {
             val target = start + maxLen
             val lo = start + minLen
-            var bestStart = -1
-            var bestEnd = -1
-            var bestSize = -1
-            for (b in bands) {
-                val s = maxOf(b.start, lo)
-                val e = minOf(b.end, target + 1)
-                val size = e - s
-                if (size >= minBand && size >= bestSize) {
-                    bestSize = size
-                    bestStart = s
-                    bestEnd = e
+            var pick = -1
+            var y = target
+            while (y >= lo) {
+                if (y - clearance >= 0 && y + clearance < h) {
+                    var clean = true
+                    for (z in y - clearance..y + clearance) {
+                        if (blocked[z]) {
+                            clean = false
+                            break
+                        }
+                    }
+                    if (clean) {
+                        pick = y
+                        break
+                    }
                 }
+                y--
             }
-            if (bestStart >= 0) {
-                val y = (bestStart + bestEnd) / 2
-                cuts += PlannedCut(y, forced = false)
-                start = y
+            if (pick >= 0) {
+                cuts += PlannedCut(pick, forced = false)
+                start = pick
             } else {
                 // Tak ada celah layak: potong di bawah batas pada baris
                 // bebas bertinta paling sedikit (DITANDAI), daripada

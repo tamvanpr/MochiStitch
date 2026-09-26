@@ -25,9 +25,10 @@ Tambahan v7b (anti-bocor):
 - Setiap titik potong terencana diverifikasi ulang pada resolusi penuh
   (`verifyCut`: patch ±64 baris via region-decode); bila sibuk, geser ke
   baris bebas terdekat (±48px), bila tak ada tandai forced.
-- Rencana potong memilih celah aman TERLEBAR dalam jendela (bukan yang
-  terakhir sebelum batas); bila tak ada celah, potong darurat di bawah
-  batas pada baris bebas (DITANDAI) lebih diutamakan daripada overshoot;
+- Rencana potong memilih baris TERAKHIR dalam jendela yang punya zona
+  bersih ±(margin+4) — berkas terisi penuh sampai dekat batas tanpa
+  menempel tinta; bila tak ada, potong darurat di bawah batas pada baris
+  bebas (DITANDAI) lebih diutamakan daripada overshoot;
   overshoot memotong di baris aman paling awal lewat batas.
 - Batas keras penahanan tepi tak-terencana: 1,25x batas lunak.
 - Keep-Out Mask (Tier 0 CUT-SAFETY): daerah terang terkurung (dalam balon)
