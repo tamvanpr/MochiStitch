@@ -28,6 +28,13 @@ Tambahan v7b (anti-bocor):
 - Rencana potong memilih celah aman TERLEBAR dalam jendela (bukan yang
   terakhir sebelum batas); overshoot memotong di baris aman paling awal
   lewat batas agar berkas hanya sedikit melewati batas.
+- Keep-Out Mask (Tier 0 CUT-SAFETY): daerah terang terkurung (dalam balon)
+  dihitung via flood fill dari tepi pada salinan 240px, lalu OR ke profil
+  busy; potongan paksa yang jatuh di zona larangan DIBATALKAN (halaman
+  dibiarkan utuh/kelebihan tinggi + ditandai).
+- Potong di TENGAH celah, bukan ujungnya (anti menempel balon).
+- continuityMap + touchesEdge: goresan tegak yang menyentuh batas halaman
+  menahan pasangan halaman satu berkas (anti balon terbelah antar-file).
 - Batas antar-berkas output HANYA boleh jatuh di tepi potongan terencana
   (`Seg.cutTop` → `Sheet.safeBreak`): tepi batas-halaman-asli ditahan dalam
   berkas yang sama sampai batas keras 1,5x; bila tetap tak muat, putus paksa

@@ -52,7 +52,7 @@ class CutPlannerTest {
     @Test
     fun widestGapWins() {
         // Blok besar di tengah: celah (0,146) vs (265,400) — potong di
-        // dekat ujung terjauh celah terlebar dalam jendela, bukan di batas.
+        // TENGAH celah terlebar dalam jendela, bukan di batas.
         val busy = BooleanArray(400) { it in 150..260 }
         val cuts = CutPlanner.plan(
             RowProfile(busy, IntArray(400)),
@@ -60,7 +60,7 @@ class CutPlannerTest {
             minLen = 40,
             margin = 4
         )
-        assertEquals(listOf(143, 341), cuts.map { it.y })
+        assertEquals(listOf(93, 279), cuts.map { it.y })
         assertTrue(cuts.none { it.forced })
     }
 

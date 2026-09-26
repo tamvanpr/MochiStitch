@@ -10,8 +10,6 @@ data class Band(val start: Int, val end: Int) {
 data class PlannedCut(val y: Int, val forced: Boolean)
 
 object CutPlanner {
-    private const val BAND_EDGE_BACKOFF = 2
-
     /**
      * Pita aman = baris bebas setelah dilasi [margin]. Pita yang lebih
      * sempit dari [minBand] diabaikan: celah sekecil jarak antar-baris teks
@@ -88,7 +86,7 @@ object CutPlanner {
                 }
             }
             if (bestStart >= 0) {
-                val y = (bestEnd - 1 - BAND_EDGE_BACKOFF).coerceAtLeast(bestStart)
+                val y = (bestStart + bestEnd) / 2
                 cuts += PlannedCut(y, forced = false)
                 start = y
             } else {

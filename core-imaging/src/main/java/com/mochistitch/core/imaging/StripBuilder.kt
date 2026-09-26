@@ -434,13 +434,17 @@ class StripBuilder(
         }
         val busy = ArrayList<Boolean>()
         val ink = ArrayList<Int>()
+        val keep = ArrayList<Boolean>()
         val offsets = IntArray(measured.size)
         val windows = arrayOfNulls<Window>(measured.size)
         for ((i, m) in measured.withIndex()) {
             offsets[i] = busy.size
             val small = decodeScan(m.uri, scanWidth) ?: continue
-            val profile = try {
-                RowScanner.scan(small, edgeThreshold = edge, rangeThreshold = range)
+            val profile: RowProfile
+            val keepRows: BooleanArray
+            try {
+                profile = RowScanner.scan(small, edgeThreshold = edge, rangeThreshold = range)
+                keepRows = keepOutRows(small)
             } finally {
                 try { small.recycle() } catch (t: Throwable) { }
             }
@@ -452,12 +456,14 @@ class StripBuilder(
             val sBot = (effBot.toDouble() * sh / m.height).toInt().coerceIn(sTop + 1, sh)
             windows[i] = Window(m, effTop, effBot, sTop, sBot, sh)
             for (y in sTop until sBot) {
-                busy.add(profile.busy[y])
+                busy.add(profile.busy[y] || keepRows.getOrElse(y) { false })
                 ink.add(profile.ink[y])
+                keep.add(keepRows.getOrElse(y) { false })
             }
         }
         if (busy.isEmpty()) return GlobalPlan(emptyMap(), emptySet())
         val combined = RowProfile(busy.toBooleanArray(), ink.toIntArray())
+        val keepAll = keep.toBooleanArray()
         val maxLen = (limit.toLong() * scanWidth / stripWidth.coerceAtLeast(1)).toInt().coerceAtLeast(16)
         val plan = CutPlanner.plan(
             profile = combined,
@@ -473,6 +479,13 @@ class StripBuilder(
             val idx = pageIndexAt(offsets, y)
             val w = windows.getOrNull(idx) ?: continue
             if (y < w.scanTop || y >= w.scanBot) continue
+            // Potongan paksa yang jatuh di zona larangan (dalam balon)
+            // DIBATALKAN: halaman dibiarkan utuh/kelebihan tinggi dan
+            // ditandai, daripada balon terpotong.
+            if (cut.forced && keepAll[y]) {
+                forced.add(idx)
+                continue
+            }
             val local = y - w.scanTop
             val srcY = (w.effTop + local.toDouble() * (w.effBot - w.effTop) / (w.scanBot - w.scanTop)).toInt()
             val (finalY, badVerify) = verifyCut(measured[idx], srcY, edge, range)
@@ -485,6 +498,32 @@ class StripBuilder(
             if (cut.forced || badVerify) forced.add(idx)
         }
         return GlobalPlan(out, forced)
+    }
+
+    /**
+     * Zona larangan (keep-out) skala pindai: daerah terang terkurung =
+     * bagian dalam balon. Dihitung pada salinan kecil (~240px) lalu
+     * dipetakan ke tinggi profil pindai.
+     */
+    private fun keepOutRows(small: Bitmap): BooleanArray {
+        val sh = small.height
+        val none = BooleanArray(sh)
+        if (small.width <= 0 || sh <= 0) return none
+        return try {
+            val kw = 240
+            val kh = (sh.toLong() * kw / small.width.coerceAtLeast(1)).toInt().coerceAtLeast(1)
+            val tiny = Bitmap.createScaledBitmap(small, kw, kh, false)
+            try {
+                val px = IntArray(kw * kh)
+                tiny.getPixels(px, 0, kw, 0, 0, kw, kh)
+                val rows = KeepOut.enclosed(px, kw, kh)
+                BooleanArray(sh) { y -> rows.getOrElse((y.toLong() * kh / sh).toInt()) { false } }
+            } finally {
+                try { if (tiny !== small) tiny.recycle() } catch (t: Throwable) { }
+            }
+        } catch (t: Throwable) {
+            none
+        }
     }
 
     private class Window(
@@ -624,10 +663,49 @@ class StripBuilder(
             if (!SeamScan.hasContent(bottom.px) && !SeamScan.hasContent(top.px)) continue
             if (SeamScan.seamContinues(bottom.px, bottom.w, bottom.h, top.px, top.w, top.h)) {
                 out.add(i to i + 1)
+            } else if (touchesEdge(bottom, top = false) || touchesEdge(top, top = true)) {
+                // Struktur tinta tegak menyentuh batas halaman (garis balon /
+                // teks terbelah antar-halaman): tahan satu berkas.
+                out.add(i to i + 1)
             }
         }
         return out
     }
+
+    /**
+     * True bila ada goresan tinta TEGAK yang menyentuh tepi strip (16 baris
+     * tepi): kolom dengan run gelap vertikal >= 10px. Screentone (titik
+     * 2-4px) tidak lolos; garis balon/teks yang terpotong tepi lolos.
+     */
+    private fun touchesEdge(p: StripRenderer.EdgePatch, top: Boolean): Boolean {
+        if (p.w <= 0 || p.h < 16) return false
+        val stride = (p.w / 200).coerceAtLeast(1)
+        var count = 0
+        for (x in 0 until p.w step stride) count++
+        val sample = IntArray(count)
+        var n = 0
+        for (x in 0 until p.w step stride) sample[n++] = lumaOf(p.px[(p.h / 2) * p.w + x])
+        sample.sort()
+        val bg = sample[n / 2]
+        val rows = 16
+        for (x in 0 until p.w step 2) {
+            var run = 0
+            for (r in 0 until rows) {
+                val y = if (top) r else p.h - 1 - r
+                val l = lumaOf(p.px[y * p.w + x])
+                if (l < bg - EDGE_TOUCH_DARK || l > bg + EDGE_TOUCH_DARK) {
+                    run++
+                    if (run >= EDGE_TOUCH_RUN) return true
+                } else {
+                    run = 0
+                }
+            }
+        }
+        return false
+    }
+
+    private fun lumaOf(c: Int): Int =
+        (((c shr 16) and 0xFF) * 77 + ((c shr 8) and 0xFF) * 150 + (c and 0xFF) * 29) shr 8
 
     private fun store(
         bitmap: Bitmap,
@@ -677,6 +755,8 @@ class StripBuilder(
         const val PREVIEW_CAP = 2048
         const val SCAN_WIDTH = 480
         const val VERIFY_GUARD = 8
+        const val EDGE_TOUCH_DARK = 28
+        const val EDGE_TOUCH_RUN = 10
     }
 
     private fun scaleForPreview(src: Bitmap, cap: Int): Bitmap {
