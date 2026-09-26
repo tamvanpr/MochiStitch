@@ -65,6 +65,24 @@ class CutPlannerTest {
     }
 
     @Test
+    fun flaggedCutBelowLimitBeatsOvershoot() {
+        // Celah sempit (104-105) dalam jendela + pita besar lewat batas:
+        // potong di bawah batas dengan tanda, jangan melompat jauh.
+        val busy = BooleanArray(400) { !(it in 100..109 || it in 250..399) }
+        val cuts = CutPlanner.plan(
+            RowProfile(busy, IntArray(400)),
+            maxLen = 200,
+            minLen = 40,
+            margin = 4
+        )
+        assertEquals(2, cuts.size)
+        assertEquals(105, cuts[0].y)
+        assertTrue(cuts[0].forced)
+        assertEquals(280, cuts[1].y)
+        assertFalse(cuts[1].forced)
+    }
+
+    @Test
     fun lastBandIsNotLost() {
         val busy = BooleanArray(400) { it in 95..115 }
         val bands = CutPlanner.safeBands(busy, margin = 10, minBand = 20)

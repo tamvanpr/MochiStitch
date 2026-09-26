@@ -90,6 +90,15 @@ object CutPlanner {
                 cuts += PlannedCut(y, forced = false)
                 start = y
             } else {
+                // Tak ada celah layak: potong di bawah batas pada baris
+                // bebas bertinta paling sedikit (DITANDAI), daripada
+                // memanjang jauh melewati batas.
+                val flagged = flaggedBelowLimit(profile, blocked, start, minLen, target, h)
+                if (flagged != null) {
+                    cuts += flagged
+                    start = flagged.y
+                    continue
+                }
                 // Overshoot: potong di baris aman paling AWAL lewat batas
                 // (bukan tengah pita) agar berkas hanya sedikit melewati
                 // batas, bukan melompat jauh.
@@ -128,5 +137,34 @@ object CutPlanner {
             }
         }
         return cuts
+    }
+
+    /**
+     * Potongan darurat di bawah batas: baris bebas (tak terlarang) dengan
+     * tinta paling sedikit dalam [start+minLen, target]. Selalu DITANDAI
+     * (forced). null bila semua baris dalam jendela terlarang.
+     */
+    private fun flaggedBelowLimit(
+        profile: RowProfile,
+        blocked: BooleanArray,
+        start: Int,
+        minLen: Int,
+        target: Int,
+        h: Int
+    ): PlannedCut? {
+        val lo = start + minLen
+        val hi = min(target, h - 1)
+        if (lo > hi) return null
+        var bestY = -1
+        var bestScore = Long.MAX_VALUE
+        for (y in lo..hi) {
+            if (blocked[y]) continue
+            val score = profile.ink[y] * 1000L + (target - y)
+            if (score < bestScore) {
+                bestScore = score
+                bestY = y
+            }
+        }
+        return if (bestY >= 0) PlannedCut(bestY, forced = true) else null
     }
 }

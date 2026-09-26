@@ -138,8 +138,8 @@ class StripBuilder(
             val sheets = segs.mapIndexed { idx, s ->
                 PageGrouper.Sheet(order = idx, renderedHeight = s.renderedH, safeBreak = s.cutTop)
             }
-            // Batas keras: pinning pasangan bersambung tak boleh lebih dari 1,5x batas.
-            val hardCap = limit + limit / 2
+            // Batas keras: penahanan tepi tak-terencana tak boleh lebih dari 1,25x batas.
+            val hardCap = limit + limit / 4
             val bundles = PageGrouper.group(
                 sheets, settings.splitRule, settings.maxStripHeight, settings.pagesPerPack,
                 linked = { a, b -> linked.contains(a to b) }, hardCap = hardCap

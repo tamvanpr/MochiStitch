@@ -26,8 +26,10 @@ Tambahan v7b (anti-bocor):
   (`verifyCut`: patch ±64 baris via region-decode); bila sibuk, geser ke
   baris bebas terdekat (±48px), bila tak ada tandai forced.
 - Rencana potong memilih celah aman TERLEBAR dalam jendela (bukan yang
-  terakhir sebelum batas); overshoot memotong di baris aman paling awal
-  lewat batas agar berkas hanya sedikit melewati batas.
+  terakhir sebelum batas); bila tak ada celah, potong darurat di bawah
+  batas pada baris bebas (DITANDAI) lebih diutamakan daripada overshoot;
+  overshoot memotong di baris aman paling awal lewat batas.
+- Batas keras penahanan tepi tak-terencana: 1,25x batas lunak.
 - Keep-Out Mask (Tier 0 CUT-SAFETY): daerah terang terkurung (dalam balon)
   dihitung via flood fill dari tepi pada salinan 240px, lalu OR ke profil
   busy; potongan paksa yang jatuh di zona larangan DIBATALKAN (halaman
@@ -37,7 +39,7 @@ Tambahan v7b (anti-bocor):
   menahan pasangan halaman satu berkas (anti balon terbelah antar-file).
 - Batas antar-berkas output HANYA boleh jatuh di tepi potongan terencana
   (`Seg.cutTop` → `Sheet.safeBreak`): tepi batas-halaman-asli ditahan dalam
-  berkas yang sama sampai batas keras 1,5x; bila tetap tak muat, putus paksa
+  berkas yang sama sampai batas keras 1,25x; bila tetap tak muat, putus paksa
   dan tandai `seamCut` untuk tinjau manual.
 
 ## Arsitektur v6 (potong hanya di tempat aman — perbaikan akar masalah)
@@ -68,7 +70,7 @@ tak lolos; MIN_BAND 16). Bila tak ada celah dalam jendela, potongan
 boleh lewat batas sedikit (overflow) demi celah aman. Batas antar-berkas
 output diusahakan tidak jatuh di pasangan halaman yang bersambung piksel
 — pinning hanya bila kedua tepi mengandung konten (margin putih-vs-putih
-bukan sambungan), sampai batas keras 1,5x batas lunak. Bila batas paksa
+bukan sambungan), sampai batas keras 1,25x batas lunak. Bila batas paksa
 jatuh di sambungan, pemutusan mundur ke batas aman terakhir dalam
 berkas; hanya sambungan penuh yang terpaksa diputus dan ditandai sebagai
 flag tinjau.
