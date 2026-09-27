@@ -33,7 +33,7 @@ Tambahan v7b (anti-bocor):
   dominan >=40% atau simpangan terpusat (gradasi mulus bukan konten).
 - API bitmap (inSampleSize power-of-2, decodeRegion, inJustDecodeBounds)
   terverifikasi via Context7 (/websites/developer_android_reference).
-- Batas keras penahanan tepi tak-terencana: ~1,1x batas lunak.
+- Batas lunak HARGA MATI tanpa penahanan (hardCap warisan tak dipakai).
 - Keep-Out Mask (Tier 0 CUT-SAFETY): daerah terang terkurung (dalam balon)
   dihitung via flood fill dari tepi pada salinan 240px, lalu OR ke profil
   busy; hanya komponen terkurung KECIL (<=20% luas gambar) yang dihitung —

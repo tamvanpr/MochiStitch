@@ -472,15 +472,15 @@ class StripBuilder(
         val structAll = ArrayList<Boolean>()
         val offsets = IntArray(measured.size)
         val windows = arrayOfNulls<Window>(measured.size)
-        // Halaman yang utuh pun melewati batas keras: pembatalan potong
-        // paksa TIDAK berlaku di sana (lebih baik potong bertanda
-        // daripada berkas tak terbatas).
+        // Halaman yang utuh pun melewati BATAS (bukan batas keras):
+        // pembatalan potong paksa TIDAK berlaku di sana (lebih baik
+        // potong bertanda daripada berkas lewat batas).
         val overCap = BooleanArray(measured.size) { i ->
             val m = measured[i]
             val (cutTop, cutBot) = bannerCrops[i] ?: (0 to 0)
             val effTop = cutTop.coerceIn(0, m.height)
             val effBot = (m.height - cutBot).coerceIn(effTop + 1, m.height)
-            (effBot - effTop).toLong() * stripWidth / m.width.coerceAtLeast(1) > hardCap
+            (effBot - effTop).toLong() * stripWidth / m.width.coerceAtLeast(1) > limit
         }
         var scanned = 0
         for ((i, m) in measured.withIndex()) {
@@ -538,11 +538,11 @@ class StripBuilder(
         val plan = CutPlanner.plan(
             profile = combined,
             maxLen = maxLen,
-            // Lantai 80%: potong bersih di bawahnya tidak boleh; toleransi
-            // lewat ~10% (lihat overshoot + hardCap di bawah).
+            // Lantai 80%: potong bersih di bawahnya tidak boleh; ABSOLUT:
+            // tanpa lewat batas (overshoot 0) dalam kondisi apa pun.
             minLen = (maxLen * 4) / 5,
             margin = margin,
-            overshoot = (maxLen / 10).coerceAtLeast(8)
+            overshoot = 0
         )
         if (plan.isEmpty()) return GlobalPlan(emptyMap(), emptySet(), scanned, measured.size, 0, 0, profStats[0], profStats[1], profStats[2], profStats[3])
         val out = LinkedHashMap<Int, MutableList<Int>>()
