@@ -28,7 +28,7 @@ Tambahan v7b (anti-bocor):
 - Rencana potong berjenjang per jendela: baris terakhir berzona bersih
   dalam 1/5 batas di bawah target (lantai 80%) > darurat di bawah batas
   (DITANDAI) > tengah celah terlebar > overshoot di awal pita (maks ~10%)
-  > tinta paling sedikit (DITANDAI). Batas keras penahanan 1,1x.
+  > tinta paling sedikit (DITANDAI).
 - Cek rentang baris butuh minimal 1 tepi; cek median butuh populasi
   dominan >=40% atau simpangan terpusat (gradasi mulus bukan konten).
 - API bitmap (inSampleSize power-of-2, decodeRegion, inJustDecodeBounds)
@@ -52,10 +52,11 @@ Tambahan v7b (anti-bocor):
 - continuityMap + touchesEdge: goresan tegak yang menyentuh batas halaman
   menahan pasangan halaman satu berkas (anti balon terbelah antar-file).
 - Batas antar-berkas output HANYA boleh jatuh di tepi potongan terencana
-  (`Seg.cutTop` → `Sheet.safeBreak`): tepi batas-halaman-asli ditahan dalam
-  berkas yang sama sampai batas keras ~1,1x; bila tetap tak muat, putus paksa
-  dan tandai `seamCut` untuk tinjau manual. Pasangan bersambung di tepi
-  TERENCANA tidak ditahan melewati batas (putusnya memang di tempat aman).
+  (`Seg.cutTop` → `Sheet.safeBreak`): batas lunak HARGA MATI, tanpa
+  penahanan melewati batas. Tepi tak-terencana yang terpaksa diputus
+  (termasuk sisa pemutusan mundur) ditandai `seamCut` untuk tinjau manual.
+  Satu-satunya yang boleh lewat: segmen tunggal melebihi batas
+  (`tallSingle`, dibiarkan utuh + ditandai — fisika).
 
 ## Arsitektur v6 (potong hanya di tempat aman — perbaikan akar masalah)
 

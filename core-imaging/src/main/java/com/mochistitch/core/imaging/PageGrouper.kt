@@ -43,11 +43,9 @@ object PageGrouper {
     /**
      * @param linked (a, b) true bila lembar order-a bersambung piksel dengan
      *   order-b. null = tanpa informasi sambungan (perilaku lama).
-     * @param hardCap tinggi maksimum mutlak satu berkas saat menahan
-     *   pasangan bersambung (0 = tanpa penahanan).
-     *   Lembar dengan [Sheet.safeBreak] = false ikut ditahan sampai
-     *   [hardCap]; bila tetap tak muat, batas paksa ditandai
-     *   [Bundle.seamCut].
+     * @param hardCap DULU batas penahanan; kini tidak dipakai (batas lunak
+     *   harga mati — dipertahankan di signature agar pemanggil/test tak
+     *   berubah).
      */
     fun group(
         sheets: List<Sheet>,
@@ -74,7 +72,6 @@ object PageGrouper {
         hardCap: Int
     ): List<Bundle> {
         if (limit <= 0) return listOf(Bundle(sheets))
-        val cap = if (hardCap > limit) hardCap else limit
         val out = mutableListOf<Bundle>()
         var current = mutableListOf<Sheet>()
         var height = 0
@@ -93,28 +90,22 @@ object PageGrouper {
             if (current.isNotEmpty() && height + sheet.renderedHeight > limit) {
                 val prev = current.last()
                 val pairLinked = linked?.invoke(prev.order, sheet.order) == true
-                if (!sheet.safeBreak && height + sheet.renderedHeight <= cap) {
-                    // Tepi atas lembar ini bukan potongan terencana (batas
-                    // halaman asli): tahan dalam berkas yang sama agar batas
-                    // berkas tidak membelah konten yang belum dicek.
-                    // (Pasangan bersambung di tepi AMAN tidak ditahan:
-                    // putus di potongan terencana memang sudah aman.)
-                    current.add(sheet)
-                    height += sheet.renderedHeight
-                } else {
-                    // Putus di batas aman terakhir (mundur), bukan di tengah
-                    // sambungan — kecuali seluruh berkas memang satu sambungan.
-                    val linkFn = linked
-                    val oldSize = current.size
-                    val cutAt = if (pairLinked && linkFn != null) lastSafeBreak(current, linkFn) else oldSize
-                    out.add(Bundle(current.subList(0, cutAt).toList(), seamCut = seamCut))
-                    val rest = current.subList(cutAt, oldSize).toList()
-                    current = (rest + sheet).toMutableList()
-                    height = rest.sumOf { it.renderedHeight } + sheet.renderedHeight
-                    // Berkas baru ditandai bila batasnya jatuh di sambungan
-                    // ATAU di tepi yang belum terverifikasi aman.
-                    seamCut = cutAt == oldSize && (pairLinked || !sheet.safeBreak)
-                }
+                // Batas lunak HARGA MATI: selalu putus di sini. Tepi
+                // tak-terencana ditandai untuk ditinjau, bukan ditahan
+                // melewati batas (penahanan diam-diam = berkas > batas
+                // tanpa flag).
+                val linkFn = linked
+                val oldSize = current.size
+                val cutAt = if (pairLinked && linkFn != null) lastSafeBreak(current, linkFn) else oldSize
+                val restUnsafe = cutAt < oldSize && current.subList(cutAt, oldSize).firstOrNull()?.safeBreak == false
+                out.add(Bundle(current.subList(0, cutAt).toList(), seamCut = seamCut || restUnsafe))
+                val rest = current.subList(cutAt, oldSize).toList()
+                current = (rest + sheet).toMutableList()
+                height = rest.sumOf { it.renderedHeight } + sheet.renderedHeight
+                // Berkas baru ditandai bila batasnya jatuh di sambungan,
+                // di tepi tak-terencana, atau dimulai dari tepi
+                // tak-terencana (sisa pemutusan mundur).
+                seamCut = (cutAt == oldSize && (pairLinked || !sheet.safeBreak)) || restUnsafe
             } else {
                 current.add(sheet)
                 height += sheet.renderedHeight

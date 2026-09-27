@@ -56,9 +56,10 @@ class GroupingTest {
     }
 
     @Test
-    fun testLinkedUnsafeEdgeIsHeldBelowHardCap() {
-        // Pasangan (1,2) bersambung DAN tepi atas lembar 2 tak-terencana:
-        // lembar 2 ditahan sampai batas keras.
+    fun testLinkedUnsafeEdgeBreaksAtSafeBoundary() {
+        // Pasangan (1,2) bersambung tapi (0,1) tidak: mundur ke batas
+        // non-sambung (0|1), berkas baru mulai di tepi aman (1|..).
+        // Tanpa penahanan melewati batas.
         val input = listOf(
             Sheet(0, 400, safeBreak = true),
             Sheet(1, 400, safeBreak = true),
@@ -115,9 +116,8 @@ class GroupingTest {
     }
 
     @Test
-    fun testUnsafeEdgeIsHeldBelowHardCap() {
-        // B tepi-tak-terencana: batas berkas tidak boleh jatuh di B|atas,
-        // jadi B ditahan sampai batas keras.
+    fun testUnsafeEdgeBreaksAndFlags() {
+        // Tepi tak-terencana TIDAK ditahan melewati batas: putus + tandai.
         val input = listOf(
             Sheet(0, 600, safeBreak = true),
             Sheet(1, 600, safeBreak = false),
@@ -125,10 +125,12 @@ class GroupingTest {
         )
         val groups = PageGrouper.group(input, SplitRule.MAX_HEIGHT, 1000, 10, linked = null, hardCap = 1500)
         assertEquals(2, groups.size)
-        assertEquals(listOf(0, 1), groups[0].sheets.map { it.order })
-        assertEquals(listOf(2), groups[1].sheets.map { it.order })
+        assertEquals(listOf(0), groups[0].sheets.map { it.order })
+        assertEquals(listOf(1), groups[1].sheets.map { it.order })
+        assertEquals(listOf(2), groups[2].sheets.map { it.order })
         assertFalse(groups[0].seamCut)
-        assertFalse(groups[1].seamCut)
+        assertTrue(groups[1].seamCut)
+        assertFalse(groups[2].seamCut)
     }
 
     @Test
