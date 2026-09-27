@@ -687,10 +687,12 @@ class StripBuilder(
     }
 
     /**
-     * Verifikasi resolusi-penuh satu titik potong: pindaian kecil bisa
-     * meloloskan garis tipis (ekor balon). Bila baris potong ternyata
-     * sibuk, geser ke baris bebas terdekat (±48px); bila tak ada,
-     * pertahankan posisi dan tandai gagal verifikasi.
+     * Verifikasi ROI resolusi-penuh (ala SmartSplitEngine ai_studio_code):
+     * pindaian kecil bisa meloloskan garis tipis (ekor balon), jadi ±320
+     * baris di sekitar titik potong dipindai ulang penuh: sibuk + interior
+     * terkurung + zona teks, lalu digeser ke baris bebas terdekat
+     * (<= 300px, berzona bersih); bila tak ada, pertahankan posisi dan
+     * tandai gagal verifikasi.
      */
     private fun verifyCut(
         m: StripRenderer.Measured,
@@ -698,7 +700,7 @@ class StripBuilder(
         edge: Int,
         range: Int
     ): Pair<Int, Boolean> {
-        val half = 64
+        val half = 320
         val top = (cutY - half).coerceAtLeast(0)
         val bottom = (cutY + half).coerceAtMost(m.height)
         if (bottom - top < 8) return cutY to false
@@ -707,23 +709,48 @@ class StripBuilder(
         } catch (t: Throwable) {
             null
         } ?: return cutY to false
+        val scale = patch.w.toDouble() / SCAN_WIDTH.coerceAtLeast(1)
         val prof = RowScanner.scanBuffer(patch.px, patch.w, patch.h, edge, range, noisePixels = 3)
+        val zones = KeepOut.textZones(
+            prof.structured,
+            gap = (16 * scale).toInt().coerceAtLeast(8),
+            expand = (12 * scale).toInt().coerceAtLeast(8)
+        )
+        val keep = keepHalf(patch.px, patch.w, patch.h)
+        val merged = BooleanArray(patch.h) { y -> prof.busy[y] || zones[y] || keep[y] }
+        val blocked = CutPlanner.blockedRows(merged, VERIFY_GUARD)
         val center = (cutY - top).coerceIn(0, patch.h - 1)
-        if (!prof.busy[center]) return cutY to false
-        // Geser ke baris bebas terdekat, tapi wajib ada zona bersih
-        // ±VERIFY_GUARD di sekitarnya (jangan mendarat di sebelah tinta).
-        val radius = 48
+        if (!blocked[center]) return cutY to false
+        val radius = min(300, patch.h / 2)
         for (d in 1..radius) {
             val dn = center - d
-            if (dn - VERIFY_GUARD >= 0 && (dn - VERIFY_GUARD..dn + VERIFY_GUARD).all { !prof.busy[it] }) {
-                return (top + dn) to false
-            }
+            if (dn >= 0 && !blocked[dn]) return (top + dn) to false
             val up = center + d
-            if (up + VERIFY_GUARD < patch.h && (up - VERIFY_GUARD..up + VERIFY_GUARD).all { !prof.busy[it] }) {
-                return (top + up) to false
-            }
+            if (up < patch.h && !blocked[up]) return (top + up) to false
         }
         return cutY to true
+    }
+
+    /** Interior terkurung skala setengah untuk verifikasi ROI (hemat). */
+    private fun keepHalf(px: IntArray, w: Int, h: Int): BooleanArray {
+        val none = BooleanArray(h)
+        if (w < 4 || h < 4 || px.size < w * h) return none
+        return try {
+            val hw = w / 2
+            val hh = h / 2
+            val small = IntArray(hw * hh)
+            for (y in 0 until hh) {
+                val src = (y * h / hh) * w
+                val dst = y * hw
+                for (x in 0 until hw) {
+                    small[dst + x] = px[src + x * w / hw]
+                }
+            }
+            val rows = KeepOut.enclosed(small, hw, hh)
+            BooleanArray(h) { y -> rows.getOrElse((y.toLong() * hh / h).toInt()) { false } }
+        } catch (t: Throwable) {
+            none
+        }
     }
 
     /**

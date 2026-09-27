@@ -22,9 +22,10 @@ banner (BannerOcv), bukan untuk deteksi balon.
 Tambahan v7b (anti-bocor):
 - Pindai memakai nearest-neighbor (tanpa filter) pada lebar 480px agar garis
   tipis/ekor balon tidak terhapus blur downscale.
-- Setiap titik potong terencana diverifikasi ulang pada resolusi penuh
-  (`verifyCut`: patch ±64 baris via region-decode); bila sibuk, geser ke
-  baris bebas terdekat (±48px), bila tak ada tandai forced.
+- Setiap titik potong terencana diverifikasi ulang pada ROI resolusi
+  penuh ±320 baris (ala SmartSplitEngine ai_studio_code): sibuk +
+  interior terkurung (skala 1/2) + zona teks skala-penuh, lalu geser ke
+  baris bebas terdekat (<=300px); bila tak ada tandai forced.
 - Rencana potong berjenjang per jendela: baris terakhir berzona bersih
   dalam 1/5 batas di bawah target (lantai 80%) > darurat di bawah batas
   (DITANDAI) > tengah celah terlebar > overshoot di awal pita (maks ~10%)
