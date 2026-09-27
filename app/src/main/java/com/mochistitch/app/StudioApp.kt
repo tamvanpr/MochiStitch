@@ -62,6 +62,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -97,6 +98,11 @@ fun StudioApp(viewModel: StudioViewModel, onExitApp: () -> Unit) {
     val settings = state.settings
 
     var lastBackPress by remember { mutableStateOf(0L) }
+    LaunchedEffect(state.screen) {
+        if (state.screen == StudioScreen.SETTINGS) {
+            viewModel.refreshCacheSize(ctx)
+        }
+    }
     BackHandler(enabled = true) {
         if (state.screen != StudioScreen.INPUT) {
             viewModel.travel(StudioScreen.INPUT)
@@ -209,7 +215,9 @@ fun StudioApp(viewModel: StudioViewModel, onExitApp: () -> Unit) {
             StudioScreen.SETTINGS -> SettingsPanel(
                 settings = settings,
                 onChange = viewModel::keepSettings,
-                modifier = Modifier.padding(innerPadding).fillMaxSize()
+                modifier = Modifier.padding(innerPadding).fillMaxSize(),
+                cacheBytes = state.cacheBytes,
+                onClearCache = { viewModel.clearAppCache(ctx) }
             )
             StudioScreen.RESULT -> if (state.slices.isEmpty()) {
                 Column(

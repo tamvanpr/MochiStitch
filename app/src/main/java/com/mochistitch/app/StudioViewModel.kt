@@ -77,7 +77,9 @@ data class StudioState(
     /** Hasil resolve series mentah: dipilih chapter-nya sebelum diunduh. */
     val rawChapters: List<ChapterHit> = emptyList(),
     val rawSourceLabel: String? = null,
-    val rawSourceId: String? = null
+    val rawSourceId: String? = null,
+    /** Ukuran cache aplikasi dalam byte (-1 = belum dihitung). */
+    val cacheBytes: Long = -1
 )
 
 class StudioViewModel : ViewModel() {
@@ -166,6 +168,93 @@ class StudioViewModel : ViewModel() {
         _state.update { it.copy(batchOutcomes = emptyList()) }
     }
 
+    /** Hitung ukuran cache (impor + strip + thumbnail Coil). */
+    fun refreshCacheSize(context: Context) {
+        viewModelScope.launch(Dispatchers.IO) {
+            _state.update { it.copy(cacheBytes = appCacheSize(context)) }
+        }
+    }
+
+    /**
+     * Bersihkan cache yang tak dirujuk: folder impor/strip yatim + cache
+     * Coil. Antrean, halaman aktif, dan hasil aktif TIDAK disentuh
+     * (jalurnya masuk daftar rujukan).
+     */
+    fun clearAppCache(context: Context) {
+        viewModelScope.launch(Dispatchers.IO) {
+            _state.update { it.copy(busy = true, phase = "Membersihkan cache", fraction = 0f, failure = null) }
+            try {
+                val before = appCacheSize(context)
+                val keep = HashSet<String>()
+                fun refFile(uri: Uri) {
+                    if (uri.scheme == "file") {
+                        uri.path?.let { keep.add(File(it).absolutePath) }
+                    }
+                }
+                _state.value.pages.forEach { refFile(it.uri) }
+                _state.value.comics.forEach { comic ->
+                    comic.pageUris.forEach { refFile(it) }
+                }
+                _state.value.slices.forEach { slice ->
+                    slice.cachePath?.let { keep.add(File(it).absolutePath) }
+                }
+                var deleted = 0L
+                for (rootName in listOf("studio_import", "mochi_strips")) {
+                    val root = File(context.cacheDir, rootName)
+                    if (!root.isDirectory) continue
+                    root.walkTopDown().filter { it.isFile }.toList().forEach { f ->
+                        if (!keep.contains(f.absolutePath)) {
+                            deleted += f.length()
+                            try { f.delete() } catch (t: Throwable) { }
+                        }
+                    }
+                    root.walkTopDown().filter { it.isDirectory && it != root }.toList().forEach { d ->
+                        try {
+                            if (d.listFiles()?.isEmpty() == true) d.delete()
+                        } catch (t: Throwable) { }
+                    }
+                }
+                try {
+                    context.imageLoader.diskCache?.clear()
+                } catch (t: Throwable) { }
+                try {
+                    context.imageLoader.memoryCache?.clear()
+                } catch (t: Throwable) { }
+                System.gc()
+                val after = appCacheSize(context)
+                val freed = (before - after).coerceAtLeast(0L)
+                _state.update {
+                    it.copy(
+                        busy = false,
+                        cacheBytes = after,
+                        notice = "Cache dibersihkan, bebas ${formatMb(freed)}."
+                    )
+                }
+            } catch (e: Throwable) {
+                _state.update { it.copy(busy = false, failure = e.message ?: "Gagal membersihkan cache.") }
+            }
+        }
+    }
+
+    private fun appCacheSize(context: Context): Long {
+        var total = 0L
+        try {
+            for (rootName in listOf("studio_import", "mochi_strips")) {
+                val root = File(context.cacheDir, rootName)
+                if (root.isDirectory) {
+                    root.walkTopDown().filter { it.isFile }.forEach { total += it.length() }
+                }
+            }
+        } catch (t: Throwable) { }
+        try {
+            context.imageLoader.diskCache?.let { total += it.size }
+        } catch (t: Throwable) { }
+        return total
+    }
+
+    private fun formatMb(bytes: Long): String =
+        if (bytes < 1048576L) "${bytes / 1024} KB" else "%.1f MB".format(bytes / 1048576.0)
+
     fun clearRawChapters() {
         _state.update { it.copy(rawChapters = emptyList(), rawSourceLabel = null, rawSourceId = null) }
     }
@@ -237,27 +326,32 @@ class StudioViewModel : ViewModel() {
     fun takeImages(uris: List<Uri>, context: Context) {
         boot(context)
         viewModelScope.launch(Dispatchers.IO) {
-            val known = _state.value.pages.map { it.uri.toString() }.toSet()
-            val fresh = uris.distinctBy { it.toString() }.filterNot { known.contains(it.toString()) }
-            val dupes = uris.size - fresh.size
-            if (fresh.isEmpty()) {
-                if (dupes > 0) _state.update { it.copy(notice = "Duplikat dilewati ($dupes)") }
-                return@launch
+            addImages(uris, context)
+        }
+    }
+
+    /** Tambah gambar ke meja kerja (lewati duplikat); panggil dari IO. */
+    private suspend fun addImages(uris: List<Uri>, context: Context) {
+        val known = _state.value.pages.map { it.uri.toString() }.toSet()
+        val fresh = uris.distinctBy { it.toString() }.filterNot { known.contains(it.toString()) }
+        val dupes = uris.size - fresh.size
+        if (fresh.isEmpty()) {
+            if (dupes > 0) _state.update { it.copy(notice = "Duplikat dilewati ($dupes)") }
+            return
+        }
+        val items = fresh.map { uri ->
+            try {
+                context.contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            } catch (e: SecurityException) {
+                // Photo picker tidak memberi izin persisten — abaikan.
             }
-            val items = fresh.map { uri ->
-                try {
-                    context.contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                } catch (e: SecurityException) {
-                    // Photo picker tidak memberi izin persisten — abaikan.
-                }
-                PageItem(uri = uri, title = readName(context, uri) ?: uri.lastPathSegment ?: "Gambar")
-            }
-            _state.update { s ->
-                s.copy(
-                    pages = s.pages + items,
-                    notice = if (dupes > 0) "Duplikat dilewati ($dupes)" else null
-                )
-            }
+            PageItem(uri = uri, title = readName(context, uri) ?: uri.lastPathSegment ?: "Gambar")
+        }
+        _state.update { s ->
+            s.copy(
+                pages = s.pages + items,
+                notice = if (dupes > 0) "Duplikat dilewati ($dupes)" else null
+            )
         }
     }
 
@@ -266,31 +360,15 @@ class StudioViewModel : ViewModel() {
         viewModelScope.launch(Dispatchers.IO) {
             _state.update { it.copy(busy = true, phase = "Membongkar arsip", fraction = 0f, failure = null) }
             try {
-                val name = readName(context, uri) ?: uri.lastPathSegment?.substringAfterLast('/') ?: "arsip"
+                val name = archiveNameOf(context, uri)
                 if (!ArchiveKit.canOpen(name)) {
                     _state.update { it.copy(busy = false, failure = "Arsip tidak didukung: $name") }
                     return@launch
                 }
-                try {
-                    context.contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                } catch (e: SecurityException) {
-                    // Abaikan.
-                }
-                val stream = context.contentResolver.openInputStream(uri)
-                    ?: throw IllegalStateException("Tidak dapat membuka: $name")
-                // Streaming ke disk, satu folder unik per impor: arsip besar
-                // tidak membebani RAM dan komik lama di antrean tidak rusak.
-                val stem = ArchiveKit.sanitizeName(ArchiveKit.baseNameOf(name).ifBlank { "arsip" })
-                val unique = "${stem}_${System.currentTimeMillis()}"
-                val dir = File(File(context.cacheDir, "studio_import"), unique).apply { mkdirs() }
-                val unpacked = stream.use { ArchiveKit.unpackTo(it, name, dir) }
-                if (unpacked.isEmpty()) {
-                    try { dir.deleteRecursively() } catch (t: Throwable) { }
+                val items = importArchive(context, uri, name)
+                if (items.isEmpty()) {
                     _state.update { it.copy(busy = false, failure = "Arsip kosong: $name") }
                     return@launch
-                }
-                val items = unpacked.map { page ->
-                    PageItem(uri = Uri.fromFile(page.file), title = page.name)
                 }
                 shelve(name, items)
                 _state.update { s ->
@@ -299,6 +377,104 @@ class StudioViewModel : ViewModel() {
             } catch (e: Throwable) {
                 _state.update { it.copy(busy = false, failure = e.message ?: "Gagal impor arsip.") }
             }
+        }
+    }
+
+    /**
+     * Terima berbagi dari aplikasi lain: arsip dibongkar satu per satu
+     * (berurutan agar RAM aman), gambar ditambah langsung. Campuran
+     * didukung — tiap jenis dirutekan ke jalurnya.
+     */
+    fun takeShared(uris: List<Uri>, context: Context) {
+        boot(context)
+        val distinct = uris.distinctBy { it.toString() }
+        if (distinct.isEmpty()) return
+        viewModelScope.launch(Dispatchers.IO) {
+            val archives = mutableListOf<Pair<Uri, String>>()
+            val images = mutableListOf<Uri>()
+            for (u in distinct) {
+                val nm = archiveNameOf(context, u)
+                if (ArchiveKit.canOpen(nm)) archives.add(u to nm)
+                else images.add(u)
+            }
+            if (images.isNotEmpty()) {
+                addImages(images, context)
+            }
+            if (archives.isEmpty()) {
+                if (images.isNotEmpty()) {
+                    _state.update { s -> s.copy(screen = StudioScreen.INPUT) }
+                } else {
+                    _state.update { it.copy(failure = "Tidak ada arsip/gambar yang dikenali.") }
+                }
+                return@launch
+            }
+            var ok = 0
+            var pages = 0
+            val failed = mutableListOf<String>()
+            val allItems = mutableListOf<PageItem>()
+            for ((i, entry) in archives.withIndex()) {
+                val (uri, name) = entry
+                _state.update {
+                    it.copy(
+                        busy = true,
+                        phase = "Membongkar arsip ${i + 1}/${archives.size}",
+                        fraction = i.toFloat() / archives.size.toFloat(),
+                        failure = null
+                    )
+                }
+                try {
+                    val items = importArchive(context, uri, name)
+                    if (items.isEmpty()) {
+                        failed.add(name)
+                    } else {
+                        shelve(name, items)
+                        allItems.addAll(items)
+                        pages += items.size
+                        ok++
+                    }
+                } catch (e: Throwable) {
+                    failed.add(name)
+                }
+            }
+            val extra = if (failed.isEmpty()) "" else " (${failed.size} gagal: ${failed.take(3).joinToString(", ")})"
+            _state.update { s ->
+                s.copy(
+                    busy = false,
+                    pages = if (allItems.isEmpty()) s.pages else s.pages + allItems,
+                    screen = StudioScreen.INPUT,
+                    notice = if (ok == 0) null else "$ok arsip ($pages halaman) masuk antrean.$extra"
+                )
+            }
+            if (ok == 0) {
+                _state.update { it.copy(failure = "Semua arsip gagal dibongkar.$extra") }
+            }
+        }
+    }
+
+    private fun archiveNameOf(context: Context, uri: Uri): String =
+        readName(context, uri) ?: uri.lastPathSegment?.substringAfterLast('/') ?: "arsip"
+
+    /** Bongkar satu arsip ke folder unik; lempar pesan galat bila gagal. */
+    private suspend fun importArchive(context: Context, uri: Uri, name: String): List<PageItem> {
+        try {
+            context.contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        } catch (e: SecurityException) {
+            // Share tidak memberi izin persisten — abaikan, izin sementara cukup.
+        }
+        val stream = context.contentResolver.openInputStream(uri)
+            ?: throw IllegalStateException("Tidak dapat membuka: $name")
+        // Streaming ke disk, satu folder unik per impor: arsip besar
+        // tidak membebani RAM dan komik lama di antrean tidak rusak.
+        val stem = ArchiveKit.sanitizeName(ArchiveKit.baseNameOf(name).ifBlank { "arsip" })
+        val unique = "${stem}_${System.currentTimeMillis()}"
+        val dir = File(File(context.cacheDir, "studio_import"), unique).apply { mkdirs() }
+        val unpacked = stream.use { ArchiveKit.unpackTo(it, name, dir) }
+        if (unpacked.isEmpty()) {
+            try { dir.deleteRecursively() } catch (t: Throwable) { }
+            return emptyList()
+        }
+        return unpacked.map { page ->
+            PageItem(uri = Uri.fromFile(page.file), title = page.name)
         }
     }
 

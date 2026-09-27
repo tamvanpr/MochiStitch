@@ -24,6 +24,7 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
@@ -59,7 +60,9 @@ import kotlin.math.roundToInt
 fun SettingsPanel(
     settings: StitchSettings,
     onChange: (StitchSettings) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    cacheBytes: Long = -1,
+    onClearCache: () -> Unit = {}
 ) {
     LazyColumn(
         modifier = modifier
@@ -298,6 +301,26 @@ fun SettingsPanel(
                     )
                 }
                     }
+        }
+        }
+
+        item {
+            SettingsGroup("Penyimpanan") {
+            Text(
+                if (cacheBytes < 0) "Cache: menghitung…"
+                else if (cacheBytes < 1048576L) "Cache: ${cacheBytes / 1024} KB (impor + pratinjau + thumbnail)"
+                else "Cache: %.1f MB (impor + pratinjau + thumbnail)".format(cacheBytes / 1048576.0),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Note("Antrean, halaman aktif, dan hasil aktif tidak dihapus.")
+            OutlinedButton(
+                onClick = onClearCache,
+                enabled = cacheBytes > 0,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("Hapus cache")
+            }
         }
         }
     }
