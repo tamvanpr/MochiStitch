@@ -7,7 +7,6 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -20,7 +19,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -42,7 +40,6 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.Divider
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
@@ -70,13 +67,14 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.core.content.ContextCompat
 import com.mochistitch.core.settings.PackFormat
+import com.mochistitch.core.ui.EmptyState
+import com.mochistitch.core.ui.MochiListCard
 import com.mochistitch.core.ui.PageStrip
 import com.mochistitch.core.ui.SettingsPanel
 import com.mochistitch.core.ui.SlicePreview
@@ -216,29 +214,12 @@ fun StudioApp(viewModel: StudioViewModel, onExitApp: () -> Unit) {
                         .padding(16.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    Card(
-                        colors = CardDefaults.cardColors(
-                            containerColor = MaterialTheme.colorScheme.primaryContainer
-                        ),
+                    EmptyState(
+                        icon = Icons.Default.Apps,
+                        title = "Belum ada hasil rakitan",
+                        desc = "Pilih halaman di tab Masuk lalu tekan Rakit.",
                         modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Column(
-                            modifier = Modifier.padding(20.dp),
-                            verticalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            Text(
-                                "Belum ada hasil rakitan",
-                                style = MaterialTheme.typography.titleSmall,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onPrimaryContainer
-                            )
-                            Text(
-                                "Pilih halaman di tab Masukkan lalu tekan Rakit.",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f)
-                            )
-                        }
-                    }
+                    )
                 }
             } else Column(modifier = Modifier.padding(innerPadding).fillMaxSize()) {
                 SlicePreview(
@@ -317,8 +298,8 @@ fun StudioApp(viewModel: StudioViewModel, onExitApp: () -> Unit) {
                     LinearProgressIndicator(
                         progress = { state.fraction.coerceIn(0f, 1f) },
                         modifier = Modifier.fillMaxWidth(),
-                        color = Color(0xFF0E7C6B),
-                        trackColor = Color(0xFFD8EAE5)
+                        color = MaterialTheme.colorScheme.primary,
+                        trackColor = MaterialTheme.colorScheme.surfaceVariant
                     )
                 }
             }
@@ -394,59 +375,46 @@ private fun InputStep(viewModel: StudioViewModel, modifier: Modifier = Modifier)
         modifier = modifier.padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        LazyRow(
+        Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            item {
-                OutlinedButton(
-                    onClick = {
-                        pickImages.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
-                    },
-                    modifier = Modifier.width(148.dp)
-                ) {
-                    Icon(Icons.Default.Image, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Spacer(Modifier.size(6.dp))
-                    Text("Gambar")
-                }
+            OutlinedButton(
+                onClick = {
+                    pickImages.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+                },
+                modifier = Modifier.weight(1f)
+            ) {
+                Icon(Icons.Default.Image, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.size(6.dp))
+                Text("Gambar")
             }
-            item {
-                OutlinedButton(
-                    onClick = { pickArchive.launch(arrayOf("*/*")) },
-                    modifier = Modifier.width(148.dp)
-                ) {
-                    Icon(Icons.Default.Unarchive, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Spacer(Modifier.size(6.dp))
-                    Text("Arsip")
-                }
+            OutlinedButton(
+                onClick = { pickArchive.launch(arrayOf("*/*")) },
+                modifier = Modifier.weight(1f)
+            ) {
+                Icon(Icons.Default.Unarchive, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.size(6.dp))
+                Text("Arsip")
             }
-            item {
-                Button(
-                    onClick = { urlText = ""; showUrlDialog = true },
-                    modifier = Modifier.width(148.dp)
-                ) {
-                    Icon(Icons.Default.Download, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Spacer(Modifier.size(6.dp))
-                    Text("Unduh")
-                }
+            Button(
+                onClick = { urlText = ""; showUrlDialog = true },
+                modifier = Modifier.weight(1f)
+            ) {
+                Icon(Icons.Default.Download, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.size(6.dp))
+                Text("Unduh")
             }
         }
 
         if (state.pages.isEmpty()) {
             Spacer(modifier = Modifier.weight(1f))
-            Card(
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceVariant
-                ),
+            EmptyState(
+                icon = Icons.Default.Image,
+                title = "Belum ada halaman",
+                desc = "Gunakan tombol Gambar, Arsip, atau Unduh di atas.",
                 modifier = Modifier.fillMaxWidth()
-            ) {
-                Text(
-                    "Belum ada halaman",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(20.dp)
-                )
-            }
+            )
             Spacer(modifier = Modifier.weight(1f))
         } else {
             PageStrip(
@@ -534,35 +502,6 @@ private fun InputStep(viewModel: StudioViewModel, modifier: Modifier = Modifier)
     }
 }
 
-@Composable
-private fun SourceRow(
-    icon: @Composable () -> Unit,
-    title: String,
-    desc: String,
-    onTap: () -> Unit
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 8.dp)
-            .clickable(onClick = onTap),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Surface(
-            shape = RoundedCornerShape(10.dp),
-            color = MaterialTheme.colorScheme.primaryContainer,
-            modifier = Modifier.size(40.dp)
-        ) {
-            Box(contentAlignment = Alignment.Center) { icon() }
-        }
-        Spacer(modifier = Modifier.width(12.dp))
-        Column(modifier = Modifier.weight(1f)) {
-            Text(title, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
-            Text(desc, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
-    }
-}
-
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun QueueStep(
@@ -577,41 +516,24 @@ private fun QueueStep(
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         if (state.comics.isEmpty()) {
-            Card(
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.primaryContainer
-                ),
+            EmptyState(
+                icon = Icons.Default.GridOn,
+                title = "Antrean kosong",
+                desc = "Tambah lewat Gambar, Arsip, atau Unduh di tab Masuk — atau rakit sekali; tiap komik otomatis masuk antrean.",
                 modifier = Modifier.fillMaxWidth()
-            ) {
-                Column(
-                    modifier = Modifier.padding(20.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Text(
-                        "Antrean kosong",
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer
-                    )
-                    Text(
-                        "Tambah lewat Gambar, Arsip, atau Unduh di tab Masuk — atau rakit sekali; tiap komik otomatis masuk antrean.",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f)
-                    )
-                }
-            }
+            )
         } else {
+            Text(
+                "${state.comics.size} komik",
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Bold
+            )
             LazyColumn(
                 verticalArrangement = Arrangement.spacedBy(8.dp),
                 modifier = Modifier.weight(1f).fillMaxWidth()
             ) {
                 items(state.comics, key = { it.id }) { comic ->
-                    Card(
-                        colors = CardDefaults.cardColors(
-                            containerColor = MaterialTheme.colorScheme.surface
-                        ),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
+                    MochiListCard(modifier = Modifier.fillMaxWidth()) {
                         Column(
                             modifier = Modifier.padding(14.dp),
                             verticalArrangement = Arrangement.spacedBy(10.dp)
