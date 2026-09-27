@@ -138,8 +138,8 @@ class StripBuilder(
             val sheets = segs.mapIndexed { idx, s ->
                 PageGrouper.Sheet(order = idx, renderedHeight = s.renderedH, safeBreak = s.cutTop)
             }
-            // Batas keras: penahanan tepi tak-terencana tak boleh lebih dari 1,25x batas.
-            val hardCap = limit + limit / 4
+            // Batas keras: penahanan tepi tak-terencana tak boleh lebih dari ~10% batas.
+            val hardCap = limit + limit / 10
             val bundles = PageGrouper.group(
                 sheets, settings.splitRule, settings.maxStripHeight, settings.pagesPerPack,
                 linked = { a, b -> linked.contains(a to b) }, hardCap = hardCap
@@ -510,8 +510,11 @@ class StripBuilder(
         val plan = CutPlanner.plan(
             profile = combined,
             maxLen = maxLen,
+            // Lantai 80%: potong bersih di bawahnya tidak boleh; toleransi
+            // lewat ~10% (lihat overshoot + hardCap di bawah).
+            minLen = (maxLen * 4) / 5,
             margin = margin,
-            overshoot = (maxLen / 4).coerceAtLeast(8)
+            overshoot = (maxLen / 10).coerceAtLeast(8)
         )
         if (plan.isEmpty()) return GlobalPlan(emptyMap(), emptySet(), scanned, measured.size, 0, 0, profStats[0], profStats[1], profStats[2], profStats[3])
         val out = LinkedHashMap<Int, MutableList<Int>>()

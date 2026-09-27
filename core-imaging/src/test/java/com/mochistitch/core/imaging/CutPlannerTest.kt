@@ -51,8 +51,8 @@ class CutPlannerTest {
 
     @Test
     fun latestWithClearanceWins() {
-        // Blok besar di tengah: potong di baris TERAKHIR yang punya zona
-        // bersih (bukan tengah celah) agar berkas terisi penuh.
+        // Zona bersih hanya dicari di 1/5 teratas jendela: [160,200]
+        // terlarang semua -> darurat bertanda di 145, lalu bersih di 345.
         val busy = BooleanArray(400) { it in 150..260 }
         val cuts = CutPlanner.plan(
             RowProfile(busy, IntArray(400)),
@@ -60,8 +60,11 @@ class CutPlannerTest {
             minLen = 40,
             margin = 4
         )
-        assertEquals(listOf(137, 337), cuts.map { it.y })
-        assertTrue(cuts.none { it.forced })
+        assertEquals(2, cuts.size)
+        assertEquals(145, cuts[0].y)
+        assertTrue(cuts[0].forced)
+        assertEquals(345, cuts[1].y)
+        assertFalse(cuts[1].forced)
     }
 
     @Test

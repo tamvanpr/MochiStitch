@@ -53,8 +53,8 @@ object CutPlanner {
 
     /**
      * Rencana potong per jendela [start+minLen, start+maxLen], berjenjang:
-     * 1. Baris terakhir berzona bersih di dekat batas (<= maxLen/4 di
-     *    bawah target): penuh + aman.
+     * 1. Baris terakhir berzona bersih dalam 1/5 batas di bawah target
+     *    (zona 80%-100%): penuh + aman.
      * 2. Baris bebas bertinta paling sedikit di bawah batas (DITANDAI):
      *    penuh + jujur.
      * 3. Tengah celah aman terlebar (bersih, mungkin pendek).
@@ -78,9 +78,12 @@ object CutPlanner {
         while (h - start > maxLen) {
             val target = start + maxLen
             val lo = start + minLen
+            // Zona bersih hanya dicari di 1/5 teratas jendela (lantai 80%):
+            // berjalan terlalu jauh ke belakang menghasilkan berkas kerdil.
+            val nearLo = maxOf(lo, target - maxLen / 5)
             var pick = -1
             var y = target
-            while (y >= lo) {
+            while (y >= nearLo) {
                 if (y - clearance >= 0 && y + clearance < h) {
                     var clean = true
                     for (z in y - clearance..y + clearance) {

@@ -26,14 +26,14 @@ Tambahan v7b (anti-bocor):
   (`verifyCut`: patch ±64 baris via region-decode); bila sibuk, geser ke
   baris bebas terdekat (±48px), bila tak ada tandai forced.
 - Rencana potong berjenjang per jendela: baris terakhir berzona bersih
-  dalam 1/4 batas di bawah target > darurat di bawah batas (DITANDAI) >
-  tengah celah terlebar > overshoot di awal pita > tinta paling sedikit
-  (DITANDAI).
+  dalam 1/5 batas di bawah target (lantai 80%) > darurat di bawah batas
+  (DITANDAI) > tengah celah terlebar > overshoot di awal pita (maks ~10%)
+  > tinta paling sedikit (DITANDAI). Batas keras penahanan 1,1x.
 - Cek rentang baris butuh minimal 1 tepi; cek median butuh populasi
   dominan >=40% atau simpangan terpusat (gradasi mulus bukan konten).
 - API bitmap (inSampleSize power-of-2, decodeRegion, inJustDecodeBounds)
   terverifikasi via Context7 (/websites/developer_android_reference).
-- Batas keras penahanan tepi tak-terencana: 1,25x batas lunak.
+- Batas keras penahanan tepi tak-terencana: ~1,1x batas lunak.
 - Keep-Out Mask (Tier 0 CUT-SAFETY): daerah terang terkurung (dalam balon)
   dihitung via flood fill dari tepi pada salinan 240px, lalu OR ke profil
   busy; hanya komponen terkurung KECIL (<=20% luas gambar) yang dihitung —
