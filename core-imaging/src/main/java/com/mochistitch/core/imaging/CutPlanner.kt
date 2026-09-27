@@ -177,6 +177,10 @@ object CutPlanner {
      * Potongan darurat di bawah batas: baris bebas (tak terlarang) dengan
      * tinta paling sedikit dalam [start+minLen, target]. Selalu DITANDAI
      * (forced). null bila semua baris dalam jendela terlarang.
+     *
+     * Bobot posisi diutamakan: baris bebas hanya punya 0-1 spek tinta,
+     * jadi yang dekat batas menang atas yang bersih-sempurna tapi jauh
+     * (1 spek tidak boleh mengorbankan 3k px kepenuhan berkas).
      */
     private fun flaggedBelowLimit(
         profile: RowProfile,
@@ -193,7 +197,7 @@ object CutPlanner {
         var bestScore = Long.MAX_VALUE
         for (y in lo..hi) {
             if (blocked[y]) continue
-            val score = profile.ink[y] * 1000L + (target - y)
+            val score = (target - y).toLong() * 2 + profile.ink[y]
             if (score < bestScore) {
                 bestScore = score
                 bestY = y

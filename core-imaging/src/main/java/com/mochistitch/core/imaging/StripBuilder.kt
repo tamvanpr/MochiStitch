@@ -195,8 +195,11 @@ class StripBuilder(
             } else {
                 "Rencana potong: nonaktif (aturan ${settings.splitRule})."
             }
+            val withMarks = if (wantCut && globalCuts.marks.isNotEmpty()) {
+                "$note Titik: ${globalCuts.marks.joinToString(" ")}."
+            } else note
             val note = listOfNotNull(bannerResult.note, cutNote).joinToString(" ")
-            Result.success(BuildOutput(strips, note))
+            Result.success(BuildOutput(strips, withMarks))
         } catch (e: Throwable) {
             Result.failure(e)
         }
@@ -427,7 +430,8 @@ class StripBuilder(
         val busyPct: Int = 0,
         val keepPct: Int = 0,
         val zonePct: Int = 0,
-        val bandCount: Int = 0
+        val bandCount: Int = 0,
+        val marks: List<String> = emptyList()
     )
 
     private fun planGlobalCuts(
@@ -526,6 +530,7 @@ class StripBuilder(
         val forced = LinkedHashSet<Int>()
         var planForced = 0
         var verifyForced = 0
+        val marks = mutableListOf<String>()
         for (cut in plan) {
             val y = cut.y.coerceIn(0, combined.busy.size - 1)
             val idx = pageIndexAt(offsets, y)
@@ -553,8 +558,9 @@ class StripBuilder(
             list.add(finalY)
             if (cut.forced || badVerify) forced.add(idx)
             if (cut.forced) planForced++ else if (badVerify) verifyForced++
+            marks.add("p${idx + 1}:$finalY" + if (cut.forced || badVerify) "f" else "")
         }
-        return GlobalPlan(out, forced, scanned, measured.size, planForced, verifyForced, profStats[0], profStats[1], profStats[2], profStats[3])
+        return GlobalPlan(out, forced, scanned, measured.size, planForced, verifyForced, profStats[0], profStats[1], profStats[2], profStats[3], marks.toList())
     }
 
     /**
