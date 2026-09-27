@@ -9,11 +9,12 @@ import com.mochistitch.core.settings.SplitRule
  * - Potongan dalam halaman hanya terjadi di celah yang sudah direncanakan
  *   aman oleh pemanggil (baris bebas-tepi); grouper tidak pernah memotong
  *   sendiri.
- * - Batas antar-berkas diusahakan tidak jatuh di pasangan lembar yang
- *   bersambung piksel ([linked]); pasangan bersambung digabung sampai batas
- *   lunak terlampaui atau batas keras [hardCap] tercapai. Batas yang
- *   terpaksa jatuh di sambungan ditandai [Bundle.seamCut] agar tampil
- *   sebagai flag tinjau di pratinjau.
+ * - Batas antar-berkas diutamakan jatuh tepat di batas lunak: tepi
+ *   potongan terencana ([Sheet.safeBreak]) SELALU boleh diputus di situ
+ *   (pasangan bersambung pun tidak ditahan melewati batas — putusnya
+ *   memang di tempat aman). Tepi batas-halaman asli ditahan dalam berkas
+ *   yang sama sampai [hardCap]; bila tetap tak muat, putus paksa dan
+ *   tandai [Bundle.seamCut] agar tampil sebagai flag tinjau di pratinjau.
  */
 object PageGrouper {
 
@@ -74,7 +75,6 @@ object PageGrouper {
     ): List<Bundle> {
         if (limit <= 0) return listOf(Bundle(sheets))
         val cap = if (hardCap > limit) hardCap else limit
-        val canHold = linked != null && hardCap > limit
         val out = mutableListOf<Bundle>()
         var current = mutableListOf<Sheet>()
         var height = 0
@@ -93,14 +93,12 @@ object PageGrouper {
             if (current.isNotEmpty() && height + sheet.renderedHeight > limit) {
                 val prev = current.last()
                 val pairLinked = linked?.invoke(prev.order, sheet.order) == true
-                if (pairLinked && canHold && height + sheet.renderedHeight <= cap) {
-                    // Tahan: gabung pasangan bersambung walau melewati batas lunak.
-                    current.add(sheet)
-                    height += sheet.renderedHeight
-                } else if (!sheet.safeBreak && height + sheet.renderedHeight <= cap) {
+                if (!sheet.safeBreak && height + sheet.renderedHeight <= cap) {
                     // Tepi atas lembar ini bukan potongan terencana (batas
                     // halaman asli): tahan dalam berkas yang sama agar batas
                     // berkas tidak membelah konten yang belum dicek.
+                    // (Pasangan bersambung di tepi AMAN tidak ditahan:
+                    // putus di potongan terencana memang sudah aman.)
                     current.add(sheet)
                     height += sheet.renderedHeight
                 } else {

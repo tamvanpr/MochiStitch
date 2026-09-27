@@ -39,8 +39,34 @@ class GroupingTest {
 
     @Test
     fun testLinkedSheetsStayTogether() {
+        // Pasangan (1,2) bersambung TAPI tepinya potongan terencana
+        // (safeBreak): putus di batas lunak, tanpa menahan melewati batas.
+        // Mundur ke batas non-sambung terakhir agar (1,2) tetap seberkas.
         val groups = PageGrouper.group(
             sheets(400, 400, 400, 400), SplitRule.MAX_HEIGHT, 1000, 10,
+            linked = { a, b -> a == 1 && b == 2 }, hardCap = 2000
+        )
+        assertEquals(3, groups.size)
+        assertEquals(listOf(0), groups[0].sheets.map { it.order })
+        assertEquals(listOf(1, 2), groups[1].sheets.map { it.order })
+        assertEquals(listOf(3), groups[2].sheets.map { it.order })
+        assertFalse(groups[0].seamCut)
+        assertFalse(groups[1].seamCut)
+        assertFalse(groups[2].seamCut)
+    }
+
+    @Test
+    fun testLinkedUnsafeEdgeIsHeldBelowHardCap() {
+        // Pasangan (1,2) bersambung DAN tepi atas lembar 2 tak-terencana:
+        // lembar 2 ditahan sampai batas keras.
+        val input = listOf(
+            Sheet(0, 400, safeBreak = true),
+            Sheet(1, 400, safeBreak = true),
+            Sheet(2, 400, safeBreak = false),
+            Sheet(3, 400, safeBreak = true)
+        )
+        val groups = PageGrouper.group(
+            input, SplitRule.MAX_HEIGHT, 1000, 10,
             linked = { a, b -> a == 1 && b == 2 }, hardCap = 2000
         )
         assertEquals(2, groups.size)

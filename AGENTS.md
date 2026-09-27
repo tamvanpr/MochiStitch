@@ -53,8 +53,9 @@ Tambahan v7b (anti-bocor):
   menahan pasangan halaman satu berkas (anti balon terbelah antar-file).
 - Batas antar-berkas output HANYA boleh jatuh di tepi potongan terencana
   (`Seg.cutTop` → `Sheet.safeBreak`): tepi batas-halaman-asli ditahan dalam
-  berkas yang sama sampai batas keras 1,25x; bila tetap tak muat, putus paksa
-  dan tandai `seamCut` untuk tinjau manual.
+  berkas yang sama sampai batas keras ~1,1x; bila tetap tak muat, putus paksa
+  dan tandai `seamCut` untuk tinjau manual. Pasangan bersambung di tepi
+  TERENCANA tidak ditahan melewati batas (putusnya memang di tempat aman).
 
 ## Arsitektur v6 (potong hanya di tempat aman — perbaikan akar masalah)
 
@@ -95,7 +96,7 @@ flag tinjau.
   terbit; share via FileProvider (API < 29)
 - `core-imaging/` — SeamScan v6 (rowIsSafe+paper/rowsVertSafe/combineSafe/
   findBands/planCuts-tengah/seamContinues, murni array, unit-testable),
-  PageGrouper (pinning + hardCap + seamCut), StripRenderer (Placement
+  PageGrouper (safeBreak + hardCap + seamCut), StripRenderer (Placement
   src-rect; decodeSampled; edgePatch region; renderStrip region-decode),
   StripBuilder (pindai vertikal + continuityMap seam + partisi eksak +
   crop banner dua lapis: template-match OpenCV (port setia bannercut2:
