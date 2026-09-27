@@ -5,6 +5,8 @@ import com.google.android.gms.tasks.Tasks
 import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.text.TextRecognition
 import com.google.mlkit.vision.text.chinese.ChineseTextRecognizerOptions
+import com.google.mlkit.vision.text.japanese.JapaneseTextRecognizerOptions
+import com.google.mlkit.vision.text.korean.KoreanTextRecognizerOptions
 import com.google.mlkit.vision.text.latin.TextRecognizerOptions
 import java.util.concurrent.TimeUnit
 
@@ -30,7 +32,9 @@ object TextGuard {
             val out = BooleanArray(bitmap.height)
             val options = listOf(
                 TextRecognizerOptions.DEFAULT_OPTIONS,
-                ChineseTextRecognizerOptions.Builder().build()
+                ChineseTextRecognizerOptions.Builder().build(),
+                JapaneseTextRecognizerOptions.Builder().build(),
+                KoreanTextRecognizerOptions.Builder().build()
             )
             for (opt in options) {
                 val client = TextRecognition.getClient(opt)
