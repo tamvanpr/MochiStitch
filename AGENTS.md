@@ -101,7 +101,9 @@ flag tinjau.
   crop banner dua lapis: template-match OpenCV (port setia bannercut2:
   resize+equalize+Canny+dark-mask, 5 sinyal terbobot, ambang web) per
   halaman + NCC murni sebagai fallback bila native gagal + gerbang
-  konsistensi BannerGate sebagai pendamping; selalu ada catatan
+  konsistensi BannerGate HANYA untuk sumber ber-banner (baozimh;
+  sumber lain + impor manual = lapis template saja agar strip seragam
+  milik komik tak ikut ke-crop); selalu ada catatan
   keputusan), BannerGate, BannerTemplate, BannerOcv (opencv:4.5.3),
   FileNamer. Preview hasil diskalakan ke <=1280px.
 - `core-settings/` — DataStore; tanpa smartCut/strictness/paper/fit

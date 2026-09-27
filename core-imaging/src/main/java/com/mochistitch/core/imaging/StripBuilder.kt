@@ -107,7 +107,7 @@ class StripBuilder(
                     minFrac = p.third
                 )
             } else null
-            val bannerResult = bannerCrops(measured, policy, bannerTemplateBitmaps)
+            val bannerResult = bannerCrops(measured, policy, bannerTemplateBitmaps, banner)
             val bannerCrops = bannerResult.crops
 
             // 1) Potong global: seluruh halaman dipindai pada resolusi kecil lalu
@@ -208,13 +208,16 @@ class StripBuilder(
     /**
      * Banner -> crop (topCut, bottomCut) per indeks halaman, piksel asli.
      * Lapis template berjalan SELALU (tak butuh sourceId: cocok = banner).
-     * Gerbang konsistensi butuh policy (asumsi tinggi + risiko header
-     * komik yang berulang). Selalu ada catatan keputusan (diagnostik).
+     * Gerbang konsistensi HANYA untuk sumber ber-banner ([sourceBanner]
+     * non-null, saat ini keluarga baozimh): strip seragam di sumber lain
+     * bisa jadi margin/kartu komik asli, jangan asal crop. Selalu ada
+     * catatan keputusan (diagnostik).
      */
     private fun bannerCrops(
         measured: List<StripRenderer.Measured>,
         policy: BannerPolicy?,
-        templateBitmaps: List<Bitmap>
+        templateBitmaps: List<Bitmap>,
+        sourceBanner: BannerPolicy?
     ): BannerResult {
         if (measured.isEmpty()) return BannerResult(emptyMap(), null)
         if (policy == null && templateBitmaps.isEmpty()) return BannerResult(emptyMap(), null)
@@ -326,10 +329,12 @@ class StripBuilder(
                 }
             }
         }
-        // Lapis 2 — gerbang konsistensi (banner belum dikenal; butuh policy).
+        // Lapis 2 — gerbang konsistensi (banner belum dikenal; hanya bila
+        // sumbernya memang ber-banner — kalau tidak, strip seragam bisa
+        // jadi margin/kartu komik asli).
         val gateTop: Set<Int>
         val gateBot: Set<Int>
-        if (policy != null && tops.isNotEmpty() && bots.isNotEmpty()) {
+        if (sourceBanner != null && policy != null && tops.isNotEmpty() && bots.isNotEmpty()) {
             val topStrips = tops.map { it.second }
             val botStrips = bots.map { it.second }
             val decision = BannerGate.decide(topStrips, botStrips, policy)
