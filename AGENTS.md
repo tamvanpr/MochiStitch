@@ -49,8 +49,10 @@ Tambahan v7b (anti-bocor):
   (koordinat lokal vs global pernah tertukar sehingga potongan terencana
   di luar halaman pertama terbuang diam-diam).
 - Potong di TENGAH celah, bukan ujungnya (anti menempel balon).
-- continuityMap + touchesEdge: goresan tegak yang menyentuh batas halaman
-  menahan pasangan halaman satu berkas (anti balon terbelah antar-file).
+- continuityMap = touchesEdge saja (goresan tegak >=10px ATAU garis datar
+  >=1/4 lebar di 16 baris tepi): aliran art mulus SENGAJA tak di-link
+  (putus di situ tak terlihat). Tepi halaman tak-bersentuhan = safeBreak
+  (putus diam-diam); hanya tepi bersentuhan yang ditandai seamCut.
 - Batas antar-berkas output HANYA boleh jatuh di tepi potongan terencana
   (`Seg.cutTop` → `Sheet.safeBreak`): batas lunak HARGA MATI, tanpa
   penahanan melewati batas. Tepi tak-terencana yang terpaksa diputus

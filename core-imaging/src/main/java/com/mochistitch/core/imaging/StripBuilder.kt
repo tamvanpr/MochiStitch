@@ -13,6 +13,7 @@ import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.InputStream
 import kotlin.math.max
+import kotlin.math.min
 import kotlin.math.roundToInt
 
 /** Satu berkas strip hasil rakitan. */
@@ -137,9 +138,12 @@ class StripBuilder(
             val byOrder = measured.mapIndexed { i, m -> i to m }.toMap()
             val linked = continuityMap(segs, byOrder)
             // Batas antar-berkas hanya boleh jatuh di tepi potongan
-            // terencana (cutTop); tepi batas halaman asli ditahan/ditandai.
+            // terencana (cutTop) ATAU tepi halaman yang tak bersentuhan
+            // konten (bukan bagian dari pasangan linked): margin kosong /
+            // ganti scene aman diputus tanpa tanda.
             val sheets = segs.mapIndexed { idx, s ->
-                PageGrouper.Sheet(order = idx, renderedHeight = s.renderedH, safeBreak = s.cutTop)
+                val touch = idx > 0 && linked.contains((idx - 1) to idx)
+                PageGrouper.Sheet(order = idx, renderedHeight = s.renderedH, safeBreak = s.cutTop || !touch)
             }
             val bundles = PageGrouper.group(
                 sheets, settings.splitRule, settings.maxStripHeight, settings.pagesPerPack,
@@ -762,6 +766,12 @@ class StripBuilder(
      * latar-datar-vs-datar TIDAK dihitung bersambung (margin putih bertemu
      * margin putih bukan alasan menggabung berkas).
      */
+    /**
+     * Tepi antar-halaman yang BERBAHAYA: struktur konten menyentuh batas
+     * (balon/teks terbelah antar-halaman). Aliran art yang mulus
+     * ([SeamScan.seamContinues]) SENGAJA tidak di-link: putus di situ
+     * tidak terlihat saat berkas ditumpuk berurutan.
+     */
     private fun continuityMap(
         segs: List<Seg>,
         byOrder: Map<Int, StripRenderer.Measured>
@@ -777,11 +787,7 @@ class StripBuilder(
             val bottom = renderer.edgePatch(a.uri, ma.width, ma.height, a.srcBottom - r, a.srcBottom) ?: continue
             val top = renderer.edgePatch(b.uri, mb.width, mb.height, b.srcTop, b.srcTop + r) ?: continue
             if (!SeamScan.hasContent(bottom.px) && !SeamScan.hasContent(top.px)) continue
-            if (SeamScan.seamContinues(bottom.px, bottom.w, bottom.h, top.px, top.w, top.h)) {
-                out.add(i to i + 1)
-            } else if (touchesEdge(bottom, top = false) || touchesEdge(top, top = true)) {
-                // Struktur tinta tegak menyentuh batas halaman (garis balon /
-                // teks terbelah antar-halaman): tahan satu berkas.
+            if (touchesEdge(bottom, top = false) || touchesEdge(top, top = true)) {
                 out.add(i to i + 1)
             }
         }
@@ -789,9 +795,10 @@ class StripBuilder(
     }
 
     /**
-     * True bila ada goresan tinta TEGAK yang menyentuh tepi strip (16 baris
-     * tepi): kolom dengan run gelap vertikal >= 10px. Screentone (titik
-     * 2-4px) tidak lolos; garis balon/teks yang terpotong tepi lolos.
+     * True bila konten MENYENTUH tepi strip: goresan tegak (kolom dengan
+     * run gelap vertikal >= 10px) ATAU garis datar panjang (run gelap
+     * horizontal >= 1/4 lebar pada baris tak-terstruktur) dalam 16 baris
+     * tepi. Screentone (titik 2-4px) dan arsir tipis tidak lolos.
      */
     private fun touchesEdge(p: StripRenderer.EdgePatch, top: Boolean): Boolean {
         if (p.w <= 0 || p.h < 16) return false
@@ -816,6 +823,11 @@ class StripBuilder(
                     run = 0
                 }
             }
+        }
+        val prof = RowScanner.scanBuffer(p.px, p.w, p.h)
+        val edgeRows = if (top) 0 until minOf(8, p.h) else maxOf(0, p.h - 8) until p.h
+        for (y in edgeRows) {
+            if (!prof.structured[y] && prof.maxRun[y] >= p.w / 4) return true
         }
         return false
     }
