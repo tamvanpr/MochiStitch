@@ -511,7 +511,7 @@ class StudioViewModel : ViewModel() {
                         busy = false,
                         slices = slices,
                         screen = StudioScreen.RESULT,
-                        notice = out.bannerNote
+                        notice = "[${BuildConfig.GIT_SHA}] ${out.bannerNote}"
                     )
                 }
             } catch (e: Throwable) {

@@ -19,6 +19,16 @@ android {
         vectorDrawables {
             useSupportLibrary = true
         }
+        // Hash commit untuk label diagnostik (bukti versi build di HP).
+        val gitSha = try {
+            providers.exec {
+                commandLine("git", "rev-parse", "--short", "HEAD")
+                isIgnoreExitValue = true
+            }.standardOutput.asText.get().trim().take(7).ifEmpty { "local" }
+        } catch (t: Throwable) {
+            "local"
+        }
+        buildConfigField("String", "GIT_SHA", "\"$gitSha\"")
     }
 
     signingConfigs {
@@ -70,6 +80,7 @@ android {
 
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 
     packaging {
