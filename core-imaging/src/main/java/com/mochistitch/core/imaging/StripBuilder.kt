@@ -113,8 +113,11 @@ class StripBuilder(
             // 1) Potong global: seluruh halaman dipindai pada resolusi kecil lalu
             // titik potong Direncanakan di atas profil gabungan, sehingga batas
             // antar-halaman tidak lagi menjadi potongan paksa.
+            // Batas keras: penahanan tepi tak-terencana tak boleh lebih dari ~10% batas.
+            // Dipakai perencana (batal-vs-paksa) dan pengelompok (tahan-vs-putus).
+            val hardCap = limit + limit / 10
             val globalCuts = if (wantCut) {
-                planGlobalCuts(measured, bannerCrops, stripWidth, limit, settings)
+                planGlobalCuts(measured, bannerCrops, stripWidth, limit, settings, hardCap)
             } else GlobalPlan(emptyMap(), emptySet(), 0, measured.size)
             val segs = mutableListOf<Seg>()
             measured.forEachIndexed { i, m ->
@@ -138,8 +141,6 @@ class StripBuilder(
             val sheets = segs.mapIndexed { idx, s ->
                 PageGrouper.Sheet(order = idx, renderedHeight = s.renderedH, safeBreak = s.cutTop)
             }
-            // Batas keras: penahanan tepi tak-terencana tak boleh lebih dari ~10% batas.
-            val hardCap = limit + limit / 10
             val bundles = PageGrouper.group(
                 sheets, settings.splitRule, settings.maxStripHeight, settings.pagesPerPack,
                 linked = { a, b -> linked.contains(a to b) }, hardCap = hardCap
@@ -149,6 +150,8 @@ class StripBuilder(
             onProgress(BuildPhase.MEASURING, 0.2f)
             val strips = mutableListOf<BuiltStrip>()
             var number = 1
+            var tallCount = 0
+            val overList = mutableListOf<String>()
             val series = settings.seriesTitle.ifBlank { "MochiStitch" }
             val chapter = settings.chapterLabel.ifBlank { "1" }
 
@@ -159,6 +162,9 @@ class StripBuilder(
                     StripRenderer.Placement(s.uri, s.srcTop, s.srcBottom)
                 }
                 val whole = renderer.renderStrip(placements, config).getOrThrow()
+                val bundleH = bundle.sheets.sumOf { segs[it.order].renderedH }
+                if (bundle.tallSingle) tallCount++
+                if (bundleH > limit) overList.add("#${number}:$bundleH")
 
                 val anyBanner = bundle.sheets.any { sheet -> segs[sheet.order].bannerCut }
                 val anyForced = bundle.sheets.any { sheet -> segs[sheet.order].order in forcedSeg }
@@ -191,7 +197,9 @@ class StripBuilder(
                     "pindai ${globalCuts.scannedPages}/${globalCuts.totalPages} halaman; " +
                     "sibuk ${globalCuts.busyPct}% larang ${globalCuts.keepPct}% " +
                     "zona ${globalCuts.zonePct}% pita ${globalCuts.bandCount}) · " +
-                    "Berkas: ${bundles.size} (${forcedBounds} batas paksa)."
+                    "Berkas: ${bundles.size} (${forcedBounds} batas paksa, " +
+                    "${tallCount} utuh-tinggi" +
+                    (if (overList.isEmpty()) "" else "; lewat: ${overList.joinToString(" ")}") + ")."
             } else {
                 "Rencana potong: nonaktif (aturan ${settings.splitRule})."
             }
@@ -439,7 +447,8 @@ class StripBuilder(
         bannerCrops: Map<Int, Pair<Int, Int>>,
         stripWidth: Int,
         limit: Int,
-        settings: StitchSettings
+        settings: StitchSettings,
+        hardCap: Int
     ): GlobalPlan {
         val scanWidth = SCAN_WIDTH
         val edge = when (settings.cutStrictness) {
@@ -463,6 +472,16 @@ class StripBuilder(
         val structAll = ArrayList<Boolean>()
         val offsets = IntArray(measured.size)
         val windows = arrayOfNulls<Window>(measured.size)
+        // Halaman yang utuh pun melewati batas keras: pembatalan potong
+        // paksa TIDAK berlaku di sana (lebih baik potong bertanda
+        // daripada berkas tak terbatas).
+        val overCap = BooleanArray(measured.size) { i ->
+            val m = measured[i]
+            val (cutTop, cutBot) = bannerCrops[i] ?: (0 to 0)
+            val effTop = cutTop.coerceIn(0, m.height)
+            val effBot = (m.height - cutBot).coerceIn(effTop + 1, m.height)
+            (effBot - effTop).toLong() * stripWidth / m.width.coerceAtLeast(1) > hardCap
+        }
         var scanned = 0
         for ((i, m) in measured.withIndex()) {
             offsets[i] = busy.size
@@ -540,9 +559,10 @@ class StripBuilder(
             val ly = y - offsets[idx]
             if (ly < w.scanTop || ly >= w.scanBot) continue
             // Potongan paksa yang jatuh di zona larangan (dalam balon)
-            // DIBATALKAN: halaman dibiarkan utuh/kelebihan tinggi dan
-            // ditandai, daripada balon terpotong.
-            if (cut.forced && keepAll[y]) {
+            // DIBATALKAN — kecuali halamannya utuh pun melewati batas
+            // keras: halaman dibiarkan utuh/kelebihan tinggi dan ditandai
+            // hanya bila masih muat.
+            if (cut.forced && keepAll[y] && !overCap[idx]) {
                 forced.add(idx)
                 planForced++
                 continue
