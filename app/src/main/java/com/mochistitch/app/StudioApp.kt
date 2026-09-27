@@ -7,6 +7,7 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -20,10 +21,12 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Apps
+import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.GridOn
@@ -42,7 +45,6 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
@@ -67,14 +69,17 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.core.content.ContextCompat
 import com.mochistitch.core.settings.PackFormat
 import com.mochistitch.core.ui.EmptyState
 import com.mochistitch.core.ui.MochiListCard
+import com.mochistitch.core.ui.NumberBadge
 import com.mochistitch.core.ui.PageStrip
 import com.mochistitch.core.ui.SettingsPanel
 import com.mochistitch.core.ui.SlicePreview
@@ -486,15 +491,24 @@ private fun InputStep(viewModel: StudioViewModel, modifier: Modifier = Modifier)
                 Text("Pilih chapter${state.rawSourceLabel?.let { " · $it" } ?: ""} (${state.rawChapters.size})")
             },
             text = {
-                LazyColumn(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                    items(state.rawChapters, key = { it.id + it.url }) { ch ->
-                        TextButton(
-                            onClick = { viewModel.fetchChapterPick(ch, ctx) },
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Text(ch.title, modifier = Modifier.fillMaxWidth())
-                        }
-                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                LazyColumn(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    itemsIndexed(state.rawChapters, key = { _, ch -> ch.id + ch.url }) { index, ch ->
+                        ListItem(
+                            headlineContent = {
+                                Text(ch.title, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                            },
+                            leadingContent = { NumberBadge(number = index + 1) },
+                            trailingContent = {
+                                Icon(
+                                    Icons.Default.ChevronRight,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            },
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(12.dp))
+                                .clickable { viewModel.fetchChapterPick(ch, ctx) }
+                        )
                     }
                 }
             }

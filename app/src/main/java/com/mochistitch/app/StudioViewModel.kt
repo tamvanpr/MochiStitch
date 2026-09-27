@@ -354,8 +354,9 @@ class StudioViewModel : ViewModel() {
         }
         clearRawChapters()
         // rawSourceId ikut terhapus oleh clearRawChapters — simpan dulu.
+        // (Hasil rakitan lama SENGAJA tidak dihapus di sini: unduhan boleh
+        // gagal, dan hasil lama masih bisa diterbitkan.)
         _state.update { it.copy(rawSourceId = sourceId) }
-        dropSlices()
         _state.update { it.copy(busy = true, phase = "Mengambil daftar gambar", fraction = 0f, failure = null) }
         viewModelScope.launch(Dispatchers.IO) {
             try {
