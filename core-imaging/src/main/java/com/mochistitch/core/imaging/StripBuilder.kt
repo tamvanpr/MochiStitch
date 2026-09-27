@@ -718,6 +718,24 @@ class StripBuilder(
         )
         val keep = keepHalf(patch.px, patch.w, patch.h)
         val merged = BooleanArray(patch.h) { y -> prof.busy[y] || zones[y] || keep[y] }
+        // Lapisan ML Kit: teks yang lolos semua heuristik piksel.
+        try {
+            val bmp = Bitmap.createBitmap(patch.w, patch.h, Bitmap.Config.ARGB_8888)
+            try {
+                bmp.setPixels(patch.px, 0, patch.w, 0, 0, patch.w, patch.h)
+                TextGuard.textRows(bmp)?.let { trows ->
+                    for (y in merged.indices) {
+                        if (trows.getOrElse(y) { false }) merged[y] = true
+                    }
+                }
+            } finally {
+                try {
+                    bmp.recycle()
+                } catch (t: Throwable) {
+                }
+            }
+        } catch (t: Throwable) {
+        }
         val blocked = CutPlanner.blockedRows(merged, VERIFY_GUARD)
         val center = (cutY - top).coerceIn(0, patch.h - 1)
         if (!blocked[center]) return cutY to false
