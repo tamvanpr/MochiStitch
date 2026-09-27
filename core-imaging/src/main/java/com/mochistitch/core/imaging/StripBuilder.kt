@@ -195,10 +195,10 @@ class StripBuilder(
             } else {
                 "Rencana potong: nonaktif (aturan ${settings.splitRule})."
             }
+            val note = listOfNotNull(bannerResult.note, cutNote).joinToString(" ")
             val withMarks = if (wantCut && globalCuts.marks.isNotEmpty()) {
                 "$note Titik: ${globalCuts.marks.joinToString(" ")}."
             } else note
-            val note = listOfNotNull(bannerResult.note, cutNote).joinToString(" ")
             Result.success(BuildOutput(strips, withMarks))
         } catch (e: Throwable) {
             Result.failure(e)
