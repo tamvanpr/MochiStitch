@@ -384,32 +384,29 @@ private fun InputStep(viewModel: StudioViewModel, modifier: Modifier = Modifier)
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            OutlinedButton(
+            InputActionButton(
+                icon = Icons.Default.Image,
+                label = "Gambar",
+                filled = false,
                 onClick = {
                     pickImages.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
                 },
                 modifier = Modifier.weight(1f)
-            ) {
-                Icon(Icons.Default.Image, contentDescription = null, modifier = Modifier.size(18.dp))
-                Spacer(Modifier.size(6.dp))
-                Text("Gambar")
-            }
-            OutlinedButton(
+            )
+            InputActionButton(
+                icon = Icons.Default.Unarchive,
+                label = "Arsip",
+                filled = false,
                 onClick = { pickArchive.launch(arrayOf("*/*")) },
                 modifier = Modifier.weight(1f)
-            ) {
-                Icon(Icons.Default.Unarchive, contentDescription = null, modifier = Modifier.size(18.dp))
-                Spacer(Modifier.size(6.dp))
-                Text("Arsip")
-            }
-            Button(
+            )
+            InputActionButton(
+                icon = Icons.Default.Download,
+                label = "Unduh",
+                filled = true,
                 onClick = { urlText = ""; showUrlDialog = true },
                 modifier = Modifier.weight(1f)
-            ) {
-                Icon(Icons.Default.Download, contentDescription = null, modifier = Modifier.size(18.dp))
-                Spacer(Modifier.size(6.dp))
-                Text("Unduh")
-            }
+            )
         }
 
         if (state.pages.isEmpty()) {
@@ -516,6 +513,33 @@ private fun InputStep(viewModel: StudioViewModel, modifier: Modifier = Modifier)
     }
 }
 
+@Composable
+private fun InputActionButton(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    label: String,
+    filled: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    // Ikon di atas label (bukan sejajar): muat di layar sempit tanpa
+    // teks terpotong, dan jempol lebih mudah kena.
+    val content: @Composable () -> Unit = {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+            modifier = Modifier.padding(vertical = 4.dp)
+        ) {
+            Icon(icon, contentDescription = null, modifier = Modifier.size(22.dp))
+            Text(label, style = MaterialTheme.typography.labelLarge, maxLines = 1)
+        }
+    }
+    if (filled) {
+        Button(onClick = onClick, modifier = modifier.height(64.dp)) { content() }
+    } else {
+        OutlinedButton(onClick = onClick, modifier = modifier.height(64.dp)) { content() }
+    }
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun QueueStep(
@@ -533,7 +557,7 @@ private fun QueueStep(
             EmptyState(
                 icon = Icons.Default.GridOn,
                 title = "Antrean kosong",
-                desc = "Tambah lewat Gambar, Arsip, atau Unduh di tab Masuk — atau rakit sekali; tiap komik otomatis masuk antrean.",
+                desc = "Unduh atau impor halaman — tiap komik otomatis masuk antrean.",
                 modifier = Modifier.fillMaxWidth()
             )
         } else {
