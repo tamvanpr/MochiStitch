@@ -526,17 +526,16 @@ private fun InputActionButton(
     val content: @Composable () -> Unit = {
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(4.dp),
-            modifier = Modifier.padding(vertical = 4.dp)
+            verticalArrangement = Arrangement.spacedBy(2.dp)
         ) {
-            Icon(icon, contentDescription = null, modifier = Modifier.size(22.dp))
+            Icon(icon, contentDescription = null, modifier = Modifier.size(20.dp))
             Text(label, style = MaterialTheme.typography.labelLarge, maxLines = 1)
         }
     }
     if (filled) {
-        Button(onClick = onClick, modifier = modifier.height(64.dp)) { content() }
+        Button(onClick = onClick, modifier = modifier.height(72.dp)) { content() }
     } else {
-        OutlinedButton(onClick = onClick, modifier = modifier.height(64.dp)) { content() }
+        OutlinedButton(onClick = onClick, modifier = modifier.height(72.dp)) { content() }
     }
 }
 
