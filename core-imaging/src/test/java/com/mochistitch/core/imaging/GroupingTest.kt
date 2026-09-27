@@ -70,11 +70,13 @@ class GroupingTest {
             input, SplitRule.MAX_HEIGHT, 1000, 10,
             linked = { a, b -> a == 1 && b == 2 }, hardCap = 2000
         )
-        assertEquals(2, groups.size)
-        assertEquals(listOf(0, 1, 2), groups[0].sheets.map { it.order })
-        assertEquals(listOf(3), groups[1].sheets.map { it.order })
+        assertEquals(3, groups.size)
+        assertEquals(listOf(0), groups[0].sheets.map { it.order })
+        assertEquals(listOf(1, 2), groups[1].sheets.map { it.order })
+        assertEquals(listOf(3), groups[2].sheets.map { it.order })
         assertFalse(groups[0].seamCut)
         assertFalse(groups[1].seamCut)
+        assertFalse(groups[2].seamCut)
     }
 
     @Test
@@ -124,7 +126,7 @@ class GroupingTest {
             Sheet(2, 600, safeBreak = true)
         )
         val groups = PageGrouper.group(input, SplitRule.MAX_HEIGHT, 1000, 10, linked = null, hardCap = 1500)
-        assertEquals(2, groups.size)
+        assertEquals(3, groups.size)
         assertEquals(listOf(0), groups[0].sheets.map { it.order })
         assertEquals(listOf(1), groups[1].sheets.map { it.order })
         assertEquals(listOf(2), groups[2].sheets.map { it.order })
