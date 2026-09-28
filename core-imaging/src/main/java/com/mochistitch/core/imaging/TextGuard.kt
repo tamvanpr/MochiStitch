@@ -42,12 +42,19 @@ object TextGuard {
      * teks beda panel tidak disatukan, tapi garis dalam satu balon
      * (rapat/teks) tidak membelah.
      */
+    data class TextOut(
+        val rows: BooleanArray?,
+        val latinOk: Boolean,
+        val cjkOk: Boolean,
+        val lines: Int
+    )
+
     fun textRows(
         bitmap: Bitmap,
         structured: BooleanArray? = null,
         maxRun: IntArray? = null
-    ): Triple<BooleanArray?, Int, Int> {
-        if (bitmap.width <= 0 || bitmap.height <= 0) return Triple(null, 0, 0)
+    ): TextOut {
+        if (bitmap.width <= 0 || bitmap.height <= 0) return TextOut(null, false, false, 0)
         return try {
             val image = InputImage.fromBitmap(bitmap, 0)
             val lines = mutableListOf<TL>()
@@ -57,12 +64,13 @@ object TextGuard {
                 JapaneseTextRecognizerOptions.Builder().build(),
                 KoreanTextRecognizerOptions.Builder().build()
             )
-            var modelsOk = 0
-            for (opt in options) {
+            var latinOk = false
+            var cjkOk = false
+            for ((idx, opt) in options.withIndex()) {
                 val client = TextRecognition.getClient(opt)
                 try {
                     val result = Tasks.await(client.process(image), ML_TIMEOUT_SEC, TimeUnit.SECONDS)
-                    modelsOk++
+                    if (idx == 0) latinOk = true else cjkOk = true
                     for (block in result.textBlocks) {
                         for (line in block.lines) {
                             val box = line.boundingBox ?: continue
@@ -86,8 +94,8 @@ object TextGuard {
                 }
             }
             val out = BooleanArray(bitmap.height)
-            if (modelsOk == 0) return Triple(null, 0, 0)
-            if (lines.isEmpty()) return Triple(out, modelsOk, 0)
+            if (!latinOk && !cjkOk) return TextOut(null, false, false, 0)
+            if (lines.isEmpty()) return TextOut(out, latinOk, cjkOk, 0)
             lines.sortBy { it.top }
             var gTop = lines[0].top
             var gBot = lines[0].bottom
@@ -131,9 +139,9 @@ object TextGuard {
                 }
             }
             flush()
-            Triple(out, modelsOk, lines.size)
+            TextOut(out, latinOk, cjkOk, lines.size)
         } catch (t: Throwable) {
-            Triple(null, 0, 0)
+            TextOut(null, false, false, 0)
         }
     }
 

@@ -204,7 +204,7 @@ class StripBuilder(
                     "pindai ${globalCuts.scannedPages}/${globalCuts.totalPages} halaman; " +
                     "sibuk ${globalCuts.busyPct}% larang ${globalCuts.keepPct}% " +
                     "zona ${globalCuts.zonePct}% pita ${globalCuts.bandCount} " +
-                    "ml ${globalCuts.mlOk}/${globalCuts.mlMiss}/${globalCuts.mlLines}) · " +
+                    "ml ${globalCuts.mlOk}/${globalCuts.mlMiss}/${globalCuts.mlLines} cjk ${globalCuts.mlCjk}) · " +
                     "Berkas: ${bundles.size} (${forcedBounds} batas paksa, " +
                     "${tallCount} utuh-tinggi" +
                     (if (overList.isEmpty()) "" else "; lewat: ${overList.joinToString(" ")}") + ")."
@@ -450,7 +450,8 @@ class StripBuilder(
         val marks: List<String> = emptyList(),
         val mlOk: Int = 0,
         val mlMiss: Int = 0,
-        val mlLines: Int = 0
+        val mlLines: Int = 0,
+        val mlCjk: Int = 0
     )
 
     private suspend fun planGlobalCuts(
@@ -564,7 +565,8 @@ class StripBuilder(
             val finalY: Int = -1,
             val badVerify: Boolean = false,
             val mlOk: Boolean = false,
-            val mlLines: Int = 0
+            val mlLines: Int = 0,
+            val cjk: Boolean = false
         )
         // Fase A (paralel, 2 lajur): verifikasi tiap potong independen.
         // Fase B (berurutan): saring minGap + kumpulkan (urutan dipertahankan).
@@ -583,8 +585,9 @@ class StripBuilder(
                     }
                     val local = ly - w.scanTop
                     val srcY = (w.effTop + local.toDouble() * (w.effBot - w.effTop) / (w.scanBot - w.scanTop)).toInt()
-                    val (finalY, badVerify, mlOk, mlLines) = verifyCut(measured[idx], srcY, edge, range)
-                    VItem(cut, y, idx, cancelled = false, finalY, badVerify, mlOk, mlLines)
+                    val vr = verifyCut(measured[idx], srcY, edge, range)
+                    val (finalY, badVerify, mlOk, mlLines) = vr
+                    VItem(cut, y, idx, cancelled = false, finalY, badVerify, mlOk, mlLines, vr.cjk)
                 }
             }.awaitAll().filterNotNull()
         }
@@ -595,6 +598,7 @@ class StripBuilder(
         var mlOk = 0
         var mlMiss = 0
         var mlLines = 0
+        var mlCjk = 0
         val marks = mutableListOf<String>()
         for (item in items) {
             val cut = item.cut
@@ -607,6 +611,7 @@ class StripBuilder(
             val w = windows.getOrNull(idx) ?: continue
             if (item.mlOk) mlOk++ else mlMiss++
             mlLines += item.mlLines
+            if (item.cjk) mlCjk++
             val finalY = item.finalY
             val badVerify = item.badVerify
             val list = out.getOrPut(idx) { mutableListOf() }
@@ -619,7 +624,7 @@ class StripBuilder(
             if (cut.forced) planForced++ else if (badVerify) verifyForced++
             marks.add("p${idx + 1}:$finalY" + if (cut.forced || badVerify) "f" else "")
         }
-        return GlobalPlan(out, forced, scanned, measured.size, planForced, verifyForced, profStats[0], profStats[1], profStats[2], profStats[3], marks.toList(), mlOk, mlMiss, mlLines)
+        return GlobalPlan(out, forced, scanned, measured.size, planForced, verifyForced, profStats[0], profStats[1], profStats[2], profStats[3], marks.toList(), mlOk, mlMiss, mlLines, mlCjk)
     }
 
     /**
@@ -729,7 +734,7 @@ class StripBuilder(
      * (<= 300px, berzona bersih); bila tak ada, pertahankan posisi dan
      * tandai gagal verifikasi.
      */
-    private data class VResult(val y: Int, val bad: Boolean, val mlOk: Boolean, val mlLines: Int)
+    private data class VResult(val y: Int, val bad: Boolean, val mlOk: Boolean, val mlLines: Int, val cjk: Boolean = false)
 
     private fun verifyCut(
         m: StripRenderer.Measured,
@@ -758,13 +763,16 @@ class StripBuilder(
         // Lapisan ML Kit: teks yang lolos semua heuristik piksel.
         var mlOk = false
         var mlLines = 0
+        var cjkHit = false
         try {
             val bmp = Bitmap.createBitmap(patch.w, patch.h, Bitmap.Config.ARGB_8888)
             try {
                 bmp.setPixels(patch.px, 0, patch.w, 0, 0, patch.w, patch.h)
-                val (trows, modelsOk, found) = TextGuard.textRows(bmp, prof.structured, prof.maxRun)
-                mlOk = modelsOk > 0
-                mlLines = found
+                val tout = TextGuard.textRows(bmp, prof.structured, prof.maxRun)
+                mlOk = tout.latinOk || tout.cjkOk
+                mlLines = tout.lines
+                val trows = tout.rows
+                cjkHit = tout.cjkOk
                 if (trows != null) {
                     for (y in merged.indices) {
                         if (trows.getOrElse(y) { false }) merged[y] = true
@@ -780,15 +788,15 @@ class StripBuilder(
         }
         val blocked = CutPlanner.blockedRows(merged, VERIFY_GUARD)
         val center = (cutY - top).coerceIn(0, patch.h - 1)
-        if (!blocked[center]) return VResult(cutY, false, mlOk, mlLines)
+        if (!blocked[center]) return VResult(cutY, false, mlOk, mlLines, cjkHit)
         val radius = min(300, patch.h / 2)
         for (d in 1..radius) {
             val dn = center - d
-            if (dn >= 0 && !blocked[dn]) return VResult(top + dn, false, mlOk, mlLines)
+            if (dn >= 0 && !blocked[dn]) return VResult(top + dn, false, mlOk, mlLines, cjkHit)
             val up = center + d
-            if (up < patch.h && !blocked[up]) return VResult(top + up, false, mlOk, mlLines)
+            if (up < patch.h && !blocked[up]) return VResult(top + up, false, mlOk, mlLines, cjkHit)
         }
-        return VResult(cutY, true, mlOk, mlLines)
+        return VResult(cutY, true, mlOk, mlLines, cjkHit)
     }
 
     /** Interior terkurung skala setengah untuk verifikasi ROI (hemat). */
