@@ -33,7 +33,9 @@ object TextGuard {
      * Baris-baris ROI yang mengandung teks ATAU berada di dalam blok teks,
      * plus jumlah model yang BERHASIL berjalan (0 = ML mati total:
      * tanpa Play Services / model belum terunduh / timeout).
-     * Pasangan (null, 0) = tak ada info.
+     * Mengembalikan Triple(baris, modelOk, garisTeks): baris null bila
+     * tak ada info; modelOk = model recognizer yang sukses; garisTeks =
+     * jumlah garis teks mentah semua model.
      *
      * [structured]/[maxRun] (dari pindaian ROI, boleh null): garis
      * pembatas panel (run panjang tak-terstruktur) MEMBELAH grup —
@@ -44,8 +46,8 @@ object TextGuard {
         bitmap: Bitmap,
         structured: BooleanArray? = null,
         maxRun: IntArray? = null
-    ): Pair<BooleanArray?, Int> {
-        if (bitmap.width <= 0 || bitmap.height <= 0) return null to 0
+    ): Triple<BooleanArray?, Int, Int> {
+        if (bitmap.width <= 0 || bitmap.height <= 0) return Triple(null, 0, 0)
         return try {
             val image = InputImage.fromBitmap(bitmap, 0)
             val lines = mutableListOf<TL>()
@@ -84,8 +86,8 @@ object TextGuard {
                 }
             }
             val out = BooleanArray(bitmap.height)
-            if (modelsOk == 0) return null to 0
-            if (lines.isEmpty()) return out to modelsOk
+            if (modelsOk == 0) return Triple(null, 0, 0)
+            if (lines.isEmpty()) return Triple(out, modelsOk, 0)
             lines.sortBy { it.top }
             var gTop = lines[0].top
             var gBot = lines[0].bottom
@@ -129,9 +131,9 @@ object TextGuard {
                 }
             }
             flush()
-            out to modelsOk
+            Triple(out, modelsOk, lines.size)
         } catch (t: Throwable) {
-            null to 0
+            Triple(null, 0, 0)
         }
     }
 

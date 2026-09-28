@@ -204,7 +204,7 @@ class StripBuilder(
                     "pindai ${globalCuts.scannedPages}/${globalCuts.totalPages} halaman; " +
                     "sibuk ${globalCuts.busyPct}% larang ${globalCuts.keepPct}% " +
                     "zona ${globalCuts.zonePct}% pita ${globalCuts.bandCount} " +
-                    "ml ${globalCuts.mlOk}/${globalCuts.mlMiss}) · " +
+                    "ml ${globalCuts.mlOk}/${globalCuts.mlMiss}/${globalCuts.mlLines}) · " +
                     "Berkas: ${bundles.size} (${forcedBounds} batas paksa, " +
                     "${tallCount} utuh-tinggi" +
                     (if (overList.isEmpty()) "" else "; lewat: ${overList.joinToString(" ")}") + ")."
@@ -449,7 +449,8 @@ class StripBuilder(
         val bandCount: Int = 0,
         val marks: List<String> = emptyList(),
         val mlOk: Int = 0,
-        val mlMiss: Int = 0
+        val mlMiss: Int = 0,
+        val mlLines: Int = 0
     )
 
     private suspend fun planGlobalCuts(
@@ -562,7 +563,8 @@ class StripBuilder(
             val cancelled: Boolean,
             val finalY: Int = -1,
             val badVerify: Boolean = false,
-            val mlOk: Boolean = false
+            val mlOk: Boolean = false,
+            val mlLines: Int = 0
         )
         // Fase A (paralel, 2 lajur): verifikasi tiap potong independen.
         // Fase B (berurutan): saring minGap + kumpulkan (urutan dipertahankan).
@@ -581,8 +583,8 @@ class StripBuilder(
                     }
                     val local = ly - w.scanTop
                     val srcY = (w.effTop + local.toDouble() * (w.effBot - w.effTop) / (w.scanBot - w.scanTop)).toInt()
-                    val (finalY, badVerify, mlOk) = verifyCut(measured[idx], srcY, edge, range)
-                    VItem(cut, y, idx, cancelled = false, finalY, badVerify, mlOk)
+                    val (finalY, badVerify, mlOk, mlLines) = verifyCut(measured[idx], srcY, edge, range)
+                    VItem(cut, y, idx, cancelled = false, finalY, badVerify, mlOk, mlLines)
                 }
             }.awaitAll().filterNotNull()
         }
@@ -592,6 +594,7 @@ class StripBuilder(
         var verifyForced = 0
         var mlOk = 0
         var mlMiss = 0
+        var mlLines = 0
         val marks = mutableListOf<String>()
         for (item in items) {
             val cut = item.cut
@@ -603,6 +606,7 @@ class StripBuilder(
             }
             val w = windows.getOrNull(idx) ?: continue
             if (item.mlOk) mlOk++ else mlMiss++
+            mlLines += item.mlLines
             val finalY = item.finalY
             val badVerify = item.badVerify
             val list = out.getOrPut(idx) { mutableListOf() }
@@ -615,7 +619,7 @@ class StripBuilder(
             if (cut.forced) planForced++ else if (badVerify) verifyForced++
             marks.add("p${idx + 1}:$finalY" + if (cut.forced || badVerify) "f" else "")
         }
-        return GlobalPlan(out, forced, scanned, measured.size, planForced, verifyForced, profStats[0], profStats[1], profStats[2], profStats[3], marks.toList(), mlOk, mlMiss)
+        return GlobalPlan(out, forced, scanned, measured.size, planForced, verifyForced, profStats[0], profStats[1], profStats[2], profStats[3], marks.toList(), mlOk, mlMiss, mlLines)
     }
 
     /**
@@ -725,21 +729,23 @@ class StripBuilder(
      * (<= 300px, berzona bersih); bila tak ada, pertahankan posisi dan
      * tandai gagal verifikasi.
      */
+    private data class VResult(val y: Int, val bad: Boolean, val mlOk: Boolean, val mlLines: Int)
+
     private fun verifyCut(
         m: StripRenderer.Measured,
         cutY: Int,
         edge: Int,
         range: Int
-    ): Triple<Int, Boolean, Boolean> {
+    ): VResult {
         val half = 320
         val top = (cutY - half).coerceAtLeast(0)
         val bottom = (cutY + half).coerceAtMost(m.height)
-        if (bottom - top < 8) return Triple(cutY, false, false)
+        if (bottom - top < 8) return VResult(cutY, false, false, 0)
         val patch = try {
             renderer.edgePatch(m.uri, m.width, m.height, top, bottom)
         } catch (t: Throwable) {
             null
-        } ?: return Triple(cutY, false, false)
+        } ?: return VResult(cutY, false, false, 0)
         val scale = patch.w.toDouble() / SCAN_WIDTH.coerceAtLeast(1)
         val prof = RowScanner.scanBuffer(patch.px, patch.w, patch.h, edge, range, noisePixels = 3)
         val zones = KeepOut.textZones(
@@ -751,12 +757,14 @@ class StripBuilder(
         val merged = BooleanArray(patch.h) { y -> prof.busy[y] || zones[y] || keep[y] }
         // Lapisan ML Kit: teks yang lolos semua heuristik piksel.
         var mlOk = false
+        var mlLines = 0
         try {
             val bmp = Bitmap.createBitmap(patch.w, patch.h, Bitmap.Config.ARGB_8888)
             try {
                 bmp.setPixels(patch.px, 0, patch.w, 0, 0, patch.w, patch.h)
-                val (trows, modelsOk) = TextGuard.textRows(bmp, prof.structured, prof.maxRun)
+                val (trows, modelsOk, found) = TextGuard.textRows(bmp, prof.structured, prof.maxRun)
                 mlOk = modelsOk > 0
+                mlLines = found
                 if (trows != null) {
                     for (y in merged.indices) {
                         if (trows.getOrElse(y) { false }) merged[y] = true
@@ -772,15 +780,15 @@ class StripBuilder(
         }
         val blocked = CutPlanner.blockedRows(merged, VERIFY_GUARD)
         val center = (cutY - top).coerceIn(0, patch.h - 1)
-        if (!blocked[center]) return Triple(cutY, false, mlOk)
+        if (!blocked[center]) return VResult(cutY, false, mlOk, mlLines)
         val radius = min(300, patch.h / 2)
         for (d in 1..radius) {
             val dn = center - d
-            if (dn >= 0 && !blocked[dn]) return Triple(top + dn, false, mlOk)
+            if (dn >= 0 && !blocked[dn]) return VResult(top + dn, false, mlOk, mlLines)
             val up = center + d
-            if (up < patch.h && !blocked[up]) return Triple(top + up, false, mlOk)
+            if (up < patch.h && !blocked[up]) return VResult(top + up, false, mlOk, mlLines)
         }
-        return Triple(cutY, true, mlOk)
+        return VResult(cutY, true, mlOk, mlLines)
     }
 
     /** Interior terkurung skala setengah untuk verifikasi ROI (hemat). */
