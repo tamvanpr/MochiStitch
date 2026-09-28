@@ -9,6 +9,9 @@ import com.mochistitch.core.settings.CutStrictness
 import com.mochistitch.core.settings.SplitRule
 import com.mochistitch.core.settings.StitchSettings
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.InputStream
@@ -200,7 +203,8 @@ class StripBuilder(
                     "${globalCuts.planForced} perencana + ${globalCuts.verifyForced} verifikasi; " +
                     "pindai ${globalCuts.scannedPages}/${globalCuts.totalPages} halaman; " +
                     "sibuk ${globalCuts.busyPct}% larang ${globalCuts.keepPct}% " +
-                    "zona ${globalCuts.zonePct}% pita ${globalCuts.bandCount}) · " +
+                    "zona ${globalCuts.zonePct}% pita ${globalCuts.bandCount} " +
+                    "ml ${globalCuts.mlOk}/${globalCuts.mlMiss}) · " +
                     "Berkas: ${bundles.size} (${forcedBounds} batas paksa, " +
                     "${tallCount} utuh-tinggi" +
                     (if (overList.isEmpty()) "" else "; lewat: ${overList.joinToString(" ")}") + ")."
@@ -443,10 +447,12 @@ class StripBuilder(
         val keepPct: Int = 0,
         val zonePct: Int = 0,
         val bandCount: Int = 0,
-        val marks: List<String> = emptyList()
+        val marks: List<String> = emptyList(),
+        val mlOk: Int = 0,
+        val mlMiss: Int = 0
     )
 
-    private fun planGlobalCuts(
+    private suspend fun planGlobalCuts(
         measured: List<StripRenderer.Measured>,
         bannerCrops: Map<Int, Pair<Int, Int>>,
         stripWidth: Int,
@@ -549,31 +555,56 @@ class StripBuilder(
             overshoot = 0
         )
         if (plan.isEmpty()) return GlobalPlan(emptyMap(), emptySet(), scanned, measured.size, 0, 0, profStats[0], profStats[1], profStats[2], profStats[3])
+        data class VItem(
+            val cut: PlannedCut,
+            val y: Int,
+            val idx: Int,
+            val cancelled: Boolean,
+            val finalY: Int = -1,
+            val badVerify: Boolean = false,
+            val mlOk: Boolean = false
+        )
+        // Fase A (paralel, 2 lajur): verifikasi tiap potong independen.
+        // Fase B (berurutan): saring minGap + kumpulkan (urutan dipertahankan).
+        val verifyLane = Dispatchers.IO.limitedParallelism(2)
+        val items = coroutineScope {
+            plan.map { cut ->
+                async(verifyLane) {
+                    val y = cut.y.coerceIn(0, combined.busy.size - 1)
+                    val idx = pageIndexAt(offsets, y)
+                    val w = windows.getOrNull(idx)
+                    if (w == null) return@async null
+                    val ly = y - offsets[idx]
+                    if (ly < w.scanTop || ly >= w.scanBot) return@async null
+                    if (cut.forced && keepAll[y] && !overCap[idx]) {
+                        return@async VItem(cut, y, idx, cancelled = true)
+                    }
+                    val local = ly - w.scanTop
+                    val srcY = (w.effTop + local.toDouble() * (w.effBot - w.effTop) / (w.scanBot - w.scanTop)).toInt()
+                    val (finalY, badVerify, mlOk) = verifyCut(measured[idx], srcY, edge, range)
+                    VItem(cut, y, idx, cancelled = false, finalY, badVerify, mlOk)
+                }
+            }.awaitAll().filterNotNull()
+        }
         val out = LinkedHashMap<Int, MutableList<Int>>()
         val forced = LinkedHashSet<Int>()
         var planForced = 0
         var verifyForced = 0
+        var mlOk = 0
+        var mlMiss = 0
         val marks = mutableListOf<String>()
-        for (cut in plan) {
-            val y = cut.y.coerceIn(0, combined.busy.size - 1)
-            val idx = pageIndexAt(offsets, y)
-            val w = windows.getOrNull(idx) ?: continue
-            // y adalah koordinat GLOBAL profil gabungan; ubah ke lokal
-            // halaman dulu sebelum dibandingkan ke jendela pindai.
-            val ly = y - offsets[idx]
-            if (ly < w.scanTop || ly >= w.scanBot) continue
-            // Potongan paksa yang jatuh di zona larangan (dalam balon)
-            // DIBATALKAN — kecuali halamannya utuh pun melewati batas
-            // keras: halaman dibiarkan utuh/kelebihan tinggi dan ditandai
-            // hanya bila masih muat.
-            if (cut.forced && keepAll[y] && !overCap[idx]) {
+        for (item in items) {
+            val cut = item.cut
+            val idx = item.idx
+            if (item.cancelled) {
                 forced.add(idx)
                 planForced++
                 continue
             }
-            val local = ly - w.scanTop
-            val srcY = (w.effTop + local.toDouble() * (w.effBot - w.effTop) / (w.scanBot - w.scanTop)).toInt()
-            val (finalY, badVerify) = verifyCut(measured[idx], srcY, edge, range)
+            val w = windows.getOrNull(idx) ?: continue
+            if (item.mlOk) mlOk++ else mlMiss++
+            val finalY = item.finalY
+            val badVerify = item.badVerify
             val list = out.getOrPut(idx) { mutableListOf() }
             val minGap = (64L * (w.effBot - w.effTop) / (w.scanBot - w.scanTop)).toInt().coerceAtLeast(1)
             val last = list.lastOrNull() ?: w.effTop
@@ -584,7 +615,7 @@ class StripBuilder(
             if (cut.forced) planForced++ else if (badVerify) verifyForced++
             marks.add("p${idx + 1}:$finalY" + if (cut.forced || badVerify) "f" else "")
         }
-        return GlobalPlan(out, forced, scanned, measured.size, planForced, verifyForced, profStats[0], profStats[1], profStats[2], profStats[3], marks.toList())
+        return GlobalPlan(out, forced, scanned, measured.size, planForced, verifyForced, profStats[0], profStats[1], profStats[2], profStats[3], marks.toList(), mlOk, mlMiss)
     }
 
     /**
@@ -699,16 +730,16 @@ class StripBuilder(
         cutY: Int,
         edge: Int,
         range: Int
-    ): Pair<Int, Boolean> {
+    ): Triple<Int, Boolean, Boolean> {
         val half = 320
         val top = (cutY - half).coerceAtLeast(0)
         val bottom = (cutY + half).coerceAtMost(m.height)
-        if (bottom - top < 8) return cutY to false
+        if (bottom - top < 8) return Triple(cutY, false, false)
         val patch = try {
             renderer.edgePatch(m.uri, m.width, m.height, top, bottom)
         } catch (t: Throwable) {
             null
-        } ?: return cutY to false
+        } ?: return Triple(cutY, false, false)
         val scale = patch.w.toDouble() / SCAN_WIDTH.coerceAtLeast(1)
         val prof = RowScanner.scanBuffer(patch.px, patch.w, patch.h, edge, range, noisePixels = 3)
         val zones = KeepOut.textZones(
@@ -719,11 +750,14 @@ class StripBuilder(
         val keep = keepHalf(patch.px, patch.w, patch.h)
         val merged = BooleanArray(patch.h) { y -> prof.busy[y] || zones[y] || keep[y] }
         // Lapisan ML Kit: teks yang lolos semua heuristik piksel.
+        var mlOk = false
         try {
             val bmp = Bitmap.createBitmap(patch.w, patch.h, Bitmap.Config.ARGB_8888)
             try {
                 bmp.setPixels(patch.px, 0, patch.w, 0, 0, patch.w, patch.h)
-                TextGuard.textRows(bmp)?.let { trows ->
+                val (trows, modelsOk) = TextGuard.textRows(bmp)
+                mlOk = modelsOk > 0
+                if (trows != null) {
                     for (y in merged.indices) {
                         if (trows.getOrElse(y) { false }) merged[y] = true
                     }
@@ -738,15 +772,15 @@ class StripBuilder(
         }
         val blocked = CutPlanner.blockedRows(merged, VERIFY_GUARD)
         val center = (cutY - top).coerceIn(0, patch.h - 1)
-        if (!blocked[center]) return cutY to false
+        if (!blocked[center]) return Triple(cutY, false, mlOk)
         val radius = min(300, patch.h / 2)
         for (d in 1..radius) {
             val dn = center - d
-            if (dn >= 0 && !blocked[dn]) return (top + dn) to false
+            if (dn >= 0 && !blocked[dn]) return Triple(top + dn, false, mlOk)
             val up = center + d
-            if (up < patch.h && !blocked[up]) return (top + up) to false
+            if (up < patch.h && !blocked[up]) return Triple(top + up, false, mlOk)
         }
-        return cutY to true
+        return Triple(cutY, true, mlOk)
     }
 
     /** Interior terkurung skala setengah untuk verifikasi ROI (hemat). */

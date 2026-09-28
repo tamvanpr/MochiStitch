@@ -30,11 +30,13 @@ object TextGuard {
     private data class TL(val top: Int, val bottom: Int, val left: Int, val right: Int)
 
     /**
-     * Baris-baris ROI yang mengandung teks ATAU berada di dalam blok teks.
-     * null = tak tersedia (perlakukan sebagai "tak ada info").
+     * Baris-baris ROI yang mengandung teks ATAU berada di dalam blok teks,
+     * plus jumlah model yang BERHASIL berjalan (0 = ML mati total:
+     * tanpa Play Services / model belum terunduh / timeout).
+     * Pasangan (null, 0) = tak ada info.
      */
-    fun textRows(bitmap: Bitmap): BooleanArray? {
-        if (bitmap.width <= 0 || bitmap.height <= 0) return null
+    fun textRows(bitmap: Bitmap): Pair<BooleanArray?, Int> {
+        if (bitmap.width <= 0 || bitmap.height <= 0) return null to 0
         return try {
             val image = InputImage.fromBitmap(bitmap, 0)
             val lines = mutableListOf<TL>()
@@ -44,10 +46,12 @@ object TextGuard {
                 JapaneseTextRecognizerOptions.Builder().build(),
                 KoreanTextRecognizerOptions.Builder().build()
             )
+            var modelsOk = 0
             for (opt in options) {
                 val client = TextRecognition.getClient(opt)
                 try {
-                    val result = Tasks.await(client.process(image), 15, TimeUnit.SECONDS)
+                    val result = Tasks.await(client.process(image), ML_TIMEOUT_SEC, TimeUnit.SECONDS)
+                    modelsOk++
                     for (block in result.textBlocks) {
                         for (line in block.lines) {
                             val box = line.boundingBox ?: continue
@@ -61,6 +65,8 @@ object TextGuard {
                             )
                         }
                     }
+                } catch (t: Throwable) {
+                    // Model ini tak jalan di HP ini — lanjut ke model lain.
                 } finally {
                     try {
                         client.close()
@@ -69,7 +75,8 @@ object TextGuard {
                 }
             }
             val out = BooleanArray(bitmap.height)
-            if (lines.isEmpty()) return out
+            if (modelsOk == 0) return null to 0
+            if (lines.isEmpty()) return out to modelsOk
             lines.sortBy { it.top }
             var gTop = lines[0].top
             var gBot = lines[0].bottom
@@ -110,12 +117,13 @@ object TextGuard {
                 }
             }
             flush()
-            out
+            out to modelsOk
         } catch (t: Throwable) {
-            null
+            null to 0
         }
     }
 
+    private const val ML_TIMEOUT_SEC = 8L
     private const val SINGLE_MIN_PAD = 8
     private const val SINGLE_MAX_PAD = 40
     private const val GROUP_PAD = 10
