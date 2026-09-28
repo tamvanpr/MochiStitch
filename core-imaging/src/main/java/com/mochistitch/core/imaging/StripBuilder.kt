@@ -755,7 +755,7 @@ class StripBuilder(
             val bmp = Bitmap.createBitmap(patch.w, patch.h, Bitmap.Config.ARGB_8888)
             try {
                 bmp.setPixels(patch.px, 0, patch.w, 0, 0, patch.w, patch.h)
-                val (trows, modelsOk) = TextGuard.textRows(bmp)
+                val (trows, modelsOk) = TextGuard.textRows(bmp, prof.structured, prof.maxRun)
                 mlOk = modelsOk > 0
                 if (trows != null) {
                     for (y in merged.indices) {

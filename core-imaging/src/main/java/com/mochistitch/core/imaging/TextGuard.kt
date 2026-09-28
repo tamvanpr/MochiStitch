@@ -34,8 +34,17 @@ object TextGuard {
      * plus jumlah model yang BERHASIL berjalan (0 = ML mati total:
      * tanpa Play Services / model belum terunduh / timeout).
      * Pasangan (null, 0) = tak ada info.
+     *
+     * [structured]/[maxRun] (dari pindaian ROI, boleh null): garis
+     * pembatas panel (run panjang tak-terstruktur) MEMBELAH grup —
+     * teks beda panel tidak disatukan, tapi garis dalam satu balon
+     * (rapat/teks) tidak membelah.
      */
-    fun textRows(bitmap: Bitmap): Pair<BooleanArray?, Int> {
+    fun textRows(
+        bitmap: Bitmap,
+        structured: BooleanArray? = null,
+        maxRun: IntArray? = null
+    ): Pair<BooleanArray?, Int> {
         if (bitmap.width <= 0 || bitmap.height <= 0) return null to 0
         return try {
             val image = InputImage.fromBitmap(bitmap, 0)
@@ -100,7 +109,10 @@ object TextGuard {
                 val gap = line.top - gBot
                 val overlap = minOf(gRight, line.right) - maxOf(gLeft, line.left)
                 val minW = minOf(gRight - gLeft, line.right - line.left).coerceAtLeast(1)
-                if (gap <= (2.5 * maxOf(gMaxH, curH)).toInt() && overlap * 1.0 / minW > 0.3) {
+                val nearEnough = gap <= (GROUP_GAP_FACTOR * maxOf(gMaxH, curH)).toInt()
+                val aligned = overlap * 1.0 / minW > 0.3
+                val divided = hasDivider(gBot, line.top, structured, maxRun, bitmap.width)
+                if (nearEnough && aligned && !divided) {
                     gBot = maxOf(gBot, line.bottom)
                     gLeft = minOf(gLeft, line.left)
                     gRight = maxOf(gRight, line.right)
@@ -123,7 +135,24 @@ object TextGuard {
         }
     }
 
+    private fun hasDivider(
+        fromY: Int,
+        toY: Int,
+        structured: BooleanArray?,
+        maxRun: IntArray?,
+        width: Int
+    ): Boolean {
+        if (structured == null || maxRun == null) return false
+        val bar = width / 4
+        for (y in fromY..toY) {
+            if (y < 0 || y >= structured.size || y >= maxRun.size) continue
+            if (!structured[y] && maxRun[y] >= bar) return true
+        }
+        return false
+    }
+
     private const val ML_TIMEOUT_SEC = 8L
+    private const val GROUP_GAP_FACTOR = 5.0
     private const val SINGLE_MIN_PAD = 8
     private const val SINGLE_MAX_PAD = 40
     private const val GROUP_PAD = 10
