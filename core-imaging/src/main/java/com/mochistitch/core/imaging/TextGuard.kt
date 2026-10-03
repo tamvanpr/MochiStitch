@@ -161,7 +161,7 @@ object TextGuard {
         return false
     }
 
-    private const val ML_TIMEOUT_SEC = 8L
+    private const val ML_TIMEOUT_SEC = 4L
     private const val GROUP_GAP_FACTOR = 5.0
     private const val SINGLE_MIN_PAD = 8
     private const val SINGLE_MAX_PAD = 40

@@ -202,8 +202,8 @@ class StripBuilder(
                 number++
                 // Rakit batch puluhan halaman mengaduk bitmap besar
                 // berulang-ulang (fragmentasi heap): beri kesempatan GC
-                // merapat setiap selesai satu berkas.
-                System.gc()
+                // merapat tiap 5 berkas (GC tiap berkas terlalu lambat).
+                if (number % 5 == 0) System.gc()
             }
             onProgress(BuildPhase.ASSEMBLING, 1.0f)
             val planned = globalCuts.cuts.values.sumOf { it.size }
@@ -215,7 +215,7 @@ class StripBuilder(
                     "pindai ${globalCuts.scannedPages}/${globalCuts.totalPages} halaman; " +
                     "sibuk ${globalCuts.busyPct}% larang ${globalCuts.keepPct}% " +
                     "zona ${globalCuts.zonePct}% pita ${globalCuts.bandCount} " +
-                    "ml ${globalCuts.mlOk}/${globalCuts.mlMiss}/${globalCuts.mlLines} cjk ${globalCuts.mlCjk}) · " +
+                    "ml ${globalCuts.mlOk}/${globalCuts.mlMiss}/${globalCuts.mlSkip}/${globalCuts.mlLines} cjk ${globalCuts.mlCjk}) · " +
                     "Berkas: ${bundles.size} (${forcedBounds} batas paksa, " +
                     "${tallCount} utuh-tinggi" +
                     (if (overList.isEmpty()) "" else "; lewat: ${overList.joinToString(" ")}") + ")."
@@ -462,7 +462,8 @@ class StripBuilder(
         val mlOk: Int = 0,
         val mlMiss: Int = 0,
         val mlLines: Int = 0,
-        val mlCjk: Int = 0
+        val mlCjk: Int = 0,
+        val mlSkip: Int = 0
     )
 
     private suspend fun planGlobalCuts(
@@ -577,7 +578,8 @@ class StripBuilder(
             val badVerify: Boolean = false,
             val mlOk: Boolean = false,
             val mlLines: Int = 0,
-            val cjk: Boolean = false
+            val cjk: Boolean = false,
+            val mlSkipped: Boolean = false
         )
         // Fase A (paralel, 2 lajur): verifikasi tiap potong independen.
         // Fase B (berurutan): saring minGap + kumpulkan (urutan dipertahankan).
@@ -598,7 +600,7 @@ class StripBuilder(
                     val srcY = (w.effTop + local.toDouble() * (w.effBot - w.effTop) / (w.scanBot - w.scanTop)).toInt()
                     val vr = verifyCut(measured[idx], srcY, edge, range)
                     val (finalY, badVerify, mlOk, mlLines) = vr
-                    VItem(cut, y, idx, cancelled = false, finalY, badVerify, mlOk, mlLines, vr.cjk)
+                    VItem(cut, y, idx, cancelled = false, finalY, badVerify, mlOk, mlLines, vr.cjk, vr.mlSkipped)
                 }
             }.awaitAll().filterNotNull()
         }
@@ -608,6 +610,7 @@ class StripBuilder(
         var verifyForced = 0
         var mlOk = 0
         var mlMiss = 0
+        var mlSkip = 0
         var mlLines = 0
         var mlCjk = 0
         val marks = mutableListOf<String>()
@@ -620,7 +623,7 @@ class StripBuilder(
                 continue
             }
             val w = windows.getOrNull(idx) ?: continue
-            if (item.mlOk) mlOk++ else mlMiss++
+            if (item.mlSkipped) mlSkip++ else if (item.mlOk) mlOk++ else mlMiss++
             mlLines += item.mlLines
             if (item.cjk) mlCjk++
             val finalY = item.finalY
@@ -635,7 +638,7 @@ class StripBuilder(
             if (cut.forced) planForced++ else if (badVerify) verifyForced++
             marks.add("p${idx + 1}:$finalY" + if (cut.forced || badVerify) "f" else "")
         }
-        return GlobalPlan(out, forced, scanned, measured.size, planForced, verifyForced, profStats[0], profStats[1], profStats[2], profStats[3], marks.toList(), mlOk, mlMiss, mlLines, mlCjk)
+        return GlobalPlan(out, forced, scanned, measured.size, planForced, verifyForced, profStats[0], profStats[1], profStats[2], profStats[3], marks.toList(), mlOk, mlMiss, mlLines, mlCjk, mlSkip)
     }
 
     /**
@@ -745,7 +748,7 @@ class StripBuilder(
      * (<= 300px, berzona bersih); bila tak ada, pertahankan posisi dan
      * tandai gagal verifikasi.
      */
-    private data class VResult(val y: Int, val bad: Boolean, val mlOk: Boolean, val mlLines: Int, val cjk: Boolean = false)
+    private data class VResult(val y: Int, val bad: Boolean, val mlOk: Boolean, val mlLines: Int, val cjk: Boolean = false, val mlSkipped: Boolean = false)
 
     private fun verifyCut(
         m: StripRenderer.Measured,
@@ -771,43 +774,77 @@ class StripBuilder(
         )
         val keep = keepHalf(patch.px, patch.w, patch.h)
         val merged = BooleanArray(patch.h) { y -> prof.busy[y] || zones[y] || keep[y] }
+        val blocked = CutPlanner.blockedRows(merged, VERIFY_GUARD)
+        val center = (cutY - top).coerceIn(0, patch.h - 1)
+        // Lapisan ML Kit (4 recognizer, mahal): hanya bila piksel sudah
+        // curiga dalam ±96 baris dari titik potong. Potongan di tengah
+        // area bersih total tidak butuh ML — tidak ada teks = tidak ada
+        // piksel yang terlewat di sana.
+        var mlSuspect = false
+        val r0 = (center - ML_SUSPECT_RADIUS).coerceAtLeast(0)
+        val r1 = (center + ML_SUSPECT_RADIUS).coerceAtMost(patch.h - 1)
+        for (y in r0..r1) {
+            if (merged[y]) {
+                mlSuspect = true
+                break
+            }
+        }
         // Lapisan ML Kit: teks yang lolos semua heuristik piksel.
         var mlOk = false
         var mlLines = 0
         var cjkHit = false
-        try {
-            val bmp = Bitmap.createBitmap(patch.w, patch.h, Bitmap.Config.ARGB_8888)
+        if (mlSuspect) {
+            // ROI kecil di sekitar titik potong saja (bukan 640 baris penuh).
+            val c0 = r0
+            val c1 = r1 + 1
+            val cw = patch.w
+            val ch = (c1 - c0).coerceAtLeast(1)
+            val sub = IntArray(cw * ch)
+            for (y in 0 until ch) {
+                System.arraycopy(patch.px, (c0 + y) * cw, sub, y * cw, cw)
+            }
             try {
-                bmp.setPixels(patch.px, 0, patch.w, 0, 0, patch.w, patch.h)
-                val tout = TextGuard.textRows(bmp, prof.structured, prof.maxRun)
-                mlOk = tout.latinOk || tout.cjkOk
-                mlLines = tout.lines
-                val trows = tout.rows
-                cjkHit = tout.cjkOk
-                if (trows != null) {
-                    for (y in merged.indices) {
-                        if (trows.getOrElse(y) { false }) merged[y] = true
+                val bmp = Bitmap.createBitmap(cw, ch, Bitmap.Config.ARGB_8888)
+                try {
+                    bmp.setPixels(sub, 0, cw, 0, 0, cw, ch)
+                    // structured/maxRun ikut dicrop agar koordinatnya
+                    // sejajar dengan bitmap ROI kecil.
+                    val subStruct = prof.structured.sliceArray(c0 until (c0 + ch).coerceAtMost(prof.structured.size))
+                    val subMaxRun = prof.maxRun.sliceArray(c0 until (c0 + ch).coerceAtMost(prof.maxRun.size))
+                    val tout = TextGuard.textRows(bmp, subStruct, subMaxRun)
+                    mlOk = tout.latinOk || tout.cjkOk
+                    mlLines = tout.lines
+                    val trows = tout.rows
+                    cjkHit = tout.cjkOk
+                    if (trows != null) {
+                        for (y in trows.indices) {
+                            if (trows[y]) {
+                                val fy = c0 + y
+                                if (fy in merged.indices) merged[fy] = true
+                            }
+                        }
+                    }
+                } finally {
+                    try {
+                        bmp.recycle()
+                    } catch (t: Throwable) {
                     }
                 }
-            } finally {
-                try {
-                    bmp.recycle()
-                } catch (t: Throwable) {
-                }
+            } catch (t: Throwable) {
             }
-        } catch (t: Throwable) {
+            // Sinyal ML mengubah merged -> hitung ulang blocked.
+            val reblocked = CutPlanner.blockedRows(merged, VERIFY_GUARD)
+            for (y in blocked.indices) blocked[y] = reblocked[y]
         }
-        val blocked = CutPlanner.blockedRows(merged, VERIFY_GUARD)
-        val center = (cutY - top).coerceIn(0, patch.h - 1)
-        if (!blocked[center]) return VResult(cutY, false, mlOk, mlLines, cjkHit)
+        if (!blocked[center]) return VResult(cutY, false, mlOk, mlLines, cjkHit, mlSkipped = !mlSuspect)
         val radius = min(300, patch.h / 2)
         for (d in 1..radius) {
             val dn = center - d
-            if (dn >= 0 && !blocked[dn]) return VResult(top + dn, false, mlOk, mlLines, cjkHit)
+            if (dn >= 0 && !blocked[dn]) return VResult(top + dn, false, mlOk, mlLines, cjkHit, mlSkipped = !mlSuspect)
             val up = center + d
-            if (up < patch.h && !blocked[up]) return VResult(top + up, false, mlOk, mlLines, cjkHit)
+            if (up < patch.h && !blocked[up]) return VResult(top + up, false, mlOk, mlLines, cjkHit, mlSkipped = !mlSuspect)
         }
-        return VResult(cutY, true, mlOk, mlLines, cjkHit)
+        return VResult(cutY, true, mlOk, mlLines, cjkHit, mlSkipped = !mlSuspect)
     }
 
     /** Interior terkurung skala setengah untuk verifikasi ROI (hemat). */
@@ -982,8 +1019,8 @@ class StripBuilder(
                     yOff += s.renderedH
                 }
                 val dir = File(scratchDir, "mochi_strips").apply { mkdirs() }
-                val out = File(dir, "debug_%03d.png".format(number))
-                out.outputStream().use { o -> dbg.compress(Bitmap.CompressFormat.PNG, 100, o) }
+                val out = File(dir, "debug_%03d.jpg".format(number))
+                out.outputStream().use { o -> dbg.compress(Bitmap.CompressFormat.JPEG, 80, o) }
                 out.absolutePath
             } finally {
                 try {
@@ -1048,6 +1085,8 @@ class StripBuilder(
         const val VERIFY_GUARD = 8
         const val EDGE_TOUCH_DARK = 28
         const val EDGE_TOUCH_RUN = 10
+        /** Radius curiga ML: sinyal piksel sejauh ini dari titik potong memicu recognizer. */
+        const val ML_SUSPECT_RADIUS = 96
     }
 
     private fun scaleForPreview(src: Bitmap, cap: Int): Bitmap {

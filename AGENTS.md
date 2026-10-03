@@ -22,7 +22,7 @@ banner (BannerOcv), bukan untuk deteksi balon.
 Tambahan v7b (anti-bocor):
 - Pindai memakai nearest-neighbor (tanpa filter) pada lebar 480px agar garis
   tipis/ekor balon tidak terhapus blur downscale.
-- Gambar diagnostik per strip (`debug_NNN.png`: strip 240px + garis
+- Gambar diagnostik per strip (`debug_NNN.jpg`: strip 240px + garis
   potong hijau/merah, MochiStitch.md §1): tombol "Lihat deteksi" di
   dialog zoom hasil; file yatim ikut dibersihkan cache.
 - Setiap titik potong terencana diverifikasi ulang pada ROI resolusi
