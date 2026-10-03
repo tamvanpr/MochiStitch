@@ -21,6 +21,7 @@ import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Publish
 import androidx.compose.material.icons.filled.Report
 import androidx.compose.material3.Button
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -180,6 +181,7 @@ fun SlicePreview(
 
     val focus = zoomed
     if (focus != null) {
+        var showDebug by remember(focus) { mutableStateOf(false) }
         androidx.compose.ui.window.Dialog(onDismissRequest = { zoomed = null }) {
             Card(shape = RoundedCornerShape(20.dp)) {
                 Column(
@@ -201,12 +203,29 @@ fun SlicePreview(
                         }
                     }
                     focus.bitmap?.let { bmp ->
-                        Image(
-                            bitmap = bmp.asImageBitmap(),
-                            contentDescription = focus.fileName,
-                            contentScale = ContentScale.FillWidth,
+                        if (showDebug && focus.debugPath != null) {
+                            coil.compose.AsyncImage(
+                                model = java.io.File(focus.debugPath!!),
+                                contentDescription = focus.fileName,
+                                contentScale = ContentScale.FillWidth,
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        } else {
+                            Image(
+                                bitmap = bmp.asImageBitmap(),
+                                contentDescription = focus.fileName,
+                                contentScale = ContentScale.FillWidth,
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        }
+                    }
+                    if (focus.debugPath != null) {
+                        OutlinedButton(
+                            onClick = { showDebug = !showDebug },
                             modifier = Modifier.fillMaxWidth()
-                        )
+                        ) {
+                            Text(if (showDebug) "Sembunyikan deteksi" else "Lihat deteksi")
+                        }
                     }
                     Button(onClick = { zoomed = null }, modifier = Modifier.fillMaxWidth()) {
                         Text("Tutup")

@@ -3,6 +3,9 @@ package com.mochistitch.core.imaging
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.Canvas
+import android.graphics.Paint
+import android.graphics.Rect
 import android.net.Uri
 import com.mochistitch.core.common.BannerPolicy
 import com.mochistitch.core.settings.CutStrictness
@@ -31,7 +34,9 @@ data class BuiltStrip(
     val flagReason: String? = null,
     val bytes: Long = 0L,
     /** Strip banner situs dicrop di berkas ini (info, bukan peringatan). */
-    val bannerCut: Boolean = false
+    val bannerCut: Boolean = false,
+    /** Gambar diagnostik (strip + garis potong hijau/merah), boleh null. */
+    val debugPath: String? = null
 )
 
 enum class BuildPhase(val label: String) {
@@ -184,11 +189,17 @@ class StripBuilder(
                 }
                 strips.add(
                     store(
-                        bitmap = whole, number = number++, series = series, chapter = chapter,
+                        bitmap = whole, number = number, series = series, chapter = chapter,
                         settings = settings, config = config, flagged = flagged, flagReason = reason,
-                        bannerCut = anyBanner
+                        bannerCut = anyBanner,
+                        debugPath = try {
+                            renderDebug(whole, bundle, segs, globalCuts.cuts, byOrder, stripWidth, forcedSeg, number)
+                        } catch (t: Throwable) {
+                            null
+                        }
                     )
                 )
+                number++
                 // Rakit batch puluhan halaman mengaduk bitmap besar
                 // berulang-ulang (fragmentasi heap): beri kesempatan GC
                 // merapat setiap selesai satu berkas.
@@ -930,6 +941,61 @@ class StripBuilder(
     private fun lumaOf(c: Int): Int =
         (((c shr 16) and 0xFF) * 77 + ((c shr 8) and 0xFF) * 150 + (c and 0xFF) * 29) shr 8
 
+    /**
+     * Gambar diagnostik (MochiStitch.md §1): strip diskala 240px + garis
+     * potong (hijau bersih, merah bertanda) per posisi terencana.
+     * Disimpan sebagai PNG cache; null bila gagal (non-fatal).
+     */
+    private fun renderDebug(
+        strip: Bitmap,
+        bundle: PageGrouper.Bundle,
+        segs: List<Seg>,
+        cuts: Map<Int, List<Int>>,
+        byOrder: Map<Int, StripRenderer.Measured>,
+        stripWidth: Int,
+        forcedPages: Set<Int>,
+        number: Int
+    ): String? {
+        if (strip.width <= 0 || strip.height <= 0) return null
+        return try {
+            val dw = 240
+            val dh = (strip.height.toLong() * dw / strip.width).toInt().coerceIn(1, 20000)
+            val dbg = Bitmap.createBitmap(dw, dh, Bitmap.Config.RGB_565)
+            try {
+                val canvas = Canvas(dbg)
+                canvas.drawBitmap(strip, null, Rect(0, 0, dw, dh), null)
+                val paint = Paint().apply { style = Paint.Style.FILL }
+                val th = (dh / 400).coerceIn(2, 6)
+                var yOff = 0
+                for (sheet in bundle.sheets) {
+                    val s = segs[sheet.order]
+                    val m = byOrder[s.order]
+                    if (m != null) {
+                        for (c in cuts[s.order].orEmpty()) {
+                            if (c < s.srcTop || c >= s.srcBottom) continue
+                            val stripY = yOff + ((c - s.srcTop).toLong() * stripWidth / m.width.coerceAtLeast(1)).toInt()
+                            val dy = (stripY.toLong() * dh / strip.height).toInt().coerceIn(0, dh - 1)
+                            paint.color = if (s.order in forcedPages) 0xFFFF4444.toInt() else 0xFF33DD66.toInt()
+                            canvas.drawRect(0f, (dy - th / 2).toFloat(), dw.toFloat(), (dy + th / 2 + 1).toFloat(), paint)
+                        }
+                    }
+                    yOff += s.renderedH
+                }
+                val dir = File(scratchDir, "mochi_strips").apply { mkdirs() }
+                val out = File(dir, "debug_%03d.png".format(number))
+                out.outputStream().use { o -> dbg.compress(Bitmap.CompressFormat.PNG, 100, o) }
+                out.absolutePath
+            } finally {
+                try {
+                    dbg.recycle()
+                } catch (t: Throwable) {
+                }
+            }
+        } catch (t: Throwable) {
+            null
+        }
+    }
+
     private fun store(
         bitmap: Bitmap,
         number: Int,
@@ -939,7 +1005,8 @@ class StripBuilder(
         config: StripConfig,
         flagged: Boolean,
         flagReason: String?,
-        bannerCut: Boolean = false
+        bannerCut: Boolean = false,
+        debugPath: String? = null
     ): BuiltStrip {
         val ext = FileNamer.extensionOf(settings.imageFormat)
         val stem = FileNamer.numbered(settings.namePattern, series, chapter, number, settings.numberWidth, settings.imageFormat)
@@ -970,7 +1037,8 @@ class StripBuilder(
             flagged = flagged,
             flagReason = flagReason,
             bytes = final.length(),
-            bannerCut = bannerCut
+            bannerCut = bannerCut,
+            debugPath = debugPath
         )
     }
 

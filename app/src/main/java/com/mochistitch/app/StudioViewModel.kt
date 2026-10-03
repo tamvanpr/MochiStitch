@@ -197,6 +197,7 @@ class StudioViewModel : ViewModel() {
                 }
                 _state.value.slices.forEach { slice ->
                     slice.cachePath?.let { keep.add(File(it).absolutePath) }
+                    slice.debugPath?.let { keep.add(File(it).absolutePath) }
                 }
                 var deleted = 0L
                 for (rootName in listOf("studio_import", "mochi_strips")) {
@@ -625,6 +626,9 @@ class StudioViewModel : ViewModel() {
             slice.cachePath?.let { path ->
                 try { File(path).delete() } catch (t: Throwable) { }
             }
+            slice.debugPath?.let { path ->
+                try { File(path).delete() } catch (t: Throwable) { }
+            }
             try {
                 slice.bitmap?.let { bmp ->
                     if (!bmp.isRecycled) bmp.recycle()
@@ -680,7 +684,8 @@ class StudioViewModel : ViewModel() {
                         flagged = strip.flagged,
                         flagReason = strip.flagReason,
                         bytes = strip.bytes,
-                        bannerCut = strip.bannerCut
+                        bannerCut = strip.bannerCut,
+                        debugPath = strip.debugPath
                     )
                 }
                 _state.update {

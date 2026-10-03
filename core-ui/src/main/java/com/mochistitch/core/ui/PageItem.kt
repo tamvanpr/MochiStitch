@@ -23,5 +23,7 @@ data class SliceInfo(
     val flagReason: String? = null,
     val bytes: Long = 0L,
     /** Strip banner situs dicrop di berkas ini (info, bukan peringatan). */
-    val bannerCut: Boolean = false
+    val bannerCut: Boolean = false,
+    /** Gambar diagnostik (strip + garis potong), boleh null. */
+    val debugPath: String? = null
 )
