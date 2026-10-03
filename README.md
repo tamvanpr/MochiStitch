@@ -11,6 +11,7 @@ One engine principle defines the build: **a cut line never crosses ink** (balloo
 - **Vertical stitching**: stack full pages vertically, scaled proportionally to the strip width — zero source pixels are discarded.
 - **Safe splitting**: oversized pages are cut only through edge-free rows (never through balloons), and continuous page pairs are kept in the same output file; risky seams are flagged in the preview.
 - **Page-boundary splitting**: split the output into multiple files (`WHOLE`, `MAX_HEIGHT`, or `PAGES_PER_PACK` rules).
+- **Image input**: pick pages from the gallery (Photo Picker) — duplicates are skipped automatically.
 - **Archive input**: open `.zip`, `.cbz`, `.rar`, `.cbr`, `.7z`, and `.cb7` directly — pages stream to disk so large archives stay memory-safe.
 - **Archive output**: ZIP/CBZ packaging with MediaStore delivery (Pictures/MochiStitch folder on Android 10+, FileProvider share on older devices).
 - **Batch queue**: import several comics, set a packaging format per title, and process them all in one run.

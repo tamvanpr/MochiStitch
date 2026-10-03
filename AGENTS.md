@@ -108,10 +108,9 @@ flag tinjau.
   StripBuilder (pindai vertikal + continuityMap seam + partisi eksak +
   crop banner dua lapis: template-match OpenCV (port setia bannercut2:
   resize+equalize+Canny+dark-mask, 5 sinyal terbobot, ambang web) per
-  halaman + NCC murni sebagai fallback bila native gagal + gerbang
-  konsistensi BannerGate HANYA untuk sumber ber-banner (baozimh;
-  sumber lain + impor manual = lapis template saja agar strip seragam
-  milik komik tak ikut ke-crop); selalu ada catatan
+  halaman; lapis template berjalan selalu (cocok = banner); gerbang
+  konsistensi BannerGate dorman (tak ada lagi sumber ber-banner sejak
+  fitur unduh mentah dihapus); selalu ada catatan
   keputusan), BannerGate, BannerTemplate, BannerOcv (opencv:4.5.3),
   FileNamer. Preview hasil diskalakan ke <=1280px.
 - `core-settings/` — DataStore; tanpa smartCut/strictness/paper/fit
@@ -120,20 +119,7 @@ flag tinjau.
 - `core-archive/` — baca ZIP/CBZ (java.util.zip), RAR/CBR (junrar),
   7Z/CB7 (commons-compress + xz); tulis ZIP/CBZ; `unpackTo` streaming
   ke disk, satu folder unik per impor
-- `core-download/` — unduhan mentah MODE GANDA via kontrak Trial Fetch
-  (tanpa dependensi baru; HttpURLConnection + parser JSON mini + AES JCE):
-  RawSources (15 sumber RAW+EN + classifier + BannerPolicy per sumber
-  **hanya baozimh** + imageHeaders per-sumber), RawContract (3 bentuk
-  JSON + buang banner utuh via metadata), WorkerDownloadApi (dipakai bila
-  workerUrl diisi), DirectResolvers (resolve langsung tanpa worker:
-  baozimh 6-host + kredensial app, wmanhua num/pasd, jjabtoon/jjaptoon/
-  goodtoon/manwa/koudaimh-params-AES, mangadex at-home, mangapill, comick
-  mirror, mangageko, demonic, likemanga, mangabats API, xcomic Qwik),
-  RawCrypto (AES manwa/koudaimh), PageDownloader (streaming, konkurensi 3,
-  retry 2x, transform dekripsi). Bytes langsung dari CDN; hasil otomatis
-  shelve() ke antrean. Izin INTERNET; workerUrl opsional (kosong = mode
-  langsung).
-- `core-common/` — ComicProject (+sourceId unduhan), BannerPolicy.
+- `core-common/` — ComicProject, BannerPolicy.
 - `core-common/` — ComicProject (antrean batch; halaman disinkronkan saat rakit)
 
 ## Aturan Penting
@@ -144,7 +130,7 @@ flag tinjau.
 - Input arsip: ZIP/CBZ/RAR/CBR/7Z/CB7 via core-archive
 - Output arsip: Terbitkan (tab Hasil) SELALU ikut Setelan
   (`{series}_ch{chapter}.zip/cbz`, tanpa timestamp); batch per komik
-  (arsip asal = basename sama, unduhan/manual = judulnya, tanpa timestamp)
+  (arsip asal = basename sama, manual = judulnya, tanpa timestamp)
 - Bitmap config: RGB_565 — hemat memory
 - Tiap build menghasilkan 5 APK: universal, armeabi-v7a, arm64-v8a, x86, x86_64
 - Commit message dalam bahasa Indonesia

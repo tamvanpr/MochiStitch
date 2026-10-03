@@ -14,14 +14,6 @@ import coil.imageLoader
 import com.mochistitch.core.archive.ArchiveItem
 import com.mochistitch.core.archive.ArchiveKit
 import com.mochistitch.core.common.ComicProject
-import com.mochistitch.core.download.ChapterHit
-import com.mochistitch.core.download.DirectDownloadApi
-import com.mochistitch.core.download.PageDownloader
-import com.mochistitch.core.download.RawApiException
-import com.mochistitch.core.download.RawCrypto
-import com.mochistitch.core.download.RawSources
-import com.mochistitch.core.download.UrlKind
-import com.mochistitch.core.download.WorkerDownloadApi
 import com.mochistitch.core.imaging.BuildPhase
 import com.mochistitch.core.imaging.BuiltStrip
 import com.mochistitch.core.imaging.FileNamer
@@ -74,10 +66,6 @@ data class StudioState(
     val activeComicId: String? = null,
     val activeOrigin: String? = null,
     val batchOutcomes: List<PublishedFile> = emptyList(),
-    /** Hasil resolve series mentah: dipilih chapter-nya sebelum diunduh. */
-    val rawChapters: List<ChapterHit> = emptyList(),
-    val rawSourceLabel: String? = null,
-    val rawSourceId: String? = null,
     /** Ukuran cache aplikasi dalam byte (-1 = belum dihitung). */
     val cacheBytes: Long = -1
 )
@@ -256,10 +244,6 @@ class StudioViewModel : ViewModel() {
     private fun formatMb(bytes: Long): String =
         if (bytes < 1048576L) "${bytes / 1024} KB" else "%.1f MB".format(bytes / 1048576.0)
 
-    fun clearRawChapters() {
-        _state.update { it.copy(rawChapters = emptyList(), rawSourceLabel = null, rawSourceId = null) }
-    }
-
     // ── Antrean ─────────────────────────────────────────────────────
 
     fun openComic(id: String) {
@@ -291,12 +275,11 @@ class StudioViewModel : ViewModel() {
         }
     }
 
-    private fun shelve(origin: String, items: List<PageItem>, sourceId: String? = null) {
+    private fun shelve(origin: String, items: List<PageItem>) {
         val comic = ComicProject(
             origin = origin.ifBlank { "Komik ${System.currentTimeMillis()}" },
             pageUris = items.map { it.uri },
-            pageNames = items.map { it.title },
-            sourceId = sourceId
+            pageNames = items.map { it.title }
         )
         _state.update { s ->
             s.copy(comics = s.comics + comic, activeComicId = comic.id, activeOrigin = comic.origin)
@@ -479,113 +462,6 @@ class StudioViewModel : ViewModel() {
         }
     }
 
-    // ── Unduhan mentah (fase 1: tempel URL chapter/series) ──────────
-    // Mode ganda: URL worker diisi -> via worker; kosong -> langsung
-    // dari aplikasi (DirectDownloadApi). Kontrak datanya identik.
-
-    private fun workerApiOrNull(): WorkerDownloadApi? {
-        val base = _state.value.settings.workerUrl.trim().trimEnd('/')
-        if (base.isEmpty()) return null
-        return WorkerDownloadApi(base)
-    }
-
-    /** Tempel URL chapter atau series -> resolve; series membuka pemilih chapter. */
-    fun fetchRaw(rawUrl: String, context: Context) {
-        boot(context)
-        val url = rawUrl.trim()
-        val (source, kind) = RawSources.classify(url)
-        if (source == null || kind == UrlKind.UNKNOWN) {
-            _state.update { it.copy(failure = "URL tidak dikenali. RAW: baozimh, wmanhua, jjabtoon, koudaimh, jjaptoon, goodtoon, manwa. EN: mangadex, mangapill, comick, mangageko, demonic, likemanga, mangabats, xcomic.") }
-            return
-        }
-        val api = workerApiOrNull() ?: DirectDownloadApi(source)
-        if (kind == UrlKind.CHAPTER) {
-            _state.update { it.copy(rawSourceId = source.id) }
-            fetchChapterPick(ChapterHit(id = url, title = url, url = url), context)
-            return
-        }
-        _state.update { it.copy(busy = true, phase = "Memuat daftar chapter (${source.label})", fraction = 0f, failure = null) }
-        viewModelScope.launch {
-            try {
-                val chapters = api.chapters(url)
-                if (chapters.isEmpty()) {
-                    _state.update { it.copy(busy = false, failure = "Tidak ada chapter di: $url") }
-                } else {
-                    _state.update { it.copy(busy = false, rawChapters = chapters, rawSourceLabel = source.label, rawSourceId = source.id) }
-                }
-            } catch (e: Throwable) {
-                _state.update { it.copy(busy = false, failure = dlMessage(e)) }
-            }
-        }
-    }
-
-    /** Unduh satu chapter terpilih lalu masukkan ke antrean otomatis. */
-    fun fetchChapterPick(chapter: ChapterHit, context: Context) {
-        boot(context)
-        val sourceId = _state.value.rawSourceId
-        val source = sourceId?.let { RawSources.byId(it) }
-        val api = workerApiOrNull() ?: source?.let { DirectDownloadApi(it) }
-        if (api == null) {
-            _state.update { it.copy(failure = "Sumber tak dikenal, tempel ulang URL-nya.") }
-            return
-        }
-        clearRawChapters()
-        // rawSourceId ikut terhapus oleh clearRawChapters — simpan dulu.
-        // (Hasil rakitan lama SENGAJA tidak dihapus di sini: unduhan boleh
-        // gagal, dan hasil lama masih bisa diterbitkan.)
-        _state.update { it.copy(rawSourceId = sourceId) }
-        _state.update { it.copy(busy = true, phase = "Mengambil daftar gambar", fraction = 0f, failure = null) }
-        viewModelScope.launch(Dispatchers.IO) {
-            try {
-                val resolved = api.pages(chapter.url)
-                if (resolved.pages.isEmpty()) {
-                    _state.update { it.copy(busy = false, failure = "Tidak ada gambar di chapter ini.") }
-                    return@launch
-                }
-                val title = resolved.title.ifBlank { chapter.title }.ifBlank { "Unduhan" }
-                val stem = ArchiveKit.sanitizeName(title.ifBlank { "unduhan" }.take(60))
-                val dir = File(File(context.cacheDir, "studio_import"), "${stem}_${System.currentTimeMillis()}").apply { mkdirs() }
-                // Header gambar per sumber (koudaimh tanpa Referer; sisanya
-                // Referer = halaman chapter). Gambar manwa terenkripsi AES.
-                val sid = _state.value.rawSourceId ?: ""
-                val out = PageDownloader().fetchAll(
-                    pages = resolved.pages,
-                    destDir = dir,
-                    headersFor = { pageUrl -> RawSources.imageHeaders(sid, pageUrl, chapter.url) },
-                    onProgress = { p ->
-                        _state.update {
-                            it.copy(
-                                phase = "Mengunduh ${p.done}/${p.total}",
-                                fraction = 0.1f + 0.8f * (p.done.toFloat() / p.total.toFloat().coerceAtLeast(1f))
-                            )
-                        }
-                    },
-                    transform = if (sid == RawSources.MANWA.id) RawCrypto::decryptManwaImage else null,
-                    smallVeto = if (sid == RawSources.KOUDAIMH.id) RawCrypto::isKoudaimhPlaceholder else null
-                )
-                if (out.ok.isEmpty()) {
-                    try { dir.deleteRecursively() } catch (t: Throwable) { }
-                    _state.update { it.copy(busy = false, failure = "Semua ${out.failed.size} gambar gagal diunduh.") }
-                    return@launch
-                }
-                val items = out.ok.map { file -> PageItem(uri = Uri.fromFile(file), title = file.name) }
-                shelve(title, items, _state.value.rawSourceId)
-                val warn = if (out.failed.isEmpty()) "" else " (${out.failed.size} gagal)"
-                val dropped = if (resolved.droppedBanners > 0) " (${resolved.droppedBanners} banner dilewati)" else ""
-                _state.update { s ->
-                    s.copy(busy = false, pages = items, screen = StudioScreen.INPUT, notice = "$title: ${items.size} halaman diunduh$warn$dropped, masuk antrean.")
-                }
-            } catch (e: Throwable) {
-                _state.update { it.copy(busy = false, failure = dlMessage(e)) }
-            }
-        }
-    }
-
-    private fun dlMessage(e: Throwable): String = when (e) {
-        is RawApiException -> e.message ?: "Gagal mengunduh."
-        else -> e.message ?: "Gagal mengunduh."
-    }
-
     // ── Meja kerja ──────────────────────────────────────────────────
 
     fun shiftEarlier(index: Int) {
@@ -662,14 +538,10 @@ class StudioViewModel : ViewModel() {
                 } catch (t: Throwable) { }
                 System.gc()
                 val settings = _state.value.settings
-                val banner = _state.value.comics
-                    .firstOrNull { it.id == _state.value.activeComicId }
-                    ?.sourceId?.let { RawSources.byId(it)?.banner }
                 val out = StripBuilder(context).build(
                     uris = _state.value.pages.map { it.uri },
                     settings = settings,
                     onProgress = { phase, p -> _state.update { it.copy(phase = phase.label, fraction = p) } },
-                    banner = if (settings.enableBannerCut) banner else null,
                     bannerTemplateBitmaps = bannerTemplateBitmaps(context)
                 ).getOrThrow()
                 val done = out.strips
@@ -792,11 +664,10 @@ class StudioViewModel : ViewModel() {
                         uris = comic.pageUris,
                         settings = base,
                         onProgress = { _, p -> _state.update { it.copy(fraction = (pi + p) / comics.size.toFloat()) } },
-                        banner = if (base.enableBannerCut) comic.sourceId?.let { RawSources.byId(it)?.banner } else null,
                         bannerTemplateBitmaps = bannerTemplateBitmaps(context)
                     ).getOrThrow().strips
                     // Batch: tiap komik punya nama sendiri (arsip -> basename
-                    // sama; unduhan/manual -> judulnya) agar tak tabrakan.
+                    // sama; manual -> judulnya) agar tak tabrakan.
                     val batchName = if (ArchiveKit.canOpen(comic.origin)) {
                         FileNamer.packName(comic.origin, pack)
                     } else {

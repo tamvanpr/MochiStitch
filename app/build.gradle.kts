@@ -106,7 +106,6 @@ dependencies {
     implementation(project(":core-archive"))
     implementation(project(":core-settings"))
     implementation(project(":core-ui"))
-    implementation(project(":core-download"))
 
     implementation(libs.androidx.core.ktx)
     implementation("androidx.core:core-splashscreen:1.2.0")

@@ -31,10 +31,8 @@ data class StitchSettings(
     val showReviewFlags: Boolean = true,
     val matteColor: MatteColor = MatteColor.WHITE,
     val themeMode: ThemeMode = ThemeMode.SYSTEM,
-    /** Basis URL worker Trial Fetch (fase 1: sumber RAW). Kosong = unduhan nonaktif. */
-    val workerUrl: String = "",
     /** Ketegasan mesin potong: LONGGAR (lebih banyak halaman utuh) — BALANCED — AKURAT (cut paling ketat). */
     val cutStrictness: CutStrictness = CutStrictness.BALANCED,
-    /** Pakai banner template OpenCV + gate konsistensi. */
+    /** Pakai crop banner template OpenCV. */
     val enableBannerCut: Boolean = true
 )

@@ -7,13 +7,11 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -21,14 +19,11 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Apps
-import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.GridOn
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.InsertDriveFile
@@ -48,13 +43,10 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
-import androidx.compose.material3.ListItem
-import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -70,17 +62,14 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.core.content.ContextCompat
 import com.mochistitch.core.settings.PackFormat
 import com.mochistitch.core.ui.EmptyState
 import com.mochistitch.core.ui.MochiListCard
-import com.mochistitch.core.ui.NumberBadge
 import com.mochistitch.core.ui.PageStrip
 import com.mochistitch.core.ui.SettingsPanel
 import com.mochistitch.core.ui.SlicePreview
@@ -374,8 +363,6 @@ fun StudioApp(viewModel: StudioViewModel, onExitApp: () -> Unit) {
 private fun InputStep(viewModel: StudioViewModel, modifier: Modifier = Modifier) {
     val ctx = LocalContext.current
     val state by viewModel.state.collectAsState()
-    var showUrlDialog by remember { mutableStateOf(false) }
-    var urlText by remember { mutableStateOf("") }
 
     val pickImages = rememberLauncherForActivityResult(ActivityResultContracts.PickMultipleVisualMedia()) { uris ->
         if (uris.isNotEmpty()) viewModel.takeImages(uris, ctx)
@@ -395,7 +382,6 @@ private fun InputStep(viewModel: StudioViewModel, modifier: Modifier = Modifier)
             InputActionButton(
                 icon = Icons.Default.Image,
                 label = "Gambar",
-                filled = false,
                 onClick = {
                     pickImages.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
                 },
@@ -404,15 +390,7 @@ private fun InputStep(viewModel: StudioViewModel, modifier: Modifier = Modifier)
             InputActionButton(
                 icon = Icons.Default.Unarchive,
                 label = "Arsip",
-                filled = false,
                 onClick = { pickArchive.launch(arrayOf("*/*")) },
-                modifier = Modifier.weight(1f)
-            )
-            InputActionButton(
-                icon = Icons.Default.Download,
-                label = "Unduh",
-                filled = true,
-                onClick = { urlText = ""; showUrlDialog = true },
                 modifier = Modifier.weight(1f)
             )
         }
@@ -422,7 +400,7 @@ private fun InputStep(viewModel: StudioViewModel, modifier: Modifier = Modifier)
             EmptyState(
                 icon = Icons.Default.Image,
                 title = "Belum ada halaman",
-                desc = "Gunakan tombol Gambar, Arsip, atau Unduh di atas.",
+                desc = "Gunakan tombol Gambar atau Arsip di atas.",
                 modifier = Modifier.fillMaxWidth()
             )
             Spacer(modifier = Modifier.weight(1f))
@@ -453,85 +431,18 @@ private fun InputStep(viewModel: StudioViewModel, modifier: Modifier = Modifier)
             }
         }
     }
-
-    if (showUrlDialog) {
-        AlertDialog(
-            onDismissRequest = { showUrlDialog = false },
-            confirmButton = {
-                TextButton(onClick = {
-                    showUrlDialog = false
-                    if (urlText.isNotBlank()) viewModel.fetchRaw(urlText, ctx)
-                }) { Text("Lanjut") }
-            },
-            dismissButton = {
-                TextButton(onClick = { showUrlDialog = false }) { Text("Batal") }
-            },
-            title = { Text("Unduh mentah") },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(
-                        "Tempel URL chapter atau series — hasil otomatis masuk antrean.",
-                        style = MaterialTheme.typography.bodyMedium
-                    )
-                    OutlinedTextField(
-                        value = urlText,
-                        onValueChange = { urlText = it },
-                        label = { Text("URL chapter/series") },
-                        placeholder = { Text("https://…") },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                }
-            }
-        )
-    }
-
-    if (state.rawChapters.isNotEmpty()) {
-        AlertDialog(
-            onDismissRequest = viewModel::clearRawChapters,
-            confirmButton = {
-                TextButton(onClick = viewModel::clearRawChapters) { Text("Tutup") }
-            },
-            title = {
-                Text("Pilih chapter${state.rawSourceLabel?.let { " · $it" } ?: ""} (${state.rawChapters.size})")
-            },
-            text = {
-                LazyColumn(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    itemsIndexed(state.rawChapters, key = { _, ch -> ch.id + ch.url }) { index, ch ->
-                        ListItem(
-                            headlineContent = {
-                                Text(ch.title, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                            },
-                            leadingContent = { NumberBadge(number = index + 1) },
-                            trailingContent = {
-                                Icon(
-                                    Icons.Default.ChevronRight,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            },
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(12.dp))
-                                .clickable { viewModel.fetchChapterPick(ch, ctx) }
-                        )
-                    }
-                }
-            }
-        )
-    }
 }
 
 @Composable
 private fun InputActionButton(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     label: String,
-    filled: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     // Ikon di atas label (bukan sejajar): muat di layar sempit tanpa
     // teks terpotong, dan jempol lebih mudah kena.
-    val content: @Composable () -> Unit = {
+    OutlinedButton(onClick = onClick, modifier = modifier.height(72.dp)) {
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(2.dp)
@@ -539,11 +450,6 @@ private fun InputActionButton(
             Icon(icon, contentDescription = null, modifier = Modifier.size(20.dp))
             Text(label, style = MaterialTheme.typography.labelLarge, maxLines = 1)
         }
-    }
-    if (filled) {
-        Button(onClick = onClick, modifier = modifier.height(72.dp)) { content() }
-    } else {
-        OutlinedButton(onClick = onClick, modifier = modifier.height(72.dp)) { content() }
     }
 }
 
@@ -564,7 +470,7 @@ private fun QueueStep(
             EmptyState(
                 icon = Icons.Default.GridOn,
                 title = "Antrean kosong",
-                desc = "Unduh atau impor halaman — tiap komik otomatis masuk antrean.",
+                desc = "Impor gambar atau arsip — tiap komik otomatis masuk antrean.",
                 modifier = Modifier.fillMaxWidth()
             )
         } else {

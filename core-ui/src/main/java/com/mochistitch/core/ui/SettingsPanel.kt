@@ -255,38 +255,6 @@ fun SettingsPanel(
         }
 
         item {
-            SettingsGroup("Sumber Unduhan") {
-            SettingsSubLabel("RAW")
-            Text(
-                "Baozimh · Wmanhua · JJABToon · KoudaiMH · JJAPToon · GoodToon · Manwa",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurface
-            )
-            SettingsSubLabel("EN")
-            Text(
-                "MangaDex · MangaPill · Comick · MangaGeko · Demonic · LikeManga · MangaBats · XComic",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurface
-            )
-        }
-        }
-
-        item {
-            SettingsGroup("Unduhan Mentah") {
-            OutlinedTextField(
-                value = settings.workerUrl,
-                onValueChange = { onChange(settings.copy(workerUrl = it.trim())) },
-                label = { Text("URL worker Trial Fetch (opsional)") },
-                placeholder = { Text("https://worker-kamu.workers.dev") },
-                supportingText = { Text("Kosong = mode langsung dari aplikasi (tanpa worker). Diisi = via worker.") },
-                singleLine = true,
-                shape = RoundedCornerShape(12.dp),
-                modifier = Modifier.fillMaxWidth()
-            )
-        }
-        }
-
-        item {
             SettingsGroup("Tema Aplikasi") {
             ChipRow {
                 ThemeMode.entries.forEach { mode ->
